@@ -13,14 +13,18 @@ pub mod ast;
 mod bigint;
 mod builtins;
 pub mod calendar;
+mod casing_table;
 mod check;
 pub mod decimal;
 mod env;
 mod error;
+pub mod eval;
 mod lex;
+pub mod memory;
 pub mod names;
 mod parse;
 mod resolve;
+pub mod text;
 pub mod units;
 
 use datumesh_core::json::Value;

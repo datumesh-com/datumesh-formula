@@ -1,0 +1,393 @@
+//! An in-memory [`World`]: functions with binding starts, stored receipts, and computed cells
+//! evaluated on demand (memoised, with cycle and depth limits) and given receipts. It is the
+//! world of the `formula-eval` and `excel` vectors (SPEC 11), and a model of what the engine
+//! does in phase B.
+//!
+//! Computed receipts follow the vectors' conventions: signed by `mesh.example.net` with key
+//! `cd42547c321bfc08`, licence `CC0-1.0`, the reference evaluator's summary, `issued` the
+//! later of the receipt's `asof` and 2020-01-01 (the vectors' key window). Only the receipt
+//! hash is computed; nothing is signed.
+
+use std::collections::{BTreeMap, HashMap};
+use std::rc::Rc;
+
+use datumesh_core::json::Value;
+use datumesh_core::{Scalar, Type};
+
+use crate::env::{Env, EnvError, Function};
+use crate::eval::{self, Args, Binding, CellKey, Fuel, Outcome, SliceKey, Version, World, ZERO_INSTANT};
+use crate::{define, Code, Compiled};
+
+/// The vectors' default fuel (15.12): 10,000,000.
+pub const DEFAULT_FUEL: u64 = 10_000_000;
+/// The vectors' default evaluation depth limit: 2,000 cells.
+pub const DEFAULT_MAX_DEPTH: usize = 2000;
+
+/// The receipt conventions of the vectors' computed receipts.
+#[derive(Clone, Debug)]
+pub struct Conventions {
+    /// `computed_by`.
+    pub computed_by: String,
+    /// `licence`.
+    pub licence: String,
+    /// `summary`.
+    pub summary: String,
+    /// The earliest `issued` (the signing key's window start).
+    pub issued_from: String,
+}
+
+impl Default for Conventions {
+    fn default() -> Conventions {
+        Conventions {
+            computed_by: "mesh.example.net#cd42547c321bfc08".to_string(),
+            licence: "CC0-1.0".to_string(),
+            summary: "Computed by the Datumesh formula reference evaluator.".to_string(),
+            issued_from: "2020-01-01T00:00:00.000000Z".to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Stored {
+    cell: CellKey,
+    fn_hash: String,
+    version: Version,
+}
+
+/// A computed cell's evaluation: the outcome and its receipt.
+#[derive(Clone, Debug)]
+pub struct Computed {
+    /// The evaluation's outcome.
+    pub outcome: Outcome,
+    /// The receipt without `sig`.
+    pub receipt: Value,
+    /// Its receipt hash.
+    pub receipt_hash: String,
+}
+
+/// An in-memory world.
+pub struct MemoryWorld {
+    functions: BTreeMap<String, Binding>,
+    stored: Vec<Stored>,
+    compiled: HashMap<String, Rc<Compiled>>,
+    memo: HashMap<(CellKey, String), Result<Option<Version>, Code>>,
+    computed: HashMap<String, Computed>,
+    stack: Vec<CellKey>,
+    /// The evaluation depth limit, in cells.
+    pub max_depth: usize,
+    asof: String,
+    /// The receipt conventions.
+    pub conventions: Conventions,
+}
+
+fn bad(s: impl Into<String>) -> EnvError {
+    EnvError(s.into())
+}
+
+/// The receipt hash: SHA-256 of the receipt's JCS bytes without `sig` (8.3).
+pub fn receipt_hash(receipt: &Value) -> String {
+    let stripped = match receipt {
+        Value::Object(m) => Value::Object(m.iter().filter(|(k, _)| k != "sig").cloned().collect()),
+        v => v.clone(),
+    };
+    datumesh_core::sha256_hex(&stripped.to_jcs())
+}
+
+fn scalar_of(type_v: &Value, value: &Value) -> Result<Scalar, EnvError> {
+    let t = type_v.as_str().and_then(Type::from_name).ok_or_else(|| bad("receipt type"))?;
+    match (t, value) {
+        (Type::Boolean, Value::Bool(b)) => Ok(Scalar::Boolean(*b)),
+        (t, Value::String(s)) => Scalar::from_lexical(t, s).map_err(|e| bad(format!("receipt value: {e:?}"))),
+        _ => Err(bad("receipt value shape")),
+    }
+}
+
+fn args_of(v: &Value) -> Result<Args, EnvError> {
+    let m = v.as_object().ok_or_else(|| bad("args"))?;
+    let mut out = Args::new();
+    for (k, a) in m {
+        let s = scalar_of(a.get("type").ok_or_else(|| bad("arg type"))?, a.get("value").ok_or_else(|| bad("arg value"))?)?;
+        out.insert(k.clone(), s);
+    }
+    Ok(out)
+}
+
+impl MemoryWorld {
+    /// An empty world evaluating as of `asof`.
+    pub fn new(asof: &str) -> MemoryWorld {
+        MemoryWorld {
+            functions: BTreeMap::new(),
+            stored: Vec::new(),
+            compiled: HashMap::new(),
+            memo: HashMap::new(),
+            computed: HashMap::new(),
+            stack: Vec::new(),
+            max_depth: DEFAULT_MAX_DEPTH,
+            asof: asof.to_string(),
+            conventions: Conventions::default(),
+        }
+    }
+
+    /// The world of a vector: `{"functions": {name: {"descriptor", "bound"}}, "receipts": [...],
+    /// "max_depth"?}`.
+    pub fn from_value(world: &Value, asof: &str) -> Result<MemoryWorld, EnvError> {
+        let mut w = MemoryWorld::new(asof);
+        let fs = world.get("functions").and_then(Value::as_object).ok_or_else(|| bad("world without functions"))?;
+        for (name, f) in fs {
+            let d = f.get("descriptor").ok_or_else(|| bad("function without descriptor"))?;
+            let bound = f.get("bound").and_then(Value::as_str).ok_or_else(|| bad("function without bound"))?;
+            w.bind(name, d, bound)?;
+        }
+        if let Some(Value::Array(rs)) = world.get("receipts") {
+            for r in rs {
+                w.add_receipt(r)?;
+            }
+        }
+        if let Some(d) = world.get("max_depth").and_then(Value::as_number_text) {
+            w.max_depth = d.parse().map_err(|_| bad("max_depth"))?;
+        }
+        Ok(w)
+    }
+
+    /// Bind `name` to a descriptor from `start`.
+    pub fn bind(&mut self, name: &str, descriptor: &Value, start: &str) -> Result<(), EnvError> {
+        let f = Function::from_value(descriptor)?;
+        self.functions.insert(name.to_string(), Binding { function: Rc::new(f), start: start.to_string() });
+        self.compiled.remove(name);
+        Ok(())
+    }
+
+    /// Add a stored receipt.
+    pub fn add_receipt(&mut self, r: &Value) -> Result<(), EnvError> {
+        let cell = r.get("cell").ok_or_else(|| bad("receipt without cell"))?;
+        let ns = cell.get("ns").and_then(Value::as_str).ok_or_else(|| bad("cell ns"))?;
+        let f = cell.get("fn").and_then(Value::as_str).ok_or_else(|| bad("cell fn"))?;
+        let fn_hash = cell.get("fn_hash").and_then(Value::as_str).ok_or_else(|| bad("cell fn_hash"))?;
+        let args = args_of(cell.get("args").ok_or_else(|| bad("cell args"))?)?;
+        let value = scalar_of(r.get("type").ok_or_else(|| bad("type"))?, r.get("value").ok_or_else(|| bad("value"))?)?;
+        let tx = r.get("tx").and_then(Value::as_str).ok_or_else(|| bad("tx"))?;
+        let asof = r.get("asof").and_then(Value::as_str).ok_or_else(|| bad("asof"))?;
+        self.stored.push(Stored {
+            cell: CellKey { name: format!("{ns}/{f}"), args },
+            fn_hash: fn_hash.to_string(),
+            version: Version { value, receipt_hash: receipt_hash(r), tx: tx.to_string(), asof: asof.to_string() },
+        });
+        Ok(())
+    }
+
+    /// A computed receipt produced during evaluation, by hash.
+    pub fn computed(&self, hash: &str) -> Option<&Computed> {
+        self.computed.get(hash)
+    }
+
+    /// The compiled body of a formula function.
+    fn compiled_of(&mut self, name: &str) -> Result<Rc<Compiled>, Code> {
+        if let Some(c) = self.compiled.get(name) {
+            return Ok(c.clone());
+        }
+        let b = self.functions.get(name).ok_or(Code::Unresolved)?;
+        let f = b.function.clone();
+        if f.lang != "formula" {
+            return Err(Code::Unresolved);
+        }
+        let mut env = Env::new(name, f.signature.clone());
+        for (n, other) in &self.functions {
+            env.functions.insert(n.clone(), (*other.function).clone());
+        }
+        let c = Rc::new(define(&f.body, &env).map_err(|e| e.code)?);
+        self.compiled.insert(name.to_string(), c.clone());
+        Ok(c)
+    }
+
+    /// The version of a stored cell answering as of `at`: the latest `tx` among its receipts with
+    /// an `asof` at or before `at`.
+    fn stored_version(&self, cell: &CellKey, fn_hash: &str, at: &str) -> Option<Version> {
+        let mut best: Option<&Stored> = None;
+        for s in &self.stored {
+            if s.cell == *cell && s.fn_hash == fn_hash && s.version.asof.as_str() <= at {
+                let newer = match best {
+                    None => true,
+                    Some(b) => (s.version.tx.as_str(), s.version.asof.as_str()) > (b.version.tx.as_str(), b.version.asof.as_str()),
+                };
+                if newer {
+                    best = Some(s);
+                }
+            }
+        }
+        best.map(|s| s.version.clone())
+    }
+
+    /// Evaluate a computed cell as of `asof`, building its receipt.
+    pub fn compute(&mut self, cell: &CellKey, asof: &str, fuel: &mut Fuel) -> Result<Computed, Code> {
+        if self.stack.contains(cell) {
+            return Err(Code::Cycle);
+        }
+        if self.stack.len() >= self.max_depth {
+            return Err(Code::Depth);
+        }
+        let compiled = self.compiled_of(&cell.name)?;
+        let f = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.function.clone();
+        let saved = std::mem::replace(&mut self.asof, asof.to_string());
+        self.stack.push(cell.clone());
+        let r = eval::evaluate(&compiled, &f, &cell.args, asof, self, fuel);
+        self.stack.pop();
+        self.asof = saved;
+        let outcome = r?;
+        let receipt = self.receipt(&f, cell, &outcome);
+        let hash = receipt_hash(&receipt);
+        let c = Computed { outcome, receipt, receipt_hash: hash.clone() };
+        self.computed.insert(hash, c.clone());
+        Ok(c)
+    }
+
+    fn receipt(&self, f: &Function, cell: &CellKey, o: &Outcome) -> Value {
+        let s = |x: &str| Value::String(x.to_string());
+        let (ns, _) = cell.name.rsplit_once('/').unwrap_or(("", &cell.name));
+        let valid: Vec<(String, Value)> = cell
+            .args
+            .iter()
+            .filter(|(k, _)| f.signature.args.get(*k).is_some_and(|d| d.valid))
+            .map(|(k, v)| (k.clone(), v.to_value()))
+            .collect();
+        let tx = o.tx.clone().unwrap_or_else(|| ZERO_INSTANT.to_string());
+        let issued = if o.receipt_asof > self.conventions.issued_from {
+            o.receipt_asof.clone()
+        } else {
+            self.conventions.issued_from.clone()
+        };
+        let (t, v) = match &o.value {
+            Scalar::Boolean(b) => ("boolean", Value::Bool(*b)),
+            other => (other.ty().as_str(), s(other.lexical())),
+        };
+        Value::Object(vec![
+            ("asof".to_string(), s(&o.receipt_asof)),
+            ("cell".to_string(), eval::cell_object(f, cell)),
+            ("computed_by".to_string(), s(&self.conventions.computed_by)),
+            ("inputs".to_string(), Value::Array(o.lineage.iter().map(|x| s(x)).collect())),
+            ("issued".to_string(), s(&issued)),
+            ("licence".to_string(), s(&self.conventions.licence)),
+            ("proto".to_string(), s("datumesh/1")),
+            ("publisher".to_string(), s(ns)),
+            ("summary".to_string(), s(&self.conventions.summary)),
+            ("tx".to_string(), s(&tx)),
+            ("type".to_string(), s(t)),
+            ("valid".to_string(), Value::Object(valid)),
+            ("value".to_string(), v),
+        ])
+    }
+}
+
+impl World for MemoryWorld {
+    fn function(&mut self, name: &str) -> Option<Binding> {
+        self.functions.get(name).cloned()
+    }
+
+    fn read(&mut self, cell: &CellKey, at: Option<&str>, fuel: &mut Fuel) -> Result<Option<Version>, Code> {
+        let b = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.clone();
+        let at = at.map(str::to_string).unwrap_or_else(|| self.asof.clone());
+        if b.function.lang == "stored" {
+            return Ok(self.stored_version(cell, &b.function.hash, &at));
+        }
+        let key = (cell.clone(), at.clone());
+        if let Some(r) = self.memo.get(&key) {
+            return r.clone();
+        }
+        let r = match self.compute(cell, &at, fuel) {
+            Ok(c) => Ok(Some(Version {
+                value: c.outcome.value.clone(),
+                receipt_hash: c.receipt_hash.clone(),
+                tx: c.outcome.tx.clone().unwrap_or_else(|| ZERO_INSTANT.to_string()),
+                asof: c.outcome.receipt_asof.clone(),
+            })),
+            Err(c) => Err(c),
+        };
+        if !matches!(r, Err(c) if c.is_mesh_failure()) {
+            self.memo.insert(key, r.clone());
+        }
+        r
+    }
+
+    fn members(&mut self, slice: &SliceKey, _fuel: &mut Fuel) -> Result<Vec<(Args, Version)>, Code> {
+        let b = self.functions.get(&slice.name).ok_or(Code::Unresolved)?.clone();
+        let mut cells: Vec<CellKey> = Vec::new();
+        for s in &self.stored {
+            if s.cell.name == slice.name && s.fn_hash == b.function.hash && slice.matches(&s.cell.args) && !cells.contains(&s.cell) {
+                cells.push(s.cell.clone());
+            }
+        }
+        let mut out = Vec::new();
+        for c in cells {
+            if let Some(v) = self.stored_version(&c, &b.function.hash, &self.asof) {
+                out.push((c.args, v));
+            }
+        }
+        out.sort_by(|a, b| a.0.iter().map(|(_, v)| v.lexical()).cmp(b.0.iter().map(|(_, v)| v.lexical())));
+        Ok(out)
+    }
+
+    fn versions(&mut self, cell: &CellKey, from: &str, to: &str, _fuel: &mut Fuel) -> Result<Vec<Version>, Code> {
+        let b = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.clone();
+        let mut out: Vec<Version> = self
+            .stored
+            .iter()
+            .filter(|s| {
+                s.cell == *cell
+                    && s.fn_hash == b.function.hash
+                    && s.version.tx.as_str() >= from
+                    && s.version.tx.as_str() <= to
+                    && s.version.asof.as_str() <= self.asof.as_str()
+            })
+            .map(|s| s.version.clone())
+            .collect();
+        out.sort_by(|a, b| a.tx.cmp(&b.tx));
+        Ok(out)
+    }
+}
+
+/// The result of a `formula-eval` or `excel` vector's evaluation.
+#[derive(Clone, Debug)]
+pub struct VectorResult {
+    /// The evaluated cell's computed receipt and outcome.
+    pub computed: Computed,
+    /// Fuel used.
+    pub fuel_used: u64,
+}
+
+/// Evaluate the cell of a `formula-eval` or `excel` vector (`world`, `cell`, `asof`, `fuel`?).
+pub fn run_vector(v: &Value) -> Result<Result<VectorResult, Code>, EnvError> {
+    let asof = v.get("asof").and_then(Value::as_str).ok_or_else(|| bad("vector without asof"))?;
+    let mut world = MemoryWorld::from_value(v.get("world").ok_or_else(|| bad("vector without world"))?, asof)?;
+    let cell = v.get("cell").ok_or_else(|| bad("vector without cell"))?;
+    let name = cell.get("fn").and_then(Value::as_str).ok_or_else(|| bad("cell fn"))?;
+    let args = args_of(cell.get("args").ok_or_else(|| bad("cell args"))?)?;
+    let limit = match v.get("fuel").and_then(Value::as_number_text) {
+        Some(t) => t.parse().map_err(|_| bad("fuel"))?,
+        None => DEFAULT_FUEL,
+    };
+    // An excel vector's function is its formula, defined over the world's functions.
+    if v.get("kind").and_then(Value::as_str) == Some("excel") {
+        let sig = crate::env::Signature::from_value(v.get("signature").ok_or_else(|| bad("excel without signature"))?)?;
+        let mut env = Env::new(name, sig);
+        for (n, b) in &world.functions {
+            env.functions.insert(n.clone(), (*b.function).clone());
+        }
+        let source = v.get("formula").and_then(Value::as_str).ok_or_else(|| bad("excel without formula"))?;
+        let c = define(source, &env).map_err(|e| bad(format!("excel formula: {e}")))?;
+        let descriptor = Value::Object(vec![
+            (
+                "code".to_string(),
+                Value::Object(vec![
+                    ("body".to_string(), Value::String(c.body.clone())),
+                    ("lang".to_string(), Value::String("formula".to_string())),
+                ]),
+            ),
+            ("inputs".to_string(), Value::Array(c.inputs.iter().map(|i| Value::String(i.clone())).collect())),
+            ("signature".to_string(), v.get("signature").cloned().unwrap_or(Value::Null)),
+        ]);
+        world.bind(name, &descriptor, ZERO_INSTANT)?;
+    }
+    let mut fuel = Fuel::new(limit);
+    let key = CellKey { name: name.to_string(), args };
+    let r = world.compute(&key, asof, &mut fuel).map(|computed| VectorResult { computed, fuel_used: fuel.used });
+    Ok(r)
+}
