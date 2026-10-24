@@ -5,6 +5,9 @@
 set -e
 target="$1"; secs="${2:-120}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
+if ! docker image inspect datumesh-fuzz >/dev/null 2>&1; then
+  printf 'FROM rustlang/rust:nightly\nRUN cargo install cargo-fuzz --locked\n' | docker build -q -t datumesh-fuzz - >&2
+fi
 mkdir -p "$root/fuzz/corpus/$target"
 cp "$root"/fuzz/seeds/* "$root/fuzz/corpus/$target/"
 exec docker run --rm -v "$HOME/.cache/datumesh-cargo:/usr/local/cargo/registry" -v "$root:/w" -w /w/fuzz \

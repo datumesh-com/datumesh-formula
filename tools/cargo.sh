@@ -7,6 +7,9 @@ set -e
 tag="$1"; shift
 case "$tag" in nightly) image=rustlang/rust:nightly ;; lint) image=datumesh-rust-1.99-lint ;; *) image="rust:$tag" ;; esac
 root="$(cd "$(dirname "$0")/.." && pwd)"
+if [ "$tag" = lint ] && ! docker image inspect "$image" >/dev/null 2>&1; then
+  printf 'FROM rust:1.99\nRUN rustup component add clippy rustfmt\n' | docker build -q -t "$image" - >&2
+fi
 exec docker run --rm -i -v "$HOME/.cache/datumesh-cargo:/usr/local/cargo/registry" -v "$root:/w" -w /w \
   -e CARGO_TARGET_DIR="/w/target-$tag" -e CARGO_TERM_COLOR=never \
   -e RUSTDOCFLAGS -e RUST_TEST_THREADS -e FORMULA_FUZZ_CASES -e FORMULA_ROUNDTRIP_CASES "$image" cargo "$@"
