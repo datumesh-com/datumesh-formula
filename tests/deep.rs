@@ -68,13 +68,14 @@ fn many_minus_signs() {
 
 #[test]
 fn nesting_at_every_level() {
-    // 127 parentheses, each around every precedence level: 255 levels of nesting.
+    // 125 parentheses, each around every precedence level, and inside the innermost a
+    // parenthesised if with a not: 256 levels of nesting.
     let mut src = "x".to_string();
-    for _ in 0..127 {
+    for _ in 0..125 {
         src = format!("(-x ^ 2 * x / 1 + x - (if 1 < 2 and not false or true then x else x) + {src})");
     }
     let src = src.replace("-x ^ 2", "(-x) ^ 2");
-    assert!(eval_x(&src, "1", true).is_ok());
+    assert_eq!(eval_x(&src, "1", true), Ok("126".to_string()));
     let deeper = format!("({src})");
     assert_eq!(define(&deeper, &env()).unwrap_err().code, Code::Limit);
     // 255 nested calls.

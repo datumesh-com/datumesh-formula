@@ -362,12 +362,23 @@ impl Checker<'_> {
             },
             Node::Op { op, args } => match op {
                 Op::Neg => {
-                    let t = self.node(args[0])?;
-                    match t {
-                        Ty::Num(_) => Ok(t),
-                        Ty::Slice(ref elem, _) if matches!(**elem, Ty::Num(_)) => Ok(t),
-                        _ => Err(e(Code::Type, format!("-{}", t.name()))),
+                    // A chain of minus signs, iteratively.
+                    let mut chain = vec![id];
+                    let mut cur = args[0];
+                    while let Node::Op { op: Op::Neg, args } = ast.node(cur) {
+                        chain.push(cur);
+                        cur = args[0];
                     }
+                    let t = self.node(cur)?;
+                    match t {
+                        Ty::Num(_) => {}
+                        Ty::Slice(ref elem, _) if matches!(**elem, Ty::Num(_)) => {}
+                        _ => return Err(e(Code::Type, format!("-{}", t.name()))),
+                    }
+                    for n in chain {
+                        self.types[n as usize] = Some(t.clone());
+                    }
+                    Ok(t)
                 }
                 Op::Not => {
                     let t = self.scalar_of(args[0])?;
