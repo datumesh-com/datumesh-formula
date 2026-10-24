@@ -58,3 +58,14 @@ pub fn boolean(v: &Value, key: &str) -> Option<bool> {
         _ => None,
     }
 }
+
+/// A vector by its path under `spec-vectors/`.
+pub fn vector(rel: &str) -> Value {
+    json::parse(&std::fs::read(root().join(rel)).unwrap()).unwrap()
+}
+
+/// The environment of the formula vectors (`formula/add`): the function `calc.example.net/f`
+/// with the shared signature, and no other functions.
+pub fn formula_env() -> datumesh_formula::Env {
+    datumesh_formula::Env::from_value(vector("formula/add.json").get("env").unwrap()).unwrap()
+}
