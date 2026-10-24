@@ -289,6 +289,11 @@ impl Resolver<'_> {
     }
 
     fn value(&mut self, v: &PVal) -> Result<NodeId, Error> {
+        if let PVal::Expr(x) = v {
+            if matches!(self.tree.get(*x), PNode::Lambda(..)) {
+                return Err(e(Code::Placement, "a lambda is only the second argument of map or filter"));
+            }
+        }
         match v {
             PVal::Expr(x) => self.node(*x),
             // The parser admits `*` and ranges only in reads.
@@ -299,6 +304,13 @@ impl Resolver<'_> {
     /// A built-in argument: the aggregate of `scan` and `window` and the dimension of `along`
     /// are words, not variables.
     fn param_value(&mut self, callee: &str, param: &str, v: &PVal) -> Result<NodeId, Error> {
+        if param == "fn" && (callee == "map" || callee == "filter") {
+            if let PVal::Expr(x) = v {
+                if matches!(self.tree.get(*x), PNode::Lambda(..)) {
+                    return self.node(*x);
+                }
+            }
+        }
         if param == "aggregate" && (callee == "scan" || callee == "window") {
             let word = match v {
                 PVal::Expr(x) => match self.tree.get(*x) {

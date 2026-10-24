@@ -93,16 +93,17 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, Error> {
         if date_shape(b, i) {
             if b.get(i + 10) == Some(&b'T') {
                 // Anything shaped YYYY-MM-DDT... is an instant or E_FORMULA_INSTANT.
-                let mut j = i + 10;
-                while j < b.len() && (is_word_char(b[j]) || b[j] == b':' || b[j] == b'.') {
-                    j += 1;
-                }
-                let text = &src[i..j];
-                if j - i != 27 || parse_instant(text).is_none() {
-                    return Err(err(Code::Instant, i, format!("not a canonical instant: {text}")));
+                let end = (i + 27).min(b.len());
+                let text = src.get(i..end).unwrap_or("");
+                if end - i != 27 || parse_instant(text).is_none() || b.get(end).is_some_and(|&c| is_word_char(c)) {
+                    let mut j = i + 10;
+                    while j < b.len() && (is_word_char(b[j]) || b[j] == b':' || b[j] == b'.') {
+                        j += 1;
+                    }
+                    return Err(err(Code::Instant, i, format!("not a canonical instant: {}", &src[i..j])));
                 }
                 out.push(Token { kind: Kind::Instant, text: text.to_string(), unit: None, pos: start });
-                i = j;
+                i = end;
                 continue;
             }
             let text = &src[i..i + 10];
@@ -153,7 +154,8 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, Error> {
                 j += 1;
             }
             let mut integer = true;
-            if j < b.len() && b[j] == b'.' && b.get(j + 1) != Some(&b'.') {
+            // The run: digits and points, stopping before "..".
+            while j < b.len() && b[j] == b'.' && b.get(j + 1) != Some(&b'.') {
                 integer = false;
                 j += 1;
                 while j < b.len() && b[j].is_ascii_digit() {
@@ -269,14 +271,17 @@ fn qualified_shape(b: &[u8], i: usize) -> Option<usize> {
         j += 1;
     }
     let host = &b[i..j];
-    if !host.contains(&b'.') || b.get(j) != Some(&b'/') || !b.get(j + 1).is_some_and(|&c| is_word_char(c)) {
+    if host.split(|&c| c == b'.').any(|l| l.is_empty()) {
+        return None;
+    }
+    if !host.contains(&b'.') || b.get(j) != Some(&b'/') {
         return None;
     }
     let last = host.rsplit(|&c| c == b'.').next().unwrap_or(&[]);
     if last.is_empty() || last.iter().all(u8::is_ascii_digit) {
         return None;
     }
-    while j < b.len() && b[j] == b'/' && b.get(j + 1).is_some_and(|&c| is_word_char(c)) {
+    while j < b.len() && b[j] == b'/' {
         j += 1;
         while j < b.len() && is_word_char(b[j]) {
             j += 1;

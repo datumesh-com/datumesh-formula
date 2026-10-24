@@ -184,6 +184,9 @@ impl<'a> Parser<'a> {
 
     fn unexpected(&self, expected: &str) -> Error {
         let t = self.peek();
+        if t.is("->") {
+            return err(Code::Placement, "a lambda is only an argument of map or filter");
+        }
         if t.kind == Kind::Word && is_keyword(&t.text) {
             return err(Code::Syntax, format!("unexpected keyword, found {} at {}", t.describe(), t.pos));
         }
@@ -229,9 +232,6 @@ impl<'a> Parser<'a> {
     }
 
     fn expr_inner(&mut self) -> Result<Id, Error> {
-        if let Some((params, _)) = self.lambda_head() {
-            return Err(err(Code::Placement, format!("a lambda ({}) is only an argument of map or filter", params.join(", "))));
-        }
         let t = self.peek();
         if t.is_word("if") && !self.if_is_call() {
             return self.if_expr();
@@ -293,6 +293,9 @@ impl<'a> Parser<'a> {
         if !self.peek_at(1).is("(") {
             return false;
         }
+        if self.peek_at(2).kind == Kind::Word && self.peek_at(3).is(":") {
+            return false;
+        }
         let mut depth = 0i64;
         let mut k = 1;
         loop {
@@ -330,7 +333,9 @@ impl<'a> Parser<'a> {
         self.bump(); // let
         let t = self.peek();
         if t.kind != Kind::Word {
-            return Err(self.unexpected("a name"));
+            // What a primary expression would report here, else a syntax error.
+            self.primary()?;
+            return Err(err(Code::Syntax, format!("expected a name after let, found {} at {}", t.describe(), t.pos)));
         }
         if is_keyword(&t.text) {
             return Err(err(Code::Reserved, format!("{} cannot be a name", t.text)));
@@ -543,6 +548,10 @@ impl<'a> Parser<'a> {
                 "*" => Err(err(Code::Placement, "* is an argument of a read only")),
                 "[" => Err(err(Code::Placement, "a range is an argument of a read only")),
                 "+" => Err(err(Code::Syntax, "there is no unary +")),
+                "^" => Err(err(Code::Ambiguous, "write the parentheses: (-a)^b, -(a^b), (a^b)^c or a^(b^c)")),
+                "." => Err(err(Code::Reserved, "'.' is reserved for methods (1.3b)")),
+                "->" => Err(err(Code::Placement, "a lambda is only an argument of map or filter")),
+                "=" | "<>" | "<" | "<=" | ">" | ">=" => Err(err(Code::Chain, "comparisons do not chain: write and")),
                 _ => Err(self.unexpected("an expression")),
             },
             Kind::End => Err(self.unexpected("an expression")),
@@ -555,6 +564,9 @@ impl<'a> Parser<'a> {
         let called = self.peek_at(1).is("(");
         match lower.as_str() {
             "true" | "false" => {
+                if called {
+                    return Err(self.unexpected("an expression"));
+                }
                 self.bump();
                 return Ok(self.push(PNode::Bool(lower == "true")));
             }
@@ -604,7 +616,7 @@ impl<'a> Parser<'a> {
     }
 
     /// An argument list `( [ arg *( "," arg ) ] )` of a read (`read`) or of the built-in `callee`.
-    fn args(&mut self, read: bool, callee: &str) -> Result<Vec<PArg>, Error> {
+    fn args(&mut self, read: bool, _callee: &str) -> Result<Vec<PArg>, Error> {
         self.expect("(")?;
         let mut out: Vec<PArg> = Vec::new();
         if self.peek().is(")") {
@@ -618,8 +630,7 @@ impl<'a> Parser<'a> {
                 self.bump();
                 self.bump();
             }
-            let positional_index = out.iter().filter(|a| a.label.is_none()).count();
-            let value = if read && self.peek().is("*") && (self.peek_at(1).is(",") || self.peek_at(1).is(")")) {
+                        let value = if read && self.peek().is("*") && (self.peek_at(1).is(",") || self.peek_at(1).is(")")) {
                 self.bump();
                 PVal::Open
             } else if self.peek().is("*") && (self.peek_at(1).is(",") || self.peek_at(1).is(")")) {
@@ -634,7 +645,8 @@ impl<'a> Parser<'a> {
                 let hi = self.expr()?;
                 self.expect("]")?;
                 PVal::Range(lo, hi)
-            } else if !read && (callee == "map" || callee == "filter") && label.is_none() && positional_index == 1 {
+            } else if !read && self.lambda_head().is_some() {
+                // Placement is checked at resolution (only the second argument of map and filter).
                 PVal::Expr(self.expr_or_lambda()?)
             } else {
                 PVal::Expr(self.expr()?)

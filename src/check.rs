@@ -317,6 +317,14 @@ impl Checker<'_> {
                 }
                 let mut acc = self.node(cur)?;
                 for (nid, op, r) in spine.into_iter().rev() {
+                    if matches!(op, Op::And | Op::Or) {
+                        if acc.is_slice() {
+                            return Err(e(Code::SliceValue, "a slice where a scalar is required"));
+                        }
+                        if acc != Ty::Bool {
+                            return Err(e(Code::Type, format!("{} {} ...: and and or take booleans", acc.name(), op.text())));
+                        }
+                    }
                     let rt = self.node(r)?;
                     acc = self.binary(op, &acc, &rt)?;
                     self.types[nid as usize] = Some(acc.clone());
@@ -790,10 +798,16 @@ impl Checker<'_> {
             "mod" => {
                 let a = self.number(args[0], f)?;
                 let b = self.number(args[1], f)?;
+                if a.is_degc() || b.is_degc() {
+                    return Err(e(Code::UnitOffset, "mod() of degC"));
+                }
                 Ok(Ty::Num(same_unit(&a, &b, "mod()")?))
             }
             "sqrt" => {
                 let x = self.number(args[0], f)?;
+                if x.is_degc() {
+                    return Err(e(Code::UnitOffset, "sqrt() of degC"));
+                }
                 match &x {
                     NumUnit::Bare { .. } => Ok(Ty::Num(NumUnit::Bare { zero: false })),
                     NumUnit::Varies => Err(e(Code::UnitUnknown, "the unit varies by member")),
@@ -820,6 +834,9 @@ impl Checker<'_> {
             "atan2" => {
                 let y = self.number(args[0], f)?;
                 let x = self.number(args[1], f)?;
+                if y.is_degc() || x.is_degc() {
+                    return Err(e(Code::UnitOffset, "atan2() of degC"));
+                }
                 same_unit(&y, &x, "atan2()")?;
                 Ok(Ty::Num(NumUnit::Known(Unit::one())))
             }
@@ -866,7 +883,7 @@ impl Checker<'_> {
                 let n = self.scalar_of(args[1])?;
                 match &n {
                     Ty::Num(u) if f == "add_days" => {
-                        if !(u.is_bare() || u.single() == Some("d") || *u == NumUnit::Known(Unit::one())) {
+                        if !(u.is_bare() || u.single() == Some("d")) {
                             return Err(e(Code::UnitMismatch, format!("add_days() counts days, not {}", u.text())));
                         }
                     }
@@ -1033,6 +1050,7 @@ impl Checker<'_> {
             let mut acc = tys[0].clone();
             for t in &tys[1..] {
                 acc = match (&acc, t) {
+                    (Ty::Num(_), Ty::Num(_)) if f == "count" => acc,
                     (Ty::Num(a), Ty::Num(b)) => Ty::Num(same_unit(a, b, &format!("{f}()"))?),
                     _ if std::mem::discriminant(&acc) == std::mem::discriminant(t) => acc,
                     _ => return Err(e(Code::Type, format!("{f}() of {} and {}", acc.name(), t.name()))),
@@ -1270,18 +1288,14 @@ fn add_units(op: Op, a: &NumUnit, b: &NumUnit) -> Result<NumUnit, Error> {
     let what = format!("{}: {} and {}", op.text(), a.text(), b.text());
     let k = NumUnit::atom("K");
     let degc = NumUnit::atom("degC");
-    // Offset units: degC - degC is K; degC +- K is degC; K + degC is degC; a bare literal added
-    // to degC is in K.
+    // Offset units (15.10): degC - degC is K; degC +- K and degC +- a bare literal are degC;
+    // K + degC and a bare literal + degC are degC; anything else with degC is an offset error.
     if a.is_degc() || b.is_degc() {
         return match (op, a, b) {
             (Op::Sub, x, y) if x.is_degc() && y.is_degc() => Ok(k),
-            (Op::Add, x, y) if x.is_degc() && y.is_degc() => Err(e(Code::UnitOffset, format!("{what}: write degC - degC"))),
             (_, x, y) if x.is_degc() && (*y == k || y.is_bare()) => Ok(degc),
-            (Op::Add, x, y) if (*x == k) && y.is_degc() => Ok(degc),
-            (_, x, y) if (x.is_bare() || *x == k) && y.is_degc() => {
-                Err(e(Code::UnitOffset, format!("{} {} degC", if x.is_bare() { "a bare number" } else { "K" }, op.text())))
-            }
-            _ => Err(e(Code::UnitMismatch, what)),
+            (Op::Add, x, y) if (*x == k || x.is_bare()) && y.is_degc() => Ok(degc),
+            _ => Err(e(Code::UnitOffset, format!("{what}: add a difference (K) to a temperature"))),
         };
     }
     same_unit(a, b, op.text())
@@ -1323,10 +1337,6 @@ pub(crate) fn convert_factor(from: &NumUnit, to: &str) -> Option<ConvertKind> {
         NumUnit::Known(_) => from.single()?,
         NumUnit::Varies => return None,
     };
-    let bare = from.is_bare();
-    if bare && to != "1" {
-        return None;
-    }
     for g in groups {
         let a = g.iter().find(|(n, _)| *n == f);
         let b = g.iter().find(|(n, _)| *n == to);
