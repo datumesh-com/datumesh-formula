@@ -754,7 +754,6 @@ impl Checker<'_> {
     // Built-ins.
 
     fn call(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
-        let named_of = |n: &str| named.iter().find(|(k, _)| k == n).map(|(_, v)| *v);
         if AGGREGATES.contains(&f) {
             return self.aggregate(f, args);
         }
@@ -763,244 +762,357 @@ impl Checker<'_> {
         }
         match f {
             "map" | "filter" => self.map_filter(f, args),
-            "scan" | "window" => {
-                let s = self.node(args[0])?;
-                let Ty::Slice(elem, keys) = &s else {
-                    return Err(e(Code::Type, format!("{f}() takes a slice")));
-                };
-                let agg_pos = if f == "scan" { 1 } else { 2 };
-                if f == "window" {
-                    let n = self.scalar_of(args[1])?;
-                    self.dimensionless(&n, "the width of window()")?;
-                }
-                let Node::Agg(agg) = self.ast.node(args[agg_pos]) else {
-                    return Err(e(Code::Enum, format!("the aggregate of {f}() is an aggregate name")));
-                };
-                let along = match named_of("along") {
-                    Some(a) => Some(self.along_key(a)?),
-                    None => None,
-                };
-                self.dimension(keys, along.as_deref())?;
-                let t = self.aggregate_type(agg, elem)?;
-                Ok(Ty::Slice(Box::new(t), keys.clone()))
-            }
-            "otherwise" => {
-                let a = self.node(args[0])?;
-                let b = self.node(args[1])?;
-                if a.is_slice() || b.is_slice() {
-                    return Err(e(Code::SliceValue, "otherwise() takes scalars"));
-                }
-                self.unify(&a, &b, "otherwise()")
-            }
-            "asof" => {
-                if args.is_empty() {
-                    self.asof_dependent = true;
-                    return Ok(Ty::Instant);
-                }
-                let t = self.tx_cell(args[0], "asof(cell, T)")?;
-                let at = self.scalar_of(args[1])?;
-                if at != Ty::Instant {
-                    return Err(e(Code::Type, format!("T of asof(cell, T) is an instant, not {}", at.name())));
-                }
-                Ok(t)
-            }
-            "versions" => {
-                let t = self.tx_cell(args[0], "versions(cell, from, to)")?;
-                for a in &args[1..] {
-                    let x = self.scalar_of(*a)?;
-                    if x != Ty::Instant {
-                        return Err(e(Code::Type, format!("versions() takes instants, not {}", x.name())));
-                    }
-                }
-                let key = KeyTy { name: "tx".to_string(), ty: Type::Instant, unit: None, valid: true };
-                Ok(Ty::Slice(Box::new(t), vec![key]))
-            }
+            "scan" | "window" => self.t_scan(id, f, args, named),
+            "otherwise" => self.t_otherwise(id, f, args, named),
+            "asof" => self.t_asof(id, f, args, named),
+            "versions" => self.t_versions(id, f, args, named),
             "abs" | "floor" | "ceiling" => {
                 let x = self.number(args[0], f)?;
                 Ok(Ty::Num(x))
             }
-            "round" | "round_up" | "round_down" => {
-                let x = self.number(args[0], f)?;
-                if let Some(d) = named_of("digits") {
-                    let t = self.scalar_of(d)?;
-                    self.dimensionless(&t, "digits")?;
-                }
-                Ok(Ty::Num(x))
-            }
-            "mod" => {
-                let a = self.number(args[0], f)?;
-                let b = self.number(args[1], f)?;
-                if a.is_degc() || b.is_degc() {
-                    return Err(e(Code::UnitOffset, "mod() of degC"));
-                }
-                Ok(Ty::Num(same_unit(&a, &b, "mod()")?))
-            }
-            "sqrt" => {
-                let x = self.number(args[0], f)?;
-                if x.is_degc() {
-                    return Err(e(Code::UnitOffset, "sqrt() of degC"));
-                }
-                match &x {
-                    NumUnit::Bare { .. } => Ok(Ty::Num(NumUnit::Bare { zero: false })),
-                    NumUnit::Varies => Err(e(Code::UnitUnknown, "the unit varies by member")),
-                    NumUnit::Known(u) => match u.sqrt() {
-                        Some(r) => Ok(Ty::Num(NumUnit::Known(r))),
-                        None => Err(e(Code::Exponent, format!("sqrt() of {} has no unit", x.text()))),
-                    },
-                }
-            }
-            "exp" | "ln" => {
-                let x = self.number(args[0], f)?;
-                if !(x.is_bare() || x == NumUnit::Known(Unit::one())) {
-                    return Err(e(Code::UnitMismatch, format!("the argument of {f}() is dimensionless")));
-                }
-                Ok(Ty::Num(NumUnit::Known(Unit::one())))
-            }
-            "sin" | "cos" => {
-                let x = self.number(args[0], f)?;
-                if !(x.is_bare() || x == NumUnit::Known(Unit::one()) || x.single() == Some("deg")) {
-                    return Err(e(Code::UnitMismatch, format!("{f}() takes radians (1) or deg, not {}", x.text())));
-                }
-                Ok(Ty::Num(NumUnit::Known(Unit::one())))
-            }
-            "atan2" => {
-                let y = self.number(args[0], f)?;
-                let x = self.number(args[1], f)?;
-                if y.is_degc() || x.is_degc() {
-                    return Err(e(Code::UnitOffset, "atan2() of degC"));
-                }
-                same_unit(&y, &x, "atan2()")?;
-                Ok(Ty::Num(NumUnit::Known(Unit::one())))
-            }
+            "round" | "round_up" | "round_down" => self.t_round(id, f, args, named),
+            "mod" => self.t_mod(id, f, args, named),
+            "sqrt" => self.t_sqrt(id, f, args, named),
+            "exp" | "ln" => self.t_exp(id, f, args, named),
+            "sin" | "cos" => self.t_sin(id, f, args, named),
+            "atan2" => self.t_atan2(id, f, args, named),
             "pi" => Ok(Ty::Num(NumUnit::Known(Unit::one()))),
-            "haversine" => {
-                for a in args {
-                    let x = self.number(*a, f)?;
-                    if !(x.is_bare() || x.single() == Some("deg")) {
-                        return Err(e(Code::UnitMismatch, format!("haversine() takes degrees, not {}", x.text())));
-                    }
-                }
-                Ok(Ty::Num(NumUnit::atom("m")))
-            }
-            "convert" => {
-                let x = self.number(args[0], f)?;
-                let Some(target) = str_literal(self.ast, args[1]) else {
-                    return Err(e(Code::Enum, "the unit of convert() is a string literal"));
-                };
-                if !units::is_unit(target) {
-                    return Err(e(Code::Unit, format!("not a listed unit: {target}")));
-                }
-                if convert_factor(&x, target).is_none() {
-                    return Err(e(Code::UnitMismatch, format!("convert() cannot convert {} to {target}", x.text())));
-                }
-                Ok(Ty::Num(NumUnit::atom(target)))
-            }
-            "date" => {
-                for a in args {
-                    let t = self.scalar_of(*a)?;
-                    self.dimensionless(&t, "date()")?;
-                }
-                Ok(Ty::Date)
-            }
-            "year" | "month" | "day" | "weekday" => {
-                self.expect(args[0], &Ty::Date, f)?;
-                Ok(Ty::Num(NumUnit::Known(Unit::one())))
-            }
+            "haversine" => self.t_haversine(id, f, args, named),
+            "convert" => self.t_convert(id, f, args, named),
+            "date" => self.t_date(id, f, args, named),
+            "year" | "month" | "day" | "weekday" => self.t_year(id, f, args, named),
             "end_of_month" => {
                 self.expect(args[0], &Ty::Date, f)?;
                 Ok(Ty::Date)
             }
-            "add_days" | "add_months" => {
-                self.expect(args[0], &Ty::Date, f)?;
-                let n = self.scalar_of(args[1])?;
-                match &n {
-                    Ty::Num(u) if f == "add_days" => {
-                        if !(u.is_bare() || u.single() == Some("d")) {
-                            return Err(e(Code::UnitMismatch, format!("add_days() counts days, not {}", u.text())));
-                        }
-                    }
-                    Ty::Num(_) => self.dimensionless(&n, "the months of add_months()")?,
-                    _ => return Err(e(Code::Type, format!("{f}() counts with a number, not {}", n.name()))),
-                }
-                self.business_options(named, f == "add_months")?;
-                Ok(Ty::Date)
-            }
-            "business_days" => {
-                self.expect(args[0], &Ty::Date, f)?;
-                self.expect(args[1], &Ty::Date, f)?;
-                self.business_options(named, false)?;
-                Ok(Ty::Num(NumUnit::atom("d")))
-            }
-            "year_fraction" => {
-                self.expect(args[0], &Ty::Date, f)?;
-                self.expect(args[1], &Ty::Date, f)?;
-                match str_literal(self.ast, args[2]) {
-                    Some(c) if CONVENTIONS.contains(&c) => {}
-                    _ => {
-                        return Err(e(
-                            Code::Enum,
-                            "convention is a string literal, one of act/360, act/365f, act/act_isda, 30/360, 30e/360, 30/360_us",
-                        ))
-                    }
-                }
-                Ok(Ty::Num(NumUnit::Known(Unit::one())))
-            }
-            "is_holiday" => {
-                self.expect(args[0], &Ty::Date, f)?;
-                self.calendar(args[1])?;
-                Ok(Ty::Bool)
-            }
-            "date_of" => {
-                self.expect(args[0], &Ty::Instant, f)?;
-                Ok(Ty::Date)
-            }
-            "instant" => {
-                self.expect(args[0], &Ty::Date, f)?;
-                Ok(Ty::Instant)
-            }
-            "len" => {
-                self.expect(args[0], &Ty::Str, f)?;
-                Ok(Ty::Num(NumUnit::Known(Unit::one())))
-            }
+            "add_days" | "add_months" => self.t_add_days(id, f, args, named),
+            "business_days" => self.t_business_days(id, f, args, named),
+            "year_fraction" => self.t_year_fraction(id, f, args, named),
+            "is_holiday" => self.t_is_holiday(id, f, args, named),
+            "date_of" => self.t_date_of(id, f, args, named),
+            "instant" => self.t_instant(id, f, args, named),
+            "len" => self.t_len(id, f, args, named),
             "upper" | "lower" | "trim" => {
                 self.expect(args[0], &Ty::Str, f)?;
                 Ok(Ty::Str)
             }
-            "concat" => {
-                for a in args {
-                    self.expect(*a, &Ty::Str, f)?;
-                }
-                Ok(Ty::Str)
-            }
-            "substr" => {
-                self.expect(args[0], &Ty::Str, f)?;
-                for a in &args[1..] {
-                    let t = self.scalar_of(*a)?;
-                    self.dimensionless(&t, "substr()")?;
-                }
-                Ok(Ty::Str)
-            }
-            "find" => {
-                self.expect(args[0], &Ty::Str, f)?;
-                self.expect(args[1], &Ty::Str, f)?;
-                if let Some(s) = named_of("start") {
-                    let t = self.scalar_of(s)?;
-                    self.dimensionless(&t, "start")?;
-                }
-                Ok(Ty::Num(NumUnit::Known(Unit::one())))
-            }
+            "concat" => self.t_concat(id, f, args, named),
+            "substr" => self.t_substr(id, f, args, named),
+            "find" => self.t_find(id, f, args, named),
             "text" => {
                 self.scalar_of(args[0])?;
                 Ok(Ty::Str)
             }
-            "fixed" => {
-                self.number(args[0], f)?;
-                let t = self.scalar_of(args[1])?;
-                self.dimensionless(&t, "digits")?;
-                Ok(Ty::Str)
-            }
+            "fixed" => self.t_fixed(id, f, args, named),
             _ => Err(e(Code::UnknownFunction, format!("{f} is not a built-in"))),
         }
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_scan(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        let named_of = |n: &str| named.iter().find(|(k, _)| k == n).map(|(_, v)| *v);
+        let s = self.node(args[0])?;
+        let Ty::Slice(elem, keys) = &s else {
+            return Err(e(Code::Type, format!("{f}() takes a slice")));
+        };
+        let agg_pos = if f == "scan" { 1 } else { 2 };
+        if f == "window" {
+            let n = self.scalar_of(args[1])?;
+            self.dimensionless(&n, "the width of window()")?;
+        }
+        let Node::Agg(agg) = self.ast.node(args[agg_pos]) else {
+            return Err(e(Code::Enum, format!("the aggregate of {f}() is an aggregate name")));
+        };
+        let along = match named_of("along") {
+            Some(a) => Some(self.along_key(a)?),
+            None => None,
+        };
+        self.dimension(keys, along.as_deref())?;
+        let t = self.aggregate_type(agg, elem)?;
+        Ok(Ty::Slice(Box::new(t), keys.clone()))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_otherwise(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        let a = self.node(args[0])?;
+        let b = self.node(args[1])?;
+        if a.is_slice() || b.is_slice() {
+            return Err(e(Code::SliceValue, "otherwise() takes scalars"));
+        }
+        self.unify(&a, &b, "otherwise()")
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_asof(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        if args.is_empty() {
+            self.asof_dependent = true;
+            return Ok(Ty::Instant);
+        }
+        let t = self.tx_cell(args[0], "asof(cell, T)")?;
+        let at = self.scalar_of(args[1])?;
+        if at != Ty::Instant {
+            return Err(e(Code::Type, format!("T of asof(cell, T) is an instant, not {}", at.name())));
+        }
+        Ok(t)
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_versions(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        let t = self.tx_cell(args[0], "versions(cell, from, to)")?;
+        for a in &args[1..] {
+            let x = self.scalar_of(*a)?;
+            if x != Ty::Instant {
+                return Err(e(Code::Type, format!("versions() takes instants, not {}", x.name())));
+            }
+        }
+        let key = KeyTy { name: "tx".to_string(), ty: Type::Instant, unit: None, valid: true };
+        Ok(Ty::Slice(Box::new(t), vec![key]))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_round(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        let named_of = |n: &str| named.iter().find(|(k, _)| k == n).map(|(_, v)| *v);
+        let x = self.number(args[0], f)?;
+        if let Some(d) = named_of("digits") {
+            let t = self.scalar_of(d)?;
+            self.dimensionless(&t, "digits")?;
+        }
+        Ok(Ty::Num(x))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_mod(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        let a = self.number(args[0], f)?;
+        let b = self.number(args[1], f)?;
+        if a.is_degc() || b.is_degc() {
+            return Err(e(Code::UnitOffset, "mod() of degC"));
+        }
+        Ok(Ty::Num(same_unit(&a, &b, "mod()")?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_sqrt(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        let x = self.number(args[0], f)?;
+        if x.is_degc() {
+            return Err(e(Code::UnitOffset, "sqrt() of degC"));
+        }
+        match &x {
+            NumUnit::Bare { .. } => Ok(Ty::Num(NumUnit::Bare { zero: false })),
+            NumUnit::Varies => Err(e(Code::UnitUnknown, "the unit varies by member")),
+            NumUnit::Known(u) => match u.sqrt() {
+                Some(r) => Ok(Ty::Num(NumUnit::Known(r))),
+                None => Err(e(Code::Exponent, format!("sqrt() of {} has no unit", x.text()))),
+            },
+        }
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_exp(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        let x = self.number(args[0], f)?;
+        if !(x.is_bare() || x == NumUnit::Known(Unit::one())) {
+            return Err(e(Code::UnitMismatch, format!("the argument of {f}() is dimensionless")));
+        }
+        Ok(Ty::Num(NumUnit::Known(Unit::one())))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_sin(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        let x = self.number(args[0], f)?;
+        if !(x.is_bare() || x == NumUnit::Known(Unit::one()) || x.single() == Some("deg")) {
+            return Err(e(Code::UnitMismatch, format!("{f}() takes radians (1) or deg, not {}", x.text())));
+        }
+        Ok(Ty::Num(NumUnit::Known(Unit::one())))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_atan2(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        let y = self.number(args[0], f)?;
+        let x = self.number(args[1], f)?;
+        if y.is_degc() || x.is_degc() {
+            return Err(e(Code::UnitOffset, "atan2() of degC"));
+        }
+        same_unit(&y, &x, "atan2()")?;
+        Ok(Ty::Num(NumUnit::Known(Unit::one())))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_haversine(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        for a in args {
+            let x = self.number(*a, f)?;
+            if !(x.is_bare() || x.single() == Some("deg")) {
+                return Err(e(Code::UnitMismatch, format!("haversine() takes degrees, not {}", x.text())));
+            }
+        }
+        Ok(Ty::Num(NumUnit::atom("m")))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_convert(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        let x = self.number(args[0], f)?;
+        let Some(target) = str_literal(self.ast, args[1]) else {
+            return Err(e(Code::Enum, "the unit of convert() is a string literal"));
+        };
+        if !units::is_unit(target) {
+            return Err(e(Code::Unit, format!("not a listed unit: {target}")));
+        }
+        if convert_factor(&x, target).is_none() {
+            return Err(e(Code::UnitMismatch, format!("convert() cannot convert {} to {target}", x.text())));
+        }
+        Ok(Ty::Num(NumUnit::atom(target)))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_date(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        for a in args {
+            let t = self.scalar_of(*a)?;
+            self.dimensionless(&t, "date()")?;
+        }
+        Ok(Ty::Date)
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_year(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        self.expect(args[0], &Ty::Date, f)?;
+        Ok(Ty::Num(NumUnit::Known(Unit::one())))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_add_days(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        self.expect(args[0], &Ty::Date, f)?;
+        let n = self.scalar_of(args[1])?;
+        match &n {
+            Ty::Num(u) if f == "add_days" => {
+                if !(u.is_bare() || u.single() == Some("d")) {
+                    return Err(e(Code::UnitMismatch, format!("add_days() counts days, not {}", u.text())));
+                }
+            }
+            Ty::Num(_) => self.dimensionless(&n, "the months of add_months()")?,
+            _ => return Err(e(Code::Type, format!("{f}() counts with a number, not {}", n.name()))),
+        }
+        self.business_options(named, f == "add_months")?;
+        Ok(Ty::Date)
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_business_days(
+        &mut self,
+        id: NodeId,
+        f: &str,
+        args: &[NodeId],
+        named: &[(String, NodeId)],
+    ) -> Result<Ty, Error> {
+        self.expect(args[0], &Ty::Date, f)?;
+        self.expect(args[1], &Ty::Date, f)?;
+        self.business_options(named, false)?;
+        Ok(Ty::Num(NumUnit::atom("d")))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_year_fraction(
+        &mut self,
+        id: NodeId,
+        f: &str,
+        args: &[NodeId],
+        named: &[(String, NodeId)],
+    ) -> Result<Ty, Error> {
+        self.expect(args[0], &Ty::Date, f)?;
+        self.expect(args[1], &Ty::Date, f)?;
+        match str_literal(self.ast, args[2]) {
+            Some(c) if CONVENTIONS.contains(&c) => {}
+            _ => return Err(e(
+                Code::Enum,
+                "convention is a string literal, one of act/360, act/365f, act/act_isda, 30/360, 30e/360, 30/360_us",
+            )),
+        }
+        Ok(Ty::Num(NumUnit::Known(Unit::one())))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_is_holiday(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        self.expect(args[0], &Ty::Date, f)?;
+        self.calendar(args[1])?;
+        Ok(Ty::Bool)
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_date_of(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        self.expect(args[0], &Ty::Instant, f)?;
+        Ok(Ty::Date)
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_instant(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        self.expect(args[0], &Ty::Date, f)?;
+        Ok(Ty::Instant)
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_len(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        self.expect(args[0], &Ty::Str, f)?;
+        Ok(Ty::Num(NumUnit::Known(Unit::one())))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_concat(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        for a in args {
+            self.expect(*a, &Ty::Str, f)?;
+        }
+        Ok(Ty::Str)
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_substr(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        self.expect(args[0], &Ty::Str, f)?;
+        for a in &args[1..] {
+            let t = self.scalar_of(*a)?;
+            self.dimensionless(&t, "substr()")?;
+        }
+        Ok(Ty::Str)
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_find(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        let named_of = |n: &str| named.iter().find(|(k, _)| k == n).map(|(_, v)| *v);
+        self.expect(args[0], &Ty::Str, f)?;
+        self.expect(args[1], &Ty::Str, f)?;
+        if let Some(s) = named_of("start") {
+            let t = self.scalar_of(s)?;
+            self.dimensionless(&t, "start")?;
+        }
+        Ok(Ty::Num(NumUnit::Known(Unit::one())))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn t_fixed(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<Ty, Error> {
+        self.number(args[0], f)?;
+        let t = self.scalar_of(args[1])?;
+        self.dimensionless(&t, "digits")?;
+        Ok(Ty::Str)
     }
 
     fn expect(&mut self, id: NodeId, want: &Ty, f: &str) -> Result<(), Error> {

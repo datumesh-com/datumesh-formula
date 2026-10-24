@@ -103,8 +103,39 @@ impl Compiled {
 /// labelled, which a printed body always is (`parse(print(ast)) = ast`, 15.6).
 pub fn canonical_ast(source: &str, env: Option<&Env>) -> Result<Ast, Error> {
     let tokens = lex::lex(source)?;
-    let tree = parse::parse(&tokens)?;
-    resolve::resolve(&tree, env)
+    deep(tokens.len(), || {
+        let tree = parse::parse(&tokens)?;
+        resolve::resolve(&tree, env)
+    })
+}
+
+/// Run `f`, on a thread with a large stack when the body is long enough to nest deeply: the
+/// recursive descent at 256 levels needs more than the 2 MiB of a default thread in a debug
+/// build. Where threads cannot be spawned, `f` runs on the caller's stack.
+fn deep<T: Send>(tokens: usize, f: impl FnOnce() -> T + Send) -> T {
+    const LONG: usize = 128;
+    const STACK: usize = 64 << 20;
+    if tokens <= LONG {
+        return f();
+    }
+    let mut f = Some(f);
+    let spawned = std::thread::scope(|s| {
+        let run = || f.take().map(|f| f());
+        match std::thread::Builder::new().stack_size(STACK).spawn_scoped(s, run) {
+            Ok(h) => Some(h.join()),
+            Err(_) => None,
+        }
+    });
+    match spawned {
+        Some(Ok(Some(v))) => v,
+        // A panic on the deep thread is the caller's panic.
+        Some(Err(payload)) => std::panic::resume_unwind(payload),
+        // No thread (a platform without them): the caller's stack.
+        _ => match f.take() {
+            Some(f) => f(),
+            None => unreachable!("the closure ran on the deep thread"),
+        },
+    }
 }
 
 /// Check a formula descriptor (15.6): it must have `signature.order` (`E_FORMULA_ORDER`), its
@@ -136,8 +167,13 @@ pub fn check_descriptor(name: &str, descriptor: &Value, env: &Env) -> Result<Com
 /// Define a formula: lex, parse, resolve and check `source` against `env` (15.2-15.10), reporting
 /// the first failure with its code (15.11).
 pub fn define(source: &str, env: &Env) -> Result<Compiled, Error> {
-    let ast = canonical_ast(source, Some(env))?;
-    let checked = check::check(&ast, env)?;
+    let tokens = lex::lex(source)?;
+    let (ast, checked) = deep(tokens.len(), || -> Result<(Ast, check::Checked), Error> {
+        let tree = parse::parse(&tokens)?;
+        let ast = resolve::resolve(&tree, Some(env))?;
+        let checked = check::check(&ast, env)?;
+        Ok((ast, checked))
+    })?;
     let returns = Returns {
         ty: match &checked.ty {
             Ty::Num(_) => Type::Number,

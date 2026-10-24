@@ -756,7 +756,6 @@ impl<W: World + ?Sized> Eval<'_, W> {
     // Built-ins.
 
     fn call(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
-        let named_of = |n: &str| named.iter().find(|(k, _)| k == n).map(|(_, v)| *v);
         if AGGREGATES.contains(&f) {
             return self.aggregate_call(f, args);
         }
@@ -766,181 +765,299 @@ impl<W: World + ?Sized> Eval<'_, W> {
             }
             "map" | "filter" => self.map_filter(f, args),
             "scan" | "window" => self.scan_window(f, args, named),
-            "otherwise" => match self.node(args[0]) {
-                Err(Stop::Code(c)) if c.is_catchable() => self.node(args[1]),
-                r => r,
-            },
-            "asof" => {
-                if args.is_empty() {
-                    return Ok(V::Instant(self.asof));
-                }
-                self.asof_read(args[0], args[1])
-            }
+            "otherwise" => self.b_otherwise(id, f, args, named),
+            "asof" => self.b_asof(id, f, args, named),
             "versions" => self.versions(args),
-            "abs" => Ok(V::Num(num(&self.node(args[0])?)?.abs().check_range()?)),
-            "floor" => Ok(V::Num(num(&self.node(args[0])?)?.floor().check_range()?)),
-            "ceiling" => Ok(V::Num(num(&self.node(args[0])?)?.ceiling().check_range()?)),
-            "round" | "round_up" | "round_down" => {
-                let x = self.node(args[0])?;
-                let digits = match named_of("digits") {
-                    Some(d) => self.node(d)?,
-                    None => V::Num(Decimal::zero()),
-                };
-                let mode = match f {
-                    "round" => RoundMode::Nearest,
-                    "round_up" => RoundMode::Up,
-                    _ => RoundMode::Down,
-                };
-                Ok(V::Num(decimal::round_digits(num(&x)?, num(&digits)?, mode)?))
-            }
-            "mod" => {
-                let x = self.node(args[0])?;
-                let d = self.node(args[1])?;
-                Ok(V::Num(decimal::modulo(num(&x)?, num(&d)?)?))
-            }
-            "sqrt" => {
-                let x = self.node(args[0])?;
-                self.charge(10)?;
-                Ok(V::Num(decimal::sqrt(num(&x)?)?))
-            }
-            "exp" => {
-                let x = self.node(args[0])?;
-                self.charge(50)?;
-                Ok(V::Num(decimal::exp(num(&x)?)?))
-            }
-            "ln" => {
-                let x = self.node(args[0])?;
-                self.charge(80)?;
-                Ok(V::Num(decimal::ln(num(&x)?)?))
-            }
-            "sin" | "cos" => {
-                let x = self.node(args[0])?;
-                self.charge(50)?;
-                let mut r = num(&x)?.clone();
-                if num_unit(self.ty(args[0])).and_then(|u| u.text().into()).as_deref() == Some("deg") {
-                    r = decimal::radians40(&r);
-                }
-                let (s, c) = decimal::sincos40(&r)?;
-                let v = if f == "sin" { s } else { c };
-                Ok(V::Num(decimal::rnd(v, decimal::PRECISION).check_range()?))
-            }
-            "atan2" => {
-                let y = self.node(args[0])?;
-                let x = self.node(args[1])?;
-                self.charge(60)?;
-                Ok(V::Num(decimal::atan2(num(&y)?, num(&x)?)?))
-            }
+            "abs" => self.b_abs(id, f, args, named),
+            "floor" => self.b_floor(id, f, args, named),
+            "ceiling" => self.b_ceiling(id, f, args, named),
+            "round" | "round_up" | "round_down" => self.b_round(id, f, args, named),
+            "mod" => self.b_mod(id, f, args, named),
+            "sqrt" => self.b_sqrt(id, f, args, named),
+            "exp" => self.b_exp(id, f, args, named),
+            "ln" => self.b_ln(id, f, args, named),
+            "sin" | "cos" => self.b_sin(id, f, args, named),
+            "atan2" => self.b_atan2(id, f, args, named),
             "pi" => Ok(V::Num(decimal::pi())),
-            "haversine" => {
-                let mut v = Vec::with_capacity(4);
-                for a in args {
-                    v.push(num(&self.node(*a)?)?.clone());
-                }
-                self.charge(400)?;
-                Ok(V::Num(decimal::haversine(&v[0], &v[1], &v[2], &v[3])?))
-            }
-            "convert" => {
-                let x = self.node(args[0])?;
-                let x = num(&x)?;
-                let target = match self.c.ast.node(args[1]) {
-                    Node::Str(s) => s.clone(),
-                    _ => return Err(Code::Enum.into()),
-                };
-                let from = num_unit(self.ty(args[0])).cloned().unwrap_or(NumUnit::Known(crate::units::Unit::one()));
-                let kind = check::convert_factor(&from, &target).ok_or(Stop::Code(Code::UnitMismatch))?;
-                Ok(V::Num(convert(x, kind)?))
-            }
-            "date" => {
-                let y = int_of(&self.node(args[0])?)?;
-                let m = int_of(&self.node(args[1])?)?;
-                let d = int_of(&self.node(args[2])?)?;
-                Ok(V::Date(Date::new(y, m, d).ok_or(Stop::Code(Code::Domain))?))
-            }
-            "year" | "month" | "day" | "weekday" | "end_of_month" => {
-                let V::Date(d) = self.node(args[0])? else { return Err(Code::Type.into()) };
-                Ok(match f {
-                    "year" => V::Num(int(i64::from(d.year))),
-                    "month" => V::Num(int(i64::from(d.month))),
-                    "day" => V::Num(int(i64::from(d.day))),
-                    "weekday" => V::Num(int(i64::from(d.weekday()))),
-                    _ => V::Date(d.end_of_month()),
-                })
-            }
+            "haversine" => self.b_haversine(id, f, args, named),
+            "convert" => self.b_convert(id, f, args, named),
+            "date" => self.b_date(id, f, args, named),
+            "year" | "month" | "day" | "weekday" | "end_of_month" => self.b_year(id, f, args, named),
             "add_days" | "add_months" | "business_days" => self.business(f, args, named),
-            "year_fraction" => {
-                let V::Date(a) = self.node(args[0])? else { return Err(Code::Type.into()) };
-                let V::Date(b) = self.node(args[1])? else { return Err(Code::Type.into()) };
-                let Node::Str(conv) = self.c.ast.node(args[2]) else { return Err(Code::Enum.into()) };
-                Ok(V::Num(calendar::year_fraction(a, b, conv)?))
-            }
-            "is_holiday" => {
-                let V::Date(d) = self.node(args[0])? else { return Err(Code::Type.into()) };
-                let hol = self.holidays(args[1])?;
-                Ok(V::Bool(hol.binary_search(&d).is_ok()))
-            }
-            "date_of" => {
-                let V::Instant(i) = self.node(args[0])? else { return Err(Code::Type.into()) };
-                Ok(V::Date(calendar::date_of(i).ok_or(Stop::Code(Code::Range))?))
-            }
-            "instant" => {
-                let V::Date(d) = self.node(args[0])? else { return Err(Code::Type.into()) };
-                Ok(V::Instant(instant_ok(i128::from(d.ordinal()) * i128::from(DAY_MICROS))?))
-            }
-            "len" => {
-                let V::Str(s) = self.node(args[0])? else { return Err(Code::Type.into()) };
-                Ok(V::Num(int(text::len(&s) as i64)))
-            }
-            "upper" | "lower" | "trim" => {
-                let V::Str(s) = self.node(args[0])? else { return Err(Code::Type.into()) };
-                let r = match f {
-                    "upper" => text::upper(&s),
-                    "lower" => text::lower(&s),
-                    _ => text::trim(&s),
-                };
-                let r = text::finish(r)?;
-                self.charge(1 + r.len() as u64 / 64)?;
-                Ok(V::Str(r))
-            }
-            "concat" => {
-                let mut out = String::new();
-                for a in args {
-                    let V::Str(s) = self.node(*a)? else { return Err(Code::Type.into()) };
-                    out.push_str(&s);
-                    if out.len() > 4 * text::MAX_STRING_BYTES {
-                        return Err(Code::Range.into());
-                    }
-                }
-                let r = text::finish(out)?;
-                self.charge(1 + r.len() as u64 / 64)?;
-                Ok(V::Str(r))
-            }
-            "substr" => {
-                let V::Str(s) = self.node(args[0])? else { return Err(Code::Type.into()) };
-                let start = int_of(&self.node(args[1])?)?;
-                let length = int_of(&self.node(args[2])?)?;
-                Ok(V::Str(text::finish(text::substr(&s, start, length)?)?))
-            }
-            "find" => {
-                let V::Str(needle) = self.node(args[0])? else { return Err(Code::Type.into()) };
-                let V::Str(hay) = self.node(args[1])? else { return Err(Code::Type.into()) };
-                let start = match named_of("start") {
-                    Some(s) => int_of(&self.node(s)?)?,
-                    None => 1,
-                };
-                Ok(V::Num(int(text::find(&needle, &hay, start)?)))
-            }
-            "text" => {
-                let v = self.node(args[0])?;
-                let s = to_scalar(&v)?;
-                Ok(V::Str(text::finish(s.lexical().to_string())?))
-            }
-            "fixed" => {
-                let x = self.node(args[0])?;
-                let d = self.node(args[1])?;
-                Ok(V::Str(text::finish(fixed(num(&x)?, num(&d)?)?)?))
-            }
+            "year_fraction" => self.b_year_fraction(id, f, args, named),
+            "is_holiday" => self.b_is_holiday(id, f, args, named),
+            "date_of" => self.b_date_of(id, f, args, named),
+            "instant" => self.b_instant(id, f, args, named),
+            "len" => self.b_len(id, f, args, named),
+            "upper" | "lower" | "trim" => self.b_upper(id, f, args, named),
+            "concat" => self.b_concat(id, f, args, named),
+            "substr" => self.b_substr(id, f, args, named),
+            "find" => self.b_find(id, f, args, named),
+            "text" => self.b_text(id, f, args, named),
+            "fixed" => self.b_fixed(id, f, args, named),
             _ => Err(Code::UnknownFunction.into()),
         }
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_otherwise(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        match self.node(args[0]) {
+            Err(Stop::Code(c)) if c.is_catchable() => self.node(args[1]),
+            r => r,
+        }
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_asof(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        if args.is_empty() {
+            return Ok(V::Instant(self.asof));
+        }
+        self.asof_read(args[0], args[1])
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_abs(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        Ok(V::Num(num(&self.node(args[0])?)?.abs().check_range()?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_floor(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        Ok(V::Num(num(&self.node(args[0])?)?.floor().check_range()?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_ceiling(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        Ok(V::Num(num(&self.node(args[0])?)?.ceiling().check_range()?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_round(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let named_of = |n: &str| named.iter().find(|(k, _)| k == n).map(|(_, v)| *v);
+        let x = self.node(args[0])?;
+        let digits = match named_of("digits") {
+            Some(d) => self.node(d)?,
+            None => V::Num(Decimal::zero()),
+        };
+        let mode = match f {
+            "round" => RoundMode::Nearest,
+            "round_up" => RoundMode::Up,
+            _ => RoundMode::Down,
+        };
+        Ok(V::Num(decimal::round_digits(num(&x)?, num(&digits)?, mode)?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_mod(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let x = self.node(args[0])?;
+        let d = self.node(args[1])?;
+        Ok(V::Num(decimal::modulo(num(&x)?, num(&d)?)?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_sqrt(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let x = self.node(args[0])?;
+        self.charge(10)?;
+        Ok(V::Num(decimal::sqrt(num(&x)?)?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_exp(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let x = self.node(args[0])?;
+        self.charge(50)?;
+        Ok(V::Num(decimal::exp(num(&x)?)?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_ln(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let x = self.node(args[0])?;
+        self.charge(80)?;
+        Ok(V::Num(decimal::ln(num(&x)?)?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_sin(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let x = self.node(args[0])?;
+        self.charge(50)?;
+        let mut r = num(&x)?.clone();
+        if num_unit(self.ty(args[0])).and_then(|u| u.text().into()).as_deref() == Some("deg") {
+            r = decimal::radians40(&r);
+        }
+        let (s, c) = decimal::sincos40(&r)?;
+        let v = if f == "sin" { s } else { c };
+        Ok(V::Num(decimal::rnd(v, decimal::PRECISION).check_range()?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_atan2(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let y = self.node(args[0])?;
+        let x = self.node(args[1])?;
+        self.charge(60)?;
+        Ok(V::Num(decimal::atan2(num(&y)?, num(&x)?)?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_haversine(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let mut v = Vec::with_capacity(4);
+        for a in args {
+            v.push(num(&self.node(*a)?)?.clone());
+        }
+        self.charge(400)?;
+        Ok(V::Num(decimal::haversine(&v[0], &v[1], &v[2], &v[3])?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_convert(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let x = self.node(args[0])?;
+        let x = num(&x)?;
+        let target = match self.c.ast.node(args[1]) {
+            Node::Str(s) => s.clone(),
+            _ => return Err(Code::Enum.into()),
+        };
+        let from = num_unit(self.ty(args[0])).cloned().unwrap_or(NumUnit::Known(crate::units::Unit::one()));
+        let kind = check::convert_factor(&from, &target).ok_or(Stop::Code(Code::UnitMismatch))?;
+        Ok(V::Num(convert(x, kind)?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_date(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let y = int_of(&self.node(args[0])?)?;
+        let m = int_of(&self.node(args[1])?)?;
+        let d = int_of(&self.node(args[2])?)?;
+        Ok(V::Date(Date::new(y, m, d).ok_or(Stop::Code(Code::Domain))?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_year(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let V::Date(d) = self.node(args[0])? else { return Err(Code::Type.into()) };
+        Ok(match f {
+            "year" => V::Num(int(i64::from(d.year))),
+            "month" => V::Num(int(i64::from(d.month))),
+            "day" => V::Num(int(i64::from(d.day))),
+            "weekday" => V::Num(int(i64::from(d.weekday()))),
+            _ => V::Date(d.end_of_month()),
+        })
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_year_fraction(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let V::Date(a) = self.node(args[0])? else { return Err(Code::Type.into()) };
+        let V::Date(b) = self.node(args[1])? else { return Err(Code::Type.into()) };
+        let Node::Str(conv) = self.c.ast.node(args[2]) else { return Err(Code::Enum.into()) };
+        Ok(V::Num(calendar::year_fraction(a, b, conv)?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_is_holiday(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let V::Date(d) = self.node(args[0])? else { return Err(Code::Type.into()) };
+        let hol = self.holidays(args[1])?;
+        Ok(V::Bool(hol.binary_search(&d).is_ok()))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_date_of(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let V::Instant(i) = self.node(args[0])? else { return Err(Code::Type.into()) };
+        Ok(V::Date(calendar::date_of(i).ok_or(Stop::Code(Code::Range))?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_instant(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let V::Date(d) = self.node(args[0])? else { return Err(Code::Type.into()) };
+        Ok(V::Instant(instant_ok(i128::from(d.ordinal()) * i128::from(DAY_MICROS))?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_len(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let V::Str(s) = self.node(args[0])? else { return Err(Code::Type.into()) };
+        Ok(V::Num(int(text::len(&s) as i64)))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_upper(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let V::Str(s) = self.node(args[0])? else { return Err(Code::Type.into()) };
+        let r = match f {
+            "upper" => text::upper(&s),
+            "lower" => text::lower(&s),
+            _ => text::trim(&s),
+        };
+        let r = text::finish(r)?;
+        self.charge(1 + r.len() as u64 / 64)?;
+        Ok(V::Str(r))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_concat(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let mut out = String::new();
+        for a in args {
+            let V::Str(s) = self.node(*a)? else { return Err(Code::Type.into()) };
+            out.push_str(&s);
+            if out.len() > 4 * text::MAX_STRING_BYTES {
+                return Err(Code::Range.into());
+            }
+        }
+        let r = text::finish(out)?;
+        self.charge(1 + r.len() as u64 / 64)?;
+        Ok(V::Str(r))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_substr(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let V::Str(s) = self.node(args[0])? else { return Err(Code::Type.into()) };
+        let start = int_of(&self.node(args[1])?)?;
+        let length = int_of(&self.node(args[2])?)?;
+        Ok(V::Str(text::finish(text::substr(&s, start, length)?)?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_find(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let named_of = |n: &str| named.iter().find(|(k, _)| k == n).map(|(_, v)| *v);
+        let V::Str(needle) = self.node(args[0])? else { return Err(Code::Type.into()) };
+        let V::Str(hay) = self.node(args[1])? else { return Err(Code::Type.into()) };
+        let start = match named_of("start") {
+            Some(s) => int_of(&self.node(s)?)?,
+            None => 1,
+        };
+        Ok(V::Num(int(text::find(&needle, &hay, start)?)))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_text(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let v = self.node(args[0])?;
+        let s = to_scalar(&v)?;
+        Ok(V::Str(text::finish(s.lexical().to_string())?))
+    }
+
+    #[inline(never)]
+    #[allow(unused_variables)]
+    fn b_fixed(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let x = self.node(args[0])?;
+        let d = self.node(args[1])?;
+        Ok(V::Str(text::finish(fixed(num(&x)?, num(&d)?)?)?))
     }
 
     fn aggregate_call(&mut self, f: &str, args: &[NodeId]) -> R<V, W::Error> {

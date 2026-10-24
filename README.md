@@ -93,6 +93,10 @@ store failure) comes back from `evaluate` unchanged.
   (`python:3.13-slim`, standard library only) and, for sin, cos, atan2 and haversine, with the
   reference tool run as a black box.
 - `tools/fuzz.sh` runs the `parse` and `evaluate` cargo-fuzz targets: no input panics.
+- Bodies at the limits of 15.3 (65,535 nodes in one chain, 256 levels of nesting) are defined,
+  printed, round-tripped and evaluated: operator chains are walked iteratively, and a body of more
+  than 128 tokens is parsed and checked on a thread with a 64 MiB stack (the caller's stack where
+  threads are not available), so a debug build needs no large stack either.
 - `SPEC-FINDINGS.md` lists where the specification leaves a reading open and which reading the
   crate takes.
 
