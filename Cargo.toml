@@ -1,0 +1,26 @@
+[package]
+name = "datumesh-formula"
+version = "0.1.0"
+description = "The Datumesh formula dialect: parser, resolver, type and unit checker, printer, canonical AST hash, exact decimal arithmetic and an evaluator with lineage and fuel."
+edition = "2021"
+rust-version = "1.97"
+license = "Apache-2.0"
+repository = "https://github.com/datumesh-com/datumesh-formula"
+homepage = "https://datumesh.com"
+documentation = "https://docs.rs/datumesh-formula"
+readme = "README.md"
+keywords = ["datumesh", "formula", "decimal", "spreadsheet", "provenance"]
+categories = ["parser-implementations", "mathematics"]
+include = ["src/**/*.rs", "Cargo.toml", "LICENSE", "README.md"]
+
+[dependencies]
+# Strict JSON, JCS, SHA-256 and the string rules of SPEC 3.5 (Unicode 15.1 assigned, NFC).
+datumesh-core = "0.3.3"
+# NFC normalisation of computed strings (SPEC 15.7). Already a dependency of datumesh-core.
+unicode-normalization = { version = "0.1.26", default-features = false }
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.test]
+opt-level = 2
