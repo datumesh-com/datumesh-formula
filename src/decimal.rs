@@ -498,7 +498,8 @@ pub fn power(x: &Decimal, y: &Decimal) -> Result<Decimal, Code> {
     }
 }
 
-/// Excel's ROUND: half away from zero to `digits` decimals (negative: tens, hundreds...).
+/// Excel's ROUND: half away from zero to `digits` decimals (negative: tens, hundreds...);
+/// ROUNDUP and ROUNDDOWN by `mode`. Exact, then the range rule.
 pub fn round_digits(x: &Decimal, digits: &Decimal, mode: RoundMode) -> Result<Decimal, Code> {
     let d = digits_of(digits)?;
     let m = match mode {
@@ -506,15 +507,29 @@ pub fn round_digits(x: &Decimal, digits: &Decimal, mode: RoundMode) -> Result<De
         RoundMode::Up => Mode::Up,
         RoundMode::Down => Mode::Down,
     };
-    x.round_to_exp(-d, m).check_range()
+    let e = d.checked_neg().ok_or(Code::Domain)?;
+    if x.is_zero() || x.exp >= e {
+        return Ok(x.clone());
+    }
+    // Rounding at a position above the leading digit: zero, or one unit of it away from zero.
+    if e > x.adjusted() + 1 {
+        if m != Mode::Up {
+            return Ok(Decimal::zero());
+        }
+        if e > MAX_CHARS as i64 {
+            return Err(Code::Range);
+        }
+        return Decimal::make(x.neg, Big::from_u64(1), e).check_range();
+    }
+    x.round_to_exp(e, m).check_range()
 }
 
 /// The digits argument of `round`, `round_up`, `round_down` and `fixed`: an integer.
 pub(crate) fn digits_of(digits: &Decimal) -> Result<i64, Code> {
-    match digits.to_i64() {
-        Some(d) if (-1000..=1000).contains(&d) => Ok(d),
-        _ => Err(Code::Domain),
+    if !digits.is_integer() {
+        return Err(Code::Domain);
     }
+    digits.to_i64().ok_or(Code::Domain)
 }
 
 /// The direction of [`round_digits`].

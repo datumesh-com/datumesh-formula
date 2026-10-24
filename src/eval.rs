@@ -912,16 +912,17 @@ impl Eval<'_> {
         for a in args {
             vals.push(self.node(*a)?);
         }
-        let values: Vec<V> = if vals.len() == 1 {
-            match &vals[0] {
-                V::Slice(s) => s.members.iter().map(|(_, v)| v.clone()).collect(),
-                v => vec![v.clone()],
-            }
-        } else {
-            vals
+        let over_slice = vals.len() == 1 && matches!(vals[0], V::Slice(_));
+        let values: Vec<V> = match (over_slice, vals.first()) {
+            (true, Some(V::Slice(s))) => s.members.iter().map(|(_, v)| v.clone()).collect(),
+            _ => vals,
         };
-        let n = values.len() as u64;
-        self.charge(if f == "median" { n * (64 - n.leading_zeros() as u64) } else { n })?;
+        // An aggregate over a slice of n members costs n (median: n times the bit length of n);
+        // over scalars, only its nodes.
+        if over_slice {
+            let n = values.len() as u64;
+            self.charge(if f == "median" { n * (64 - n.leading_zeros() as u64) } else { n })?;
+        }
         let elem_unit = num_unit(self.ty(args[0])).cloned();
         aggregate(f, &values, elem_unit.as_ref())
     }
@@ -1158,13 +1159,17 @@ impl Eval<'_> {
                     return Ok(Some(v.clone()));
                 }
                 let before = ms.iter().rev().find(|(k, _)| cmp_v(k, x) == std::cmp::Ordering::Less);
+                if method == Some("step") {
+                    // The value of the member at or before x.
+                    return match before {
+                        Some((k0, v0)) if within(k0)? => Ok(Some(v0.clone())),
+                        _ => Ok(None),
+                    };
+                }
                 let after = ms.iter().find(|(k, _)| cmp_v(k, x) == std::cmp::Ordering::Greater);
                 let (Some((k0, v0)), Some((k1, v1))) = (before, after) else { return Ok(None) };
                 if !within(k0)? || !within(k1)? {
                     return Ok(None);
-                }
-                if method == Some("step") {
-                    return Ok(Some(v0.clone()));
                 }
                 let (v0, v1) = (num(v0)?, num(v1)?);
                 let pos = |a: &V, b: &V| -> Result<Decimal, Code> {
@@ -1270,12 +1275,13 @@ impl Eval<'_> {
     fn asof_read(&mut self, cell_id: NodeId, t_id: NodeId) -> Result<V, Code> {
         let Node::Read { fn_name, .. } = self.c.ast.node(cell_id) else { return Err(Code::TxArg) };
         let fn_name = fn_name.clone();
-        let b = self.binding(&fn_name)?;
-        let pattern = self.read_args(cell_id, &b.function)?;
+        // T first: a read in the future is refused before the cell is read.
         let V::Instant(t) = self.node(t_id)? else { return Err(Code::Type) };
         if t > self.asof {
             return Err(Code::Future);
         }
+        let b = self.binding(&fn_name)?;
+        let pattern = self.read_args(cell_id, &b.function)?;
         self.charge(1)?;
         let args: Args = pattern
             .into_iter()
@@ -1296,13 +1302,13 @@ impl Eval<'_> {
     fn versions(&mut self, args: &[NodeId]) -> Result<V, Code> {
         let Node::Read { fn_name, .. } = self.c.ast.node(args[0]) else { return Err(Code::TxArg) };
         let fn_name = fn_name.clone();
-        let b = self.binding(&fn_name)?;
-        let pattern = self.read_args(args[0], &b.function)?;
         let V::Instant(from) = self.node(args[1])? else { return Err(Code::Type) };
         let V::Instant(to) = self.node(args[2])? else { return Err(Code::Type) };
         if to > self.asof {
             return Err(Code::Future);
         }
+        let b = self.binding(&fn_name)?;
+        let pattern = self.read_args(args[0], &b.function)?;
         let cargs: Args = pattern
             .into_iter()
             .filter_map(|(k, p)| match p {
@@ -1541,6 +1547,9 @@ fn convert(x: &Decimal, kind: ConvertKind) -> Result<Decimal, Code> {
 /// written with exactly that many.
 fn fixed(x: &Decimal, digits: &Decimal) -> Result<String, Code> {
     let d = decimal::digits_of(digits)?;
+    if d > text::MAX_STRING_BYTES as i64 {
+        return Err(Code::Range);
+    }
     let r = decimal::round_digits(x, digits, RoundMode::Nearest)?;
     let mut s = r.to_canonical();
     if d > 0 {

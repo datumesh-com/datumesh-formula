@@ -111,8 +111,11 @@ pub fn substr(s: &str, start: i64, length: i64) -> Result<String, Code> {
 /// when not found.
 pub fn find(needle: &str, text: &str, start: i64) -> Result<i64, Code> {
     let chars: Vec<char> = text.chars().collect();
-    if start < 1 || start as usize > chars.len() + 1 {
+    if start < 1 {
         return Err(Code::Domain);
+    }
+    if start as u64 > chars.len() as u64 + 1 {
+        return Ok(0);
     }
     let n: Vec<char> = needle.chars().collect();
     let from = (start - 1) as usize;
