@@ -1,0 +1,1 @@
+mean(within(weather.example.org/temp(station: s, t: *), t, 5 min))

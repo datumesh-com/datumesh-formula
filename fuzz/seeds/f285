@@ -1,0 +1,1 @@
+sum(weather.example.org/temp(station, *))

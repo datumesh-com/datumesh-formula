@@ -1,0 +1,1 @@
+nearest(weather.example.org/temp(station, *), t)

@@ -10,6 +10,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use datumesh_core::json::Value;
 use datumesh_core::{Scalar, Type};
@@ -29,7 +30,7 @@ pub type Args = BTreeMap<String, Scalar>;
 #[derive(Clone, Debug)]
 pub struct Binding {
     /// The function the name resolves to.
-    pub function: Rc<Function>,
+    pub function: Arc<Function>,
     /// When the binding began.
     pub start: String,
 }

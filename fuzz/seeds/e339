@@ -1,0 +1,1 @@
+rates.example.org/fx_rate(base: base, date: d, quote: quote) * (1 + rates.example.org/rate(currency: quote, tenor: "1M")) / (1 + rates.example.org/rate(currency: base, tenor: "1M"))

@@ -1,0 +1,1 @@
+max(window(data.example.org/daily(*), 7, mean))

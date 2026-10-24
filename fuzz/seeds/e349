@@ -1,0 +1,1 @@
+sum(data.example.org/price(item: *) * data.example.org/qty(item: *))

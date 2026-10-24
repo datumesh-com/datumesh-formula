@@ -1,0 +1,1 @@
+mean(last_before(weather.example.org/temp(*, *), t, 10 min))

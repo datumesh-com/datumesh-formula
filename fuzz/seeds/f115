@@ -1,0 +1,1 @@
+otherwise(at(data.example.org/daily(*), d), 0)

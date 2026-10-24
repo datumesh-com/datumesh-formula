@@ -1,0 +1,1 @@
+interpolate(latest(weather.example.org/temp(within(stations, p, 20km), *)), p)

@@ -1,0 +1,1 @@
+count(filter(data.example.org/daily(date: *), v -> v > 12 EUR))

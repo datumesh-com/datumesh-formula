@@ -1,0 +1,1 @@
+let u = a in let v = u + b in v * 2

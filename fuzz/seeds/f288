@@ -1,0 +1,1 @@
+sum(rates.example.org/fx_rate(base, *, d))

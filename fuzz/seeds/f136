@@ -1,0 +1,1 @@
+round_up(a, 1) - round_down(a, 1)

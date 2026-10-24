@@ -1,0 +1,1 @@
+business_days(d, d2, calendar: calendars.example.org/holiday(calendar: "gb-eaw", date: *))

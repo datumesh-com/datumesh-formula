@@ -1,0 +1,1 @@
+last_before(weather.example.org/temp(station, *), t, 10 min)

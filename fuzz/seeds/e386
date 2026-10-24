@@ -1,0 +1,1 @@
+count(data.example.org/daily(date: [2027-01-01..2027-01-31]))

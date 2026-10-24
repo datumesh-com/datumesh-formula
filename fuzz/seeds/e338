@@ -1,0 +1,1 @@
+latest(weather.example.org/temp(station: s, t: *), bound: 15 min)

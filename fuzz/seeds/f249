@@ -1,0 +1,1 @@
+sum(map(data.example.org/daily(*), (v, v) -> v))

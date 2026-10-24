@@ -1,0 +1,1 @@
+a / rates.example.org/fx_rate(base, quote, d) * rates.example.org/fx_rate(base, quote, d)

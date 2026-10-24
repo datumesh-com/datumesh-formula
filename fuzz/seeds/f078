@@ -1,0 +1,1 @@
+is_holiday(d, calendars.example.org/holiday("gb-eaw", *))

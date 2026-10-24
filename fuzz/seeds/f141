@@ -1,0 +1,1 @@
+if x < 2 then x else calc.example.net/f(x: x - 1) + calc.example.net/f(x: x - 2)

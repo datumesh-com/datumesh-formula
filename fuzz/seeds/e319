@@ -1,0 +1,1 @@
+sum(curve.example.net/df(tenor: [1..10]))

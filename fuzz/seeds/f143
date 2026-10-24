@@ -1,0 +1,1 @@
+mean(filter(geo.example.org/elev(lat: *, lon: *), (v, lat, lon) -> haversine(lat, lon, plat, plon) <= 20000 m))

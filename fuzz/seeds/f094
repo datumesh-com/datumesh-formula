@@ -1,0 +1,1 @@
+first_after(weather.example.org/temp(station, *), t, 10 min)

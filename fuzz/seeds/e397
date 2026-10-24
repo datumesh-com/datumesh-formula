@@ -1,0 +1,1 @@
+data.example.org/name(company: s) & " (" & text(year(data.example.org/incorporated(company: s))) & ")"

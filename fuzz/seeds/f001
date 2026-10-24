@@ -1,0 +1,1 @@
+add_days(d, 5, calendar: calendars.example.org/holiday(calendar: "gb-eaw", date: *))

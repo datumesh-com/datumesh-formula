@@ -9,7 +9,7 @@
 //! hash is computed; nothing is signed.
 
 use std::collections::{BTreeMap, HashMap};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use datumesh_core::json::Value;
 use datumesh_core::{Scalar, Type};
@@ -70,7 +70,7 @@ pub struct Computed {
 pub struct MemoryWorld {
     functions: BTreeMap<String, Binding>,
     stored: Vec<Stored>,
-    compiled: HashMap<String, Rc<Compiled>>,
+    compiled: HashMap<String, Arc<Compiled>>,
     memo: HashMap<(CellKey, String), Result<Option<Version>, Code>>,
     computed: HashMap<String, Computed>,
     stack: Vec<CellKey>,
@@ -154,7 +154,7 @@ impl MemoryWorld {
     /// Bind `name` to a descriptor from `start`.
     pub fn bind(&mut self, name: &str, descriptor: &Value, start: &str) -> Result<(), EnvError> {
         let f = Function::from_value(descriptor)?;
-        self.functions.insert(name.to_string(), Binding { function: Rc::new(f), start: start.to_string() });
+        self.functions.insert(name.to_string(), Binding { function: Arc::new(f), start: start.to_string() });
         self.compiled.remove(name);
         Ok(())
     }
@@ -183,7 +183,7 @@ impl MemoryWorld {
     }
 
     /// The compiled body of a formula function.
-    fn compiled_of(&mut self, name: &str) -> Result<Rc<Compiled>, Code> {
+    fn compiled_of(&mut self, name: &str) -> Result<Arc<Compiled>, Code> {
         if let Some(c) = self.compiled.get(name) {
             return Ok(c.clone());
         }
@@ -196,7 +196,7 @@ impl MemoryWorld {
         for (n, other) in &self.functions {
             env.functions.insert(n.clone(), (*other.function).clone());
         }
-        let c = Rc::new(define(&f.body, &env).map_err(|e| e.code)?);
+        let c = Arc::new(define(&f.body, &env).map_err(|e| e.code)?);
         self.compiled.insert(name.to_string(), c.clone());
         Ok(c)
     }

@@ -1,0 +1,1 @@
+first(versions(data.example.org/price(item: s), 2026-01-01T00:00:00.000000Z, 2026-05-01T00:00:00.000000Z))

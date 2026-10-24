@@ -1,0 +1,1 @@
+interpolate(weather.example.org/temp(station, *), t, method: "step")

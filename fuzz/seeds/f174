@@ -1,0 +1,1 @@
+latest(at(weather.example.org/temp(*, *), "kew", along: nope))

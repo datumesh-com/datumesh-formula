@@ -1,0 +1,1 @@
+business_days(d, d2, weekend: "fri-sat")

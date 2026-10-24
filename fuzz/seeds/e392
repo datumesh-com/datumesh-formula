@@ -1,0 +1,1 @@
+sum(data.example.org/daily(date: [2026-03-03..2026-03-05]))
