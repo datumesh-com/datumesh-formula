@@ -1,6 +1,6 @@
 # Findings on spec-0.4.0 section 15 (datumesh-formula 0.1.0, phase A)
 
-This crate was written from `SPEC.md` (commit `dedd132`), `units.md`, `schemas/`, `vectors/` and the
+This crate was written from `SPEC.md` (commit `dedd132`, then `18be70f`, whose changes outside section 15 touch nothing implemented here except that a range admits members in the type's order, which the crate already did, and a version slice with `from` after `to` is empty, as here), `units.md`, `schemas/`, `vectors/` and the
 contract, without reading `tools/*.py`, `tests/*`, `crosscheck/*` (except its README) or
 `DESIGN-0.4.0.md`. Where the prose left a reading open, the reading below was taken; where it says
 "black box", the reference `tools/formula.py` was run on generated inputs (its outputs only, through
@@ -124,6 +124,14 @@ This crate does the same.
 
 D6. **`find`** with `start` past the end gives 0, not a fault; `start < 1` is `E_FORMULA_DOMAIN`.
 **`round`** with a huge `digits` is exact (no fault); with a huge negative one it is 0.
+
+D7. **Bindings as of a time.** A name resolves as of the evaluation asof, and in `asof(c, T)` as of
+`T`: a `T` before the name's binding began is `E_FORMULA_UNRESOLVED` (black box). 15.13 says
+only that the read answers as of `T`.
+
+D8. **Descriptor checks (15.6).** `E_FORMULA_ORDER` comes first, then the body's own codes
+(compiled against the descriptor's signature), then `E_FORMULA_NOT_CANONICAL`, then
+`E_FORMULA_INPUTS` (black box, `check_descriptor`).
 
 ## E. Defects of the reference found on the way (black box)
 

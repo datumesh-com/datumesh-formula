@@ -168,6 +168,15 @@ impl Resolver<'_> {
                     order[i - 1].clone()
                 }
             };
+            // Each label against the callee before its value: unknown, then given twice.
+            if let Some(sig) = sig {
+                if !sig.args.contains_key(&label) {
+                    return Err(e(Code::ArgUnknown, format!("{fq} has no argument {label}")));
+                }
+            }
+            if bound.iter().any(|(m, _)| *m == label) {
+                return Err(e(Code::ArgDuplicate, format!("{label} is given twice")));
+            }
             let v = match &a.value {
                 PVal::Open => ReadArg::Open,
                 PVal::Expr(x) => ReadArg::Expr(self.node(*x)?),
@@ -179,18 +188,8 @@ impl Resolver<'_> {
             };
             bound.push((label, v));
         }
-        // Labels against the callee: duplicates, unknown labels, then missing arguments.
-        for (k, (l, _)) in bound.iter().enumerate() {
-            if bound[..k].iter().any(|(m, _)| m == l) {
-                return Err(e(Code::ArgDuplicate, format!("{l} is given twice")));
-            }
-        }
+        // Then missing arguments, in JCS order of names.
         if let Some(sig) = sig {
-            for (l, _) in &bound {
-                if !sig.args.contains_key(l) {
-                    return Err(e(Code::ArgUnknown, format!("{fq} has no argument {l}")));
-                }
-            }
             for n in sig.args.keys() {
                 if !bound.iter().any(|(l, _)| l == n) {
                     return Err(e(Code::ArgMissing, format!("{fq} needs {n} (an open argument is written *)")));

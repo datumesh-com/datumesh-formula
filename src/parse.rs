@@ -416,9 +416,16 @@ impl<'a> Parser<'a> {
         self.bump(); // let
         let t = self.peek();
         if t.kind != Kind::Word {
-            // What a primary expression would report here, else a syntax error.
-            self.primary()?;
-            return Err(err(Code::Syntax, format!("expected a name after let, found {} at {}", t.describe(), t.pos)));
+            // As the reference reports it: an operator that cannot follow is its own error.
+            let code = match t.text.as_str() {
+                _ if t.kind != Kind::Punct => Code::Syntax,
+                "=" | "<>" | "<" | "<=" | ">" | ">=" => Code::Chain,
+                "^" => Code::Ambiguous,
+                "." => Code::Reserved,
+                "->" => Code::Placement,
+                _ => Code::Syntax,
+            };
+            return Err(err(code, format!("expected a name after let, found {} at {}", t.describe(), t.pos)));
         }
         if is_keyword(&t.text) {
             return Err(err(Code::Reserved, format!("{} cannot be a name", t.text)));

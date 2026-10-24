@@ -2,7 +2,7 @@
 
 The formula dialect of [Datumesh](https://datumesh.com): `code.lang = "formula"`, the default
 language of computed functions, an Excel-compatible expression language over cells. It implements
-section 15 of [spec-0.4.0](https://github.com/datumesh-com/datumesh-spec) (commit `dedd132`): the
+section 15 of [spec-0.4.0](https://github.com/datumesh-com/datumesh-spec) (commit `18be70f`; its vectors and units.md are those of `dedd132`): the
 lexer and PEG grammar, resolution to the canonical AST and its hash, the printer that gives
 `code.body`, the type and unit checker that derives `inputs`, exact decimal arithmetic with the
 40-digit transcendental algorithms, units, angles and haversine, and an evaluator with normative fuel,
@@ -106,7 +106,7 @@ store failure) comes back from `evaluate` unchanged.
 `tools/cargo.sh 1.97 test` (the MSRV), `tools/cargo.sh lint clippy --all-targets -- -D warnings`,
 `tools/cargo.sh lint fmt`. `tools/gen_cases.py`, `tools/reference_runner.py` and
 `tools/compare.py` run generated cases through this crate (`examples/formula_runner.rs`) and through
-another implementation and compare them. `spec-vectors/` is a copy of the spec's vectors at `dedd132`.
+another implementation and compare them. `spec-vectors/` is a copy of the spec's vectors at `dedd132`, unchanged at `18be70f`.
 
 Dependencies: `datumesh-core` 0.3.3 for strict JSON, JCS, SHA-256 and the string rules of SPEC 3.5
 (Unicode 15.1 assigned code points, NFC); `unicode-normalization` (already a dependency of

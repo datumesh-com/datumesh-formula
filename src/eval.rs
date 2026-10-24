@@ -1142,6 +1142,11 @@ impl<W: World + ?Sized> Eval<'_, W> {
             (s, x, bound)
         };
         self.charge(s.members.len() as u64)?;
+        // The dimension among the keys the slice has now (a binding may have changed since
+        // define time).
+        let keys = s.keys.clone();
+        let d = check::dimension(&keys, along.as_deref()).map_err(|e| e.code)?;
+        let dim = KeyTy { unit: dim.unit.clone(), ..keys[d].clone() };
         // The bound as an exact distance along the dimension.
         let reach = match &bound {
             Some((bv, bu)) => Some(distance_of(&dim, num(bv)?, bu.as_ref())),
@@ -1373,8 +1378,8 @@ impl<W: World + ?Sized> Eval<'_, W> {
     }
 
     fn scan_window(&mut self, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
-        let keys = self.keys_of(args[0]);
         let s = self.slice_of(args[0])?;
+        let keys = s.keys.clone();
         let width = if f == "window" {
             let w = int_of(&self.node(args[1])?)?;
             if w < 1 {

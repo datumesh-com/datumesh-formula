@@ -1,4 +1,4 @@
-//! Loading the vendored spec-0.4.0 vectors (`spec-vectors/`, from datumesh-spec commit dedd132).
+//! Loading the vendored spec-0.4.0 vectors (`spec-vectors/`, from datumesh-spec commit dedd132, unchanged at 18be70f).
 #![allow(dead_code)]
 
 pub mod generate;
