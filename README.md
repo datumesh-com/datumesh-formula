@@ -41,7 +41,7 @@ assert_eq!(c.inputs, ["data.example.org/daily"]);                     // derived
 // c.ast.hash() is the canonical AST hash; c.returns the type and unit (EUR).
 
 // With a MemoryWorld holding the functions and seven stored receipts (11 to 17 EUR):
-// world.compute(&cell, asof, &mut fuel) gives the value 14, one lineage entry
+// world.compute(&cell, asof) gives the value 14, one lineage entry
 // slice:<slice id>:<members hash> for the seven member receipts, and 21 units of fuel.
 ```
 
@@ -64,21 +64,23 @@ assert_eq!(c.inputs, ["data.example.org/daily"]);                     // derived
 
 ```rust
 pub trait World {
-    fn function(&mut self, name: &str) -> Option<Binding>;          // function + binding start
-    fn read(&mut self, cell: &CellKey, at: Option<&str>, fuel: &mut Fuel)
-        -> Result<Option<Version>, Code>;                           // as of the asof, or as of T
-    fn members(&mut self, slice: &SliceKey, fuel: &mut Fuel)
-        -> Result<Vec<(Args, Version)>, Code>;                      // a stored slice as of the asof
-    fn versions(&mut self, cell: &CellKey, from: &str, to: &str, fuel: &mut Fuel)
-        -> Result<Vec<Version>, Code>;                              // a stored cell's versions
+    type Error;                                                      // passed through as Stop::World
+    fn function(&mut self, name: &str) -> Result<Option<Binding>, Self::Error>; // function + binding start
+    fn read(&mut self, cell: &CellKey, at: Option<&str>) -> Result<Option<Version>, Stop<Self::Error>>;
+    fn members(&mut self, slice: &SliceKey) -> Result<Vec<(Args, Version)>, Stop<Self::Error>>;
+    fn versions(&mut self, cell: &CellKey, from: &str, to: &str) -> Result<Vec<Version>, Stop<Self::Error>>;
+    fn charge(&mut self, n: u64) -> Result<(), Code>;                // the request's fuel
 }
 ```
 
 A `Version` is a value and the receipt that states it (hash, `tx`, `asof`). The evaluator asks the
-world for single cells (a computed cell is the world's to evaluate, memoise and sign), for the
-members of slices of stored functions, and for version slices; it enumerates the extent of a slice
-over a computed function itself and reads each member. It derives the lineage, the manifests, the
-latest input `tx` and the receipt `asof` of 8.2 rule 2. Fuel is shared by the whole request.
+world for single cells as of the evaluation asof or as of an explicit `T`, for the members of
+slices, and for version slices; a computed cell or a slice over a computed function is the world's
+to evaluate (memoise, sign, refuse cycles and depth), using `eval::extent_cells` for the cells of
+an extent. The evaluator charges nodes and built-ins through `charge`; the world charges reads
+as 15.12's table says. From the answers the evaluator derives the lineage, the manifests, the latest
+input `tx` and the receipt `asof` of 8.2 rule 2. A world's own error (an input not evaluated yet, a
+store failure) comes back from `evaluate` unchanged.
 
 ## Conformance
 

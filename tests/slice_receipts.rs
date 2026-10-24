@@ -8,7 +8,7 @@ mod common;
 use std::collections::BTreeMap;
 
 use datumesh_core::json::{self, Value};
-use datumesh_formula::eval::{CellKey, Fuel};
+use datumesh_formula::eval::CellKey;
 use datumesh_formula::memory::MemoryWorld;
 
 /// Every descriptor in the formula, formula-eval and excel vectors, by function hash.
@@ -113,10 +113,8 @@ fn slice_receipts_evaluate_to_their_values_and_lineage() {
             };
             args.insert(k.clone(), s);
         }
-        let mut fuel = Fuel::new(10_000_000);
-        let c = world
-            .compute(&CellKey { name: name.clone(), args }, asof, &mut fuel)
-            .unwrap_or_else(|e| panic!("{path}: {e}"));
+
+        let c = world.compute(&CellKey { name: name.clone(), args }, asof).unwrap_or_else(|e| panic!("{path}: {e}"));
         assert_eq!(c.outcome.value.to_value(), *value, "{path}: value");
         let want: Vec<String> = match rc.get("lineage") {
             Some(l) => common::array(l).iter().map(|x| x.as_str().unwrap().to_string()).collect(),

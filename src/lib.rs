@@ -107,6 +107,32 @@ pub fn canonical_ast(source: &str, env: Option<&Env>) -> Result<Ast, Error> {
     resolve::resolve(&tree, env)
 }
 
+/// Check a formula descriptor (15.6): it must have `signature.order` (`E_FORMULA_ORDER`), its
+/// body must define against `env`'s functions and aliases with the descriptor's own signature,
+/// be the print of its canonical AST followed by one LF (`E_FORMULA_NOT_CANONICAL`), and declare
+/// exactly the derived inputs (`E_FORMULA_INPUTS`), in that order. A descriptor of another
+/// language, or one this crate cannot read, is `E_FORMULA_SYNTAX`.
+pub fn check_descriptor(name: &str, descriptor: &Value, env: &Env) -> Result<Compiled, Error> {
+    let f = Function::from_value(descriptor).map_err(|e| Error::new(Code::Syntax, e.0))?;
+    if f.lang != "formula" {
+        return Err(Error::new(Code::Syntax, format!("code.lang is {}, not formula", f.lang)));
+    }
+    if f.signature.order.is_none() {
+        return Err(Error::new(Code::Order, "a formula descriptor declares signature.order"));
+    }
+    let mut env = env.clone();
+    env.name = name.to_string();
+    env.signature = f.signature.clone();
+    let c = define(&f.body, &env)?;
+    if c.body != f.body {
+        return Err(Error::new(Code::NotCanonical, format!("the body is not the print of its AST: {:?}", c.body)));
+    }
+    if c.inputs != f.inputs {
+        return Err(Error::new(Code::Inputs, format!("inputs are {:?}, derived {:?}", f.inputs, c.inputs)));
+    }
+    Ok(c)
+}
+
 /// Define a formula: lex, parse, resolve and check `source` against `env` (15.2-15.10), reporting
 /// the first failure with its code (15.11).
 pub fn define(source: &str, env: &Env) -> Result<Compiled, Error> {

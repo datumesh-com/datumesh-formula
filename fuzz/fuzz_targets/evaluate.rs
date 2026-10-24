@@ -77,6 +77,6 @@ fn run(body: &str, inputs: &[String], sig: &str) {
         args.insert(k.to_string(), Scalar::from_lexical(t, v).expect("scalar"));
     }
     args.insert("flag".to_string(), Scalar::Boolean(true));
-    let mut fuel = Fuel::new(20_000);
-    let _ = world.compute(&CellKey { name: "calc.example.net/e".to_string(), args }, "2026-06-01T00:00:00.000000Z", &mut fuel);
+    world.fuel = Fuel::new(20_000);
+    let _ = world.compute(&CellKey { name: "calc.example.net/e".to_string(), args }, "2026-06-01T00:00:00.000000Z");
 }

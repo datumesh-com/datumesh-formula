@@ -3,10 +3,14 @@
 //!
 //! The world answers what a mesh knows: which function a name is bound to (and since when),
 //! the version of a cell answering as of the evaluation asof or an explicit transaction time,
-//! the members of a stored slice, and the versions of a stored cell. A computed cell read by a
-//! body is evaluated by the world (memoised, with cycle and depth limits): the evaluator only
-//! asks for its version. The evaluator derives the lineage (receipt hashes and slice entries),
-//! the latest input `tx` and the receipt `asof` of 8.2 rule 2.
+//! the members of a slice, and the versions of a stored cell; and it meters the request's
+//! fuel. A computed cell, or a slice over a computed function, is evaluated by the world
+//! (memoised, with cycle and depth limits): the evaluator only asks for versions. The evaluator
+//! derives the lineage (receipt hashes and slice entries with their manifests), the latest
+//! input `tx` and the receipt `asof` of 8.2 rule 2.
+//!
+//! The world's own errors (a store failure, an input not evaluated yet) pass through the
+//! evaluator unchanged as [`Stop::World`].
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -145,23 +149,64 @@ impl Fuel {
     }
 }
 
+/// Why an evaluation stopped: a formula code (a fault, an absence or a mesh failure of 15.11),
+/// or the world's own error, passed through unchanged.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Stop<E> {
+    /// A formula code.
+    Code(Code),
+    /// The world's error.
+    World(E),
+}
+
+impl<E> From<Code> for Stop<E> {
+    fn from(c: Code) -> Stop<E> {
+        Stop::Code(c)
+    }
+}
+
+impl<E> Stop<E> {
+    /// The formula code, if it is one.
+    pub fn code(&self) -> Option<Code> {
+        match self {
+            Stop::Code(c) => Some(*c),
+            Stop::World(_) => None,
+        }
+    }
+}
+
 /// What the evaluator needs from the mesh. Phase B implements it over the engine.
+///
+/// Fuel (15.12) is the world's: the evaluator charges every node and built-in through
+/// [`World::charge`], and the world charges reads as the table says (a single-cell read 1, a
+/// slice read 1 + members, after the members are obtained) together with whatever evaluating
+/// computed inputs costs.
 pub trait World {
-    /// The function `name` is bound to as of the evaluation asof, and when that binding began.
-    fn function(&mut self, name: &str) -> Option<Binding>;
+    /// The world's own error.
+    type Error;
+
+    /// The function `name` is bound to as of the evaluation asof, or as of the transaction time
+    /// `at` when given (the `T` of `asof(cell, T)`), and when that binding began; `None` when it
+    /// is not bound then.
+    fn function(&mut self, name: &str, at: Option<&str>) -> Result<Option<Binding>, Self::Error>;
 
     /// The version of `cell` answering as of the evaluation asof, or as of the transaction time
-    /// `at` when given (`asof(cell, T)`). A computed cell is evaluated by the world, charging
-    /// `fuel`; its faults are returned as errors. `None` when the cell has no value.
-    fn read(&mut self, cell: &CellKey, at: Option<&str>, fuel: &mut Fuel) -> Result<Option<Version>, Code>;
+    /// `at` when given (`asof(cell, T)`); `None` when the cell has no value. A computed cell is
+    /// evaluated by the world, and its faults are returned. Costs 1.
+    fn read(&mut self, cell: &CellKey, at: Option<&str>) -> Result<Option<Version>, Stop<Self::Error>>;
 
-    /// The members of a slice of a stored function as of the evaluation asof: each cell's
-    /// arguments and its version answering as of the asof.
-    fn members(&mut self, slice: &SliceKey, fuel: &mut Fuel) -> Result<Vec<(Args, Version)>, Code>;
+    /// The members of a slice as of the evaluation asof (15.13): for a stored function, its cells
+    /// matching the pattern with a version answering as of the asof; for any other, the cells of
+    /// the declared extent within the pattern ([`extent_cells`]), every one evaluated, and
+    /// `E_FORMULA_ABSENT` when one has no value. Costs 1 + members.
+    fn members(&mut self, slice: &SliceKey) -> Result<Vec<(Args, Version)>, Stop<Self::Error>>;
 
     /// The versions of a stored cell with `tx` in `[from, to]`, as known as of the evaluation
-    /// asof, ascending by `tx`.
-    fn versions(&mut self, cell: &CellKey, from: &str, to: &str, fuel: &mut Fuel) -> Result<Vec<Version>, Code>;
+    /// asof, ascending by `tx`. Costs 1 + versions.
+    fn versions(&mut self, cell: &CellKey, from: &str, to: &str) -> Result<Vec<Version>, Stop<Self::Error>>;
+
+    /// Charge `n` units of fuel; `E_FORMULA_BUDGET` when the request's budget is exceeded.
+    fn charge(&mut self, n: u64) -> Result<(), Code>;
 }
 
 /// A slice manifest (15.13): the slice object and its members' receipt hashes, ascending.
@@ -203,28 +248,26 @@ pub struct Outcome {
 /// The smallest instant, the `tx` and `asof` of a receipt that read nothing.
 pub const ZERO_INSTANT: &str = "0001-01-01T00:00:00.000000Z";
 
-/// Evaluate a defined function at `args` as of `asof`.
-pub fn evaluate(
+/// Evaluate a defined function at `args` as of `asof`, over `world`.
+pub fn evaluate<W: World + ?Sized>(
     compiled: &Compiled,
     function: &Function,
     args: &Args,
     asof: &str,
-    world: &mut dyn World,
-    fuel: &mut Fuel,
-) -> Result<Outcome, Code> {
-    let a = calendar::parse_instant(asof).ok_or(Code::Domain)?;
+    world: &mut W,
+) -> Result<Outcome, Stop<W::Error>> {
+    let a = calendar::parse_instant(asof).ok_or(Stop::Code(Code::Domain))?;
     let mut scope = Vec::new();
     for (name, decl) in &function.signature.args {
-        let s = args.get(name).ok_or(Code::Domain)?;
+        let s = args.get(name).ok_or(Stop::Code(Code::Domain))?;
         if s.ty() != decl.ty {
-            return Err(Code::Type);
+            return Err(Code::Type.into());
         }
         scope.push((name.clone(), from_scalar(s)?));
     }
     let mut ev = Eval {
         c: compiled,
         world,
-        fuel,
         asof: a,
         scope,
         lineage: BTreeSet::new(),
@@ -399,10 +442,9 @@ fn seconds(a: Micros, b: Micros) -> Decimal {
 // -------------------------------------------------------------------------------------------
 // The evaluator.
 
-struct Eval<'a> {
+struct Eval<'a, W: World + ?Sized> {
     c: &'a Compiled,
-    world: &'a mut dyn World,
-    fuel: &'a mut Fuel,
+    world: &'a mut W,
     asof: Micros,
     scope: Vec<(String, V)>,
     lineage: BTreeSet<String>,
@@ -419,16 +461,19 @@ struct Narrow {
     hi: V,
 }
 
-impl Eval<'_> {
+/// The result of an evaluation step.
+type R<T, E> = Result<T, Stop<E>>;
+
+impl<W: World + ?Sized> Eval<'_, W> {
     fn charge(&mut self, n: u64) -> Result<(), Code> {
-        self.fuel.charge(n)
+        self.world.charge(n)
     }
 
     fn ty(&self, id: NodeId) -> Option<&Ty> {
         self.c.type_of(id)
     }
 
-    fn node(&mut self, id: NodeId) -> Result<V, Code> {
+    fn node(&mut self, id: NodeId) -> R<V, W::Error> {
         let ast = &self.c.ast;
         // Binary spines, iteratively: charge every node of the spine top-down, then evaluate the
         // bottom operand and each right operand in turn (left to right).
@@ -453,12 +498,14 @@ impl Eval<'_> {
         }
         self.charge(1)?;
         match ast.node(id) {
-            Node::Num { value, .. } => Ok(V::Num(Decimal::parse(value).ok_or(Code::Domain)?)),
+            Node::Num { value, .. } => Ok(V::Num(Decimal::parse(value).ok_or(Stop::Code(Code::Domain))?)),
             Node::Str(s) => Ok(V::Str(s.clone())),
             Node::Bool(b) => Ok(V::Bool(*b)),
-            Node::Date(s) => Ok(V::Date(Date::parse(s).ok_or(Code::Domain)?)),
-            Node::Instant(s) => Ok(V::Instant(calendar::parse_instant(s).ok_or(Code::Domain)?)),
-            Node::Var(n) => self.scope.iter().rev().find(|(m, _)| m == n).map(|(_, v)| v.clone()).ok_or(Code::Domain),
+            Node::Date(s) => Ok(V::Date(Date::parse(s).ok_or(Stop::Code(Code::Domain))?)),
+            Node::Instant(s) => Ok(V::Instant(calendar::parse_instant(s).ok_or(Stop::Code(Code::Domain))?)),
+            Node::Var(n) => {
+                self.scope.iter().rev().find(|(m, _)| m == n).map(|(_, v)| v.clone()).ok_or(Stop::Code(Code::Domain))
+            }
             Node::Op { op, args } => match op {
                 Op::Neg => {
                     // A chain of minus signs, iteratively.
@@ -477,7 +524,7 @@ impl Eval<'_> {
                 }
                 Op::Not => match self.node(args[0])? {
                     V::Bool(b) => Ok(V::Bool(!b)),
-                    _ => Err(Code::Type),
+                    _ => Err(Code::Type.into()),
                 },
                 Op::Pow => {
                     let b = self.node(args[0])?;
@@ -499,7 +546,7 @@ impl Eval<'_> {
             Node::If { cond, then, els } => match self.node(*cond)? {
                 V::Bool(true) => self.node(*then),
                 V::Bool(false) => self.node(*els),
-                _ => Err(Code::Type),
+                _ => Err(Code::Type.into()),
             },
             Node::Let { name, value, body } => {
                 let v = self.node(*value)?;
@@ -510,7 +557,7 @@ impl Eval<'_> {
             }
             Node::Read { .. } => self.read(id, None),
             Node::Call { fn_name, args, named } => self.call(id, fn_name, args, named),
-            Node::Lambda { .. } | Node::Agg(_) | Node::Key(_) => Err(Code::Type),
+            Node::Lambda { .. } | Node::Agg(_) | Node::Key(_) => Err(Code::Type.into()),
         }
     }
 
@@ -529,19 +576,19 @@ impl Eval<'_> {
     }
 
     /// A binary operator node `nid` with its left value and its operand nodes.
-    fn binary(&mut self, nid: NodeId, op: Op, l: V, lid: NodeId, rid: NodeId) -> Result<V, Code> {
+    fn binary(&mut self, nid: NodeId, op: Op, l: V, lid: NodeId, rid: NodeId) -> R<V, W::Error> {
         match op {
             Op::And | Op::Or => {
                 let lb = matches!(l, V::Bool(true));
                 if !matches!(l, V::Bool(_)) {
-                    return Err(Code::Type);
+                    return Err(Code::Type.into());
                 }
                 if (op == Op::And && !lb) || (op == Op::Or && lb) {
                     return Ok(V::Bool(lb));
                 }
                 match self.node(rid)? {
                     V::Bool(b) => Ok(V::Bool(b)),
-                    _ => Err(Code::Type),
+                    _ => Err(Code::Type.into()),
                 }
             }
             _ => {
@@ -549,7 +596,7 @@ impl Eval<'_> {
                 let _ = nid;
                 let lu = num_unit(self.ty(lid)).cloned();
                 let ru = num_unit(self.ty(rid)).cloned();
-                self.apply(op, &l, &r, lu.as_ref(), ru.as_ref())
+                Ok(self.apply(op, &l, &r, lu.as_ref(), ru.as_ref())?)
             }
         }
     }
@@ -592,8 +639,8 @@ impl Eval<'_> {
     // ---------------------------------------------------------------------------------------
     // Reads.
 
-    fn binding(&mut self, name: &str) -> Result<Binding, Code> {
-        let b = self.world.function(name).ok_or(Code::Unresolved)?;
+    fn binding(&mut self, name: &str, at: Option<&str>) -> R<Binding, W::Error> {
+        let b = self.world.function(name, at).map_err(Stop::World)?.ok_or(Stop::Code(Code::Unresolved))?;
         self.bindings.insert(name.to_string(), b.start.clone());
         Ok(b)
     }
@@ -612,11 +659,11 @@ impl Eval<'_> {
     }
 
     /// The arguments of a read node, evaluated in ascending label order.
-    fn read_args(&mut self, id: NodeId, f: &Function) -> Result<BTreeMap<String, PatternArg>, Code> {
-        let Node::Read { args, .. } = self.c.ast.node(id) else { return Err(Code::Type) };
+    fn read_args(&mut self, id: NodeId, f: &Function) -> R<BTreeMap<String, PatternArg>, W::Error> {
+        let Node::Read { args, .. } = self.c.ast.node(id) else { return Err(Code::Type.into()) };
         let mut out = BTreeMap::new();
         for (name, a) in args {
-            let ty = f.signature.args.get(name).map(|d| d.ty).ok_or(Code::Unresolved)?;
+            let ty = f.signature.args.get(name).map(|d| d.ty).ok_or(Stop::Code(Code::Unresolved))?;
             let p = match a {
                 ReadArg::Open => PatternArg::Open,
                 ReadArg::Expr(x) => PatternArg::Value(typed(&self.node(*x)?, ty)?),
@@ -624,7 +671,7 @@ impl Eval<'_> {
                     let lo = typed(&self.node(*lo)?, ty)?;
                     let hi = typed(&self.node(*hi)?, ty)?;
                     if cmp_scalar(&lo, &hi) == std::cmp::Ordering::Greater {
-                        return Err(Code::Domain);
+                        return Err(Code::Domain.into());
                     }
                     PatternArg::Range(lo, hi)
                 }
@@ -635,13 +682,13 @@ impl Eval<'_> {
     }
 
     /// A read node: one cell, or a slice (narrowed by a lookup's bound when given).
-    fn read(&mut self, id: NodeId, narrow: Option<Narrow>) -> Result<V, Code> {
-        let Node::Read { fn_name, .. } = self.c.ast.node(id) else { return Err(Code::Type) };
+    fn read(&mut self, id: NodeId, narrow: Option<Narrow>) -> R<V, W::Error> {
+        let Node::Read { fn_name, .. } = self.c.ast.node(id) else { return Err(Code::Type.into()) };
         let fn_name = fn_name.clone();
-        let b = self.binding(&fn_name)?;
+        let b = self.binding(&fn_name, None)?;
         let mut pattern = self.read_args(id, &b.function)?;
         if let Some(n) = narrow {
-            let ty = b.function.signature.args.get(&n.key).map(|d| d.ty).ok_or(Code::Along)?;
+            let ty = b.function.signature.args.get(&n.key).map(|d| d.ty).ok_or(Stop::Code(Code::Along))?;
             let (lo, hi) = (typed(&n.lo, ty)?, typed(&n.hi, ty)?);
             let (lo, hi) = match pattern.get(&n.key) {
                 Some(PatternArg::Range(a, z)) => (
@@ -654,7 +701,6 @@ impl Eval<'_> {
         }
         let open = pattern.values().any(|p| !matches!(p, PatternArg::Value(_)));
         if !open {
-            self.charge(1)?;
             let args: Args = pattern
                 .into_iter()
                 .map(|(k, p)| match p {
@@ -663,34 +709,18 @@ impl Eval<'_> {
                 })
                 .collect();
             let cell = CellKey { name: fn_name, args };
-            return match self.world.read(&cell, None, self.fuel)? {
+            return match self.world.read(&cell, None)? {
                 Some(v) => {
                     self.lineage.insert(v.receipt_hash.clone());
                     self.note_version(&v);
-                    from_scalar(&v.value)
+                    Ok(from_scalar(&v.value)?)
                 }
-                None => Err(Code::NotCovered),
+                None => Err(Code::NotCovered.into()),
             };
         }
         let slice = SliceKey { name: fn_name.clone(), args: pattern };
         let f = b.function.clone();
-        let members: Vec<(Args, Version)> = if f.lang == "stored" {
-            self.world.members(&slice, self.fuel)?
-        } else {
-            let cells = enumerate(&f, &slice)?;
-            let mut out = Vec::with_capacity(cells.len());
-            for args in cells {
-                let cell = CellKey { name: fn_name.clone(), args };
-                match self.world.read(&cell, None, self.fuel) {
-                    Ok(Some(v)) => out.push((cell.args, v)),
-                    Ok(None) => return Err(Code::Absent),
-                    Err(c) if c.is_mesh_failure() => return Err(c),
-                    Err(_) => return Err(Code::Absent),
-                }
-            }
-            out
-        };
-        self.charge(1 + members.len() as u64)?;
+        let members = self.world.members(&slice)?;
         // Lineage: one entry for the slice.
         let obj = slice_object(&f, &slice);
         let mut hashes: Vec<String> = members.iter().map(|(_, v)| v.receipt_hash.clone()).collect();
@@ -714,7 +744,7 @@ impl Eval<'_> {
         for (args, v) in &members {
             let mut key = Vec::with_capacity(keys.len());
             for k in &keys {
-                key.push(from_scalar(args.get(&k.name).ok_or(Code::Absent)?)?);
+                key.push(from_scalar(args.get(&k.name).ok_or(Stop::Code(Code::Absent))?)?);
             }
             ms.push((key, from_scalar(&v.value)?));
         }
@@ -725,7 +755,7 @@ impl Eval<'_> {
     // ---------------------------------------------------------------------------------------
     // Built-ins.
 
-    fn call(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<V, Code> {
+    fn call(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
         let named_of = |n: &str| named.iter().find(|(k, _)| k == n).map(|(_, v)| *v);
         if AGGREGATES.contains(&f) {
             return self.aggregate_call(f, args);
@@ -737,7 +767,7 @@ impl Eval<'_> {
             "map" | "filter" => self.map_filter(f, args),
             "scan" | "window" => self.scan_window(f, args, named),
             "otherwise" => match self.node(args[0]) {
-                Err(c) if c.is_catchable() => self.node(args[1]),
+                Err(Stop::Code(c)) if c.is_catchable() => self.node(args[1]),
                 r => r,
             },
             "asof" => {
@@ -814,20 +844,20 @@ impl Eval<'_> {
                 let x = num(&x)?;
                 let target = match self.c.ast.node(args[1]) {
                     Node::Str(s) => s.clone(),
-                    _ => return Err(Code::Enum),
+                    _ => return Err(Code::Enum.into()),
                 };
                 let from = num_unit(self.ty(args[0])).cloned().unwrap_or(NumUnit::Known(crate::units::Unit::one()));
-                let kind = check::convert_factor(&from, &target).ok_or(Code::UnitMismatch)?;
+                let kind = check::convert_factor(&from, &target).ok_or(Stop::Code(Code::UnitMismatch))?;
                 Ok(V::Num(convert(x, kind)?))
             }
             "date" => {
                 let y = int_of(&self.node(args[0])?)?;
                 let m = int_of(&self.node(args[1])?)?;
                 let d = int_of(&self.node(args[2])?)?;
-                Ok(V::Date(Date::new(y, m, d).ok_or(Code::Domain)?))
+                Ok(V::Date(Date::new(y, m, d).ok_or(Stop::Code(Code::Domain))?))
             }
             "year" | "month" | "day" | "weekday" | "end_of_month" => {
-                let V::Date(d) = self.node(args[0])? else { return Err(Code::Type) };
+                let V::Date(d) = self.node(args[0])? else { return Err(Code::Type.into()) };
                 Ok(match f {
                     "year" => V::Num(int(i64::from(d.year))),
                     "month" => V::Num(int(i64::from(d.month))),
@@ -838,30 +868,30 @@ impl Eval<'_> {
             }
             "add_days" | "add_months" | "business_days" => self.business(f, args, named),
             "year_fraction" => {
-                let V::Date(a) = self.node(args[0])? else { return Err(Code::Type) };
-                let V::Date(b) = self.node(args[1])? else { return Err(Code::Type) };
-                let Node::Str(conv) = self.c.ast.node(args[2]) else { return Err(Code::Enum) };
+                let V::Date(a) = self.node(args[0])? else { return Err(Code::Type.into()) };
+                let V::Date(b) = self.node(args[1])? else { return Err(Code::Type.into()) };
+                let Node::Str(conv) = self.c.ast.node(args[2]) else { return Err(Code::Enum.into()) };
                 Ok(V::Num(calendar::year_fraction(a, b, conv)?))
             }
             "is_holiday" => {
-                let V::Date(d) = self.node(args[0])? else { return Err(Code::Type) };
+                let V::Date(d) = self.node(args[0])? else { return Err(Code::Type.into()) };
                 let hol = self.holidays(args[1])?;
                 Ok(V::Bool(hol.binary_search(&d).is_ok()))
             }
             "date_of" => {
-                let V::Instant(i) = self.node(args[0])? else { return Err(Code::Type) };
-                Ok(V::Date(calendar::date_of(i).ok_or(Code::Range)?))
+                let V::Instant(i) = self.node(args[0])? else { return Err(Code::Type.into()) };
+                Ok(V::Date(calendar::date_of(i).ok_or(Stop::Code(Code::Range))?))
             }
             "instant" => {
-                let V::Date(d) = self.node(args[0])? else { return Err(Code::Type) };
+                let V::Date(d) = self.node(args[0])? else { return Err(Code::Type.into()) };
                 Ok(V::Instant(instant_ok(i128::from(d.ordinal()) * i128::from(DAY_MICROS))?))
             }
             "len" => {
-                let V::Str(s) = self.node(args[0])? else { return Err(Code::Type) };
+                let V::Str(s) = self.node(args[0])? else { return Err(Code::Type.into()) };
                 Ok(V::Num(int(text::len(&s) as i64)))
             }
             "upper" | "lower" | "trim" => {
-                let V::Str(s) = self.node(args[0])? else { return Err(Code::Type) };
+                let V::Str(s) = self.node(args[0])? else { return Err(Code::Type.into()) };
                 let r = match f {
                     "upper" => text::upper(&s),
                     "lower" => text::lower(&s),
@@ -874,10 +904,10 @@ impl Eval<'_> {
             "concat" => {
                 let mut out = String::new();
                 for a in args {
-                    let V::Str(s) = self.node(*a)? else { return Err(Code::Type) };
+                    let V::Str(s) = self.node(*a)? else { return Err(Code::Type.into()) };
                     out.push_str(&s);
                     if out.len() > 4 * text::MAX_STRING_BYTES {
-                        return Err(Code::Range);
+                        return Err(Code::Range.into());
                     }
                 }
                 let r = text::finish(out)?;
@@ -885,14 +915,14 @@ impl Eval<'_> {
                 Ok(V::Str(r))
             }
             "substr" => {
-                let V::Str(s) = self.node(args[0])? else { return Err(Code::Type) };
+                let V::Str(s) = self.node(args[0])? else { return Err(Code::Type.into()) };
                 let start = int_of(&self.node(args[1])?)?;
                 let length = int_of(&self.node(args[2])?)?;
                 Ok(V::Str(text::finish(text::substr(&s, start, length)?)?))
             }
             "find" => {
-                let V::Str(needle) = self.node(args[0])? else { return Err(Code::Type) };
-                let V::Str(hay) = self.node(args[1])? else { return Err(Code::Type) };
+                let V::Str(needle) = self.node(args[0])? else { return Err(Code::Type.into()) };
+                let V::Str(hay) = self.node(args[1])? else { return Err(Code::Type.into()) };
                 let start = match named_of("start") {
                     Some(s) => int_of(&self.node(s)?)?,
                     None => 1,
@@ -909,11 +939,11 @@ impl Eval<'_> {
                 let d = self.node(args[1])?;
                 Ok(V::Str(text::finish(fixed(num(&x)?, num(&d)?)?)?))
             }
-            _ => Err(Code::UnknownFunction),
+            _ => Err(Code::UnknownFunction.into()),
         }
     }
 
-    fn aggregate_call(&mut self, f: &str, args: &[NodeId]) -> Result<V, Code> {
+    fn aggregate_call(&mut self, f: &str, args: &[NodeId]) -> R<V, W::Error> {
         let mut vals = Vec::with_capacity(args.len());
         for a in args {
             vals.push(self.node(*a)?);
@@ -930,13 +960,13 @@ impl Eval<'_> {
             self.charge(if f == "median" { n * (64 - n.leading_zeros() as u64) } else { n })?;
         }
         let elem_unit = num_unit(self.ty(args[0])).cloned();
-        aggregate(f, &values, elem_unit.as_ref())
+        Ok(aggregate(f, &values, elem_unit.as_ref())?)
     }
 
-    fn slice_of(&mut self, id: NodeId) -> Result<Rc<SliceV>, Code> {
+    fn slice_of(&mut self, id: NodeId) -> R<Rc<SliceV>, W::Error> {
         match self.node(id)? {
             V::Slice(s) => Ok(s),
-            _ => Err(Code::Type),
+            _ => Err(Code::Type.into()),
         }
     }
 
@@ -954,7 +984,7 @@ impl Eval<'_> {
         })
     }
 
-    fn lookup(&mut self, _id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<V, Code> {
+    fn lookup(&mut self, _id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
         let keys = self.keys_of(args[0]);
         let along = self.along(named);
         let d = check::dimension(&keys, along.as_deref()).map_err(|e| e.code)?;
@@ -975,7 +1005,7 @@ impl Eval<'_> {
             self.charge(1)?; // the read node
             let s = match self.read(args[0], Some(narrow))? {
                 V::Slice(s) => s,
-                _ => return Err(Code::Type),
+                _ => return Err(Code::Type.into()),
             };
             (s, x, Some((bv, bu)))
         } else {
@@ -1015,8 +1045,8 @@ impl Eval<'_> {
             ms.sort_by(|a, b| cmp_v(&a.0, &b.0));
         }
         if f == "within" {
-            let x = x.ok_or(Code::Type)?;
-            let reach = reach.ok_or(Code::Type)?;
+            let x = x.ok_or(Stop::Code(Code::Type))?;
+            let reach = reach.ok_or(Stop::Code(Code::Type))?;
             let mut members = Vec::new();
             for (key, val) in &s.members {
                 if distance(&key[d], &x)?.is_some_and(|dist| dist <= reach) {
@@ -1034,7 +1064,7 @@ impl Eval<'_> {
         if keys.len() == 1 {
             return match results.into_iter().next() {
                 Some((_, v)) => Ok(v),
-                None => Err(Code::Absent),
+                None => Err(Code::Absent.into()),
             };
         }
         let mut rest = s.keys.clone();
@@ -1199,16 +1229,16 @@ impl Eval<'_> {
         }
     }
 
-    fn map_filter(&mut self, f: &str, args: &[NodeId]) -> Result<V, Code> {
+    fn map_filter(&mut self, f: &str, args: &[NodeId]) -> R<V, W::Error> {
         let s = self.slice_of(args[0])?;
-        let Node::Lambda { params, body } = self.c.ast.node(args[1]) else { return Err(Code::Type) };
+        let Node::Lambda { params, body } = self.c.ast.node(args[1]) else { return Err(Code::Type.into()) };
         let (params, body) = (params.clone(), *body);
         let mut members = Vec::with_capacity(s.members.len());
         for (key, val) in &s.members {
             let base = self.scope.len();
             self.scope.push((params[0].clone(), val.clone()));
             for p in &params[1..] {
-                let i = s.keys.iter().position(|k| &k.name == p).ok_or(Code::LambdaParam)?;
+                let i = s.keys.iter().position(|k| &k.name == p).ok_or(Stop::Code(Code::LambdaParam))?;
                 self.scope.push((p.clone(), key[i].clone()));
             }
             let r = self.node(body);
@@ -1225,20 +1255,20 @@ impl Eval<'_> {
         Ok(V::Slice(Rc::new(SliceV { keys: s.keys.clone(), members })))
     }
 
-    fn scan_window(&mut self, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<V, Code> {
+    fn scan_window(&mut self, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
         let keys = self.keys_of(args[0]);
         let s = self.slice_of(args[0])?;
         let width = if f == "window" {
             let w = int_of(&self.node(args[1])?)?;
             if w < 1 {
-                return Err(Code::Domain);
+                return Err(Code::Domain.into());
             }
             Some(w as usize)
         } else {
             None
         };
         let agg_id = if f == "scan" { args[1] } else { args[2] };
-        let Node::Agg(agg) = self.c.ast.node(agg_id) else { return Err(Code::Enum) };
+        let Node::Agg(agg) = self.c.ast.node(agg_id) else { return Err(Code::Enum.into()) };
         let agg = agg.clone();
         let along = self.along(named);
         let d = check::dimension(&keys, along.as_deref()).map_err(|e| e.code)?;
@@ -1280,17 +1310,18 @@ impl Eval<'_> {
         Ok(V::Slice(Rc::new(SliceV { keys: s.keys.clone(), members })))
     }
 
-    fn asof_read(&mut self, cell_id: NodeId, t_id: NodeId) -> Result<V, Code> {
-        let Node::Read { fn_name, .. } = self.c.ast.node(cell_id) else { return Err(Code::TxArg) };
+    fn asof_read(&mut self, cell_id: NodeId, t_id: NodeId) -> R<V, W::Error> {
+        let Node::Read { fn_name, .. } = self.c.ast.node(cell_id) else { return Err(Code::TxArg.into()) };
         let fn_name = fn_name.clone();
         // T first: a read in the future is refused before the cell is read.
-        let V::Instant(t) = self.node(t_id)? else { return Err(Code::Type) };
+        let V::Instant(t) = self.node(t_id)? else { return Err(Code::Type.into()) };
         if t > self.asof {
-            return Err(Code::Future);
+            return Err(Code::Future.into());
         }
-        let b = self.binding(&fn_name)?;
+        // The name resolves as of T.
+        let tt = calendar::instant_text(t).ok_or(Code::Range)?;
+        let b = self.binding(&fn_name, Some(&tt))?;
         let pattern = self.read_args(cell_id, &b.function)?;
-        self.charge(1)?;
         let args: Args = pattern
             .into_iter()
             .filter_map(|(k, p)| match p {
@@ -1298,24 +1329,23 @@ impl Eval<'_> {
                 _ => None,
             })
             .collect();
-        let tt = calendar::instant_text(t).ok_or(Code::Range)?;
         let cell = CellKey { name: fn_name, args };
-        let v = self.world.read(&cell, Some(&tt), self.fuel)?.ok_or(Code::NotCovered)?;
+        let v = self.world.read(&cell, Some(&tt))?.ok_or(Stop::Code(Code::NotCovered))?;
         self.lineage.insert(v.receipt_hash.clone());
         self.note_version(&v);
         self.note_asof(&tt);
-        from_scalar(&v.value)
+        Ok(from_scalar(&v.value)?)
     }
 
-    fn versions(&mut self, args: &[NodeId]) -> Result<V, Code> {
-        let Node::Read { fn_name, .. } = self.c.ast.node(args[0]) else { return Err(Code::TxArg) };
+    fn versions(&mut self, args: &[NodeId]) -> R<V, W::Error> {
+        let Node::Read { fn_name, .. } = self.c.ast.node(args[0]) else { return Err(Code::TxArg.into()) };
         let fn_name = fn_name.clone();
-        let V::Instant(from) = self.node(args[1])? else { return Err(Code::Type) };
-        let V::Instant(to) = self.node(args[2])? else { return Err(Code::Type) };
+        let V::Instant(from) = self.node(args[1])? else { return Err(Code::Type.into()) };
+        let V::Instant(to) = self.node(args[2])? else { return Err(Code::Type.into()) };
         if to > self.asof {
-            return Err(Code::Future);
+            return Err(Code::Future.into());
         }
-        let b = self.binding(&fn_name)?;
+        let b = self.binding(&fn_name, None)?;
         let pattern = self.read_args(args[0], &b.function)?;
         let cargs: Args = pattern
             .into_iter()
@@ -1324,11 +1354,12 @@ impl Eval<'_> {
                 _ => None,
             })
             .collect();
-        let (ft, tt) =
-            (calendar::instant_text(from).ok_or(Code::Range)?, calendar::instant_text(to).ok_or(Code::Range)?);
+        let (ft, tt) = (
+            calendar::instant_text(from).ok_or(Stop::Code(Code::Range))?,
+            calendar::instant_text(to).ok_or(Stop::Code(Code::Range))?,
+        );
         let cell = CellKey { name: fn_name, args: cargs };
-        let vs = self.world.versions(&cell, &ft, &tt, self.fuel)?;
-        self.charge(1 + vs.len() as u64)?;
+        let vs = self.world.versions(&cell, &ft, &tt)?;
         let cell_obj = cell_object(&b.function, &cell);
         let obj = Value::Object(vec![
             ("cell".to_string(), cell_obj),
@@ -1347,8 +1378,10 @@ impl Eval<'_> {
         self.note_asof(&tt);
         let mut members = Vec::with_capacity(vs.len());
         for v in &vs {
-            members
-                .push((vec![V::Instant(calendar::parse_instant(&v.tx).ok_or(Code::Domain)?)], from_scalar(&v.value)?));
+            members.push((
+                vec![V::Instant(calendar::parse_instant(&v.tx).ok_or(Stop::Code(Code::Domain))?)],
+                from_scalar(&v.value)?,
+            ));
         }
         members.sort_by(|a, b| cmp_keys(&a.0, &b.0));
         let key = KeyTy { name: "tx".to_string(), ty: Type::Instant, unit: None, valid: true };
@@ -1356,7 +1389,7 @@ impl Eval<'_> {
     }
 
     /// The dates of a calendar slice (one open date argument), ascending.
-    fn holidays(&mut self, id: NodeId) -> Result<Vec<Date>, Code> {
+    fn holidays(&mut self, id: NodeId) -> R<Vec<Date>, W::Error> {
         let s = self.slice_of(id)?;
         let mut out = Vec::with_capacity(s.members.len());
         for (k, _) in &s.members {
@@ -1369,8 +1402,8 @@ impl Eval<'_> {
         Ok(out)
     }
 
-    fn business(&mut self, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> Result<V, Code> {
-        let V::Date(d) = self.node(args[0])? else { return Err(Code::Type) };
+    fn business(&mut self, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        let V::Date(d) = self.node(args[0])? else { return Err(Code::Type.into()) };
         let second = self.node(args[1])?;
         let mut holidays = Vec::new();
         let mut weekend = None;
@@ -1379,20 +1412,20 @@ impl Eval<'_> {
             match k.as_str() {
                 "calendar" => holidays = self.holidays(*v)?,
                 "weekend" => {
-                    let Node::Str(w) = self.c.ast.node(*v) else { return Err(Code::Enum) };
-                    weekend = Some(Weekend::from_name(w).ok_or(Code::Enum)?);
+                    let Node::Str(w) = self.c.ast.node(*v) else { return Err(Code::Enum.into()) };
+                    weekend = Some(Weekend::from_name(w).ok_or(Stop::Code(Code::Enum))?);
                 }
                 "roll" => {
-                    let Node::Str(r) = self.c.ast.node(*v) else { return Err(Code::Enum) };
-                    roll = Some(Roll::from_name(r).ok_or(Code::Enum)?);
+                    let Node::Str(r) = self.c.ast.node(*v) else { return Err(Code::Enum.into()) };
+                    roll = Some(Roll::from_name(r).ok_or(Stop::Code(Code::Enum))?);
                 }
                 _ => {}
             }
         }
         let business = named.iter().any(|(k, _)| k == "calendar" || k == "weekend" || k == "roll");
         let rules = BusinessDays { weekend: weekend.unwrap_or(Weekend::SatSun), holidays: &holidays };
-        let fuel = &mut *self.fuel;
-        let mut step = |n: u64| fuel.charge(n);
+        let world = &mut *self.world;
+        let mut step = |n: u64| world.charge(n);
         match f {
             "add_days" => {
                 let n = int_of(&second)?;
@@ -1404,7 +1437,7 @@ impl Eval<'_> {
             }
             "add_months" => {
                 let n = int_of(&second)?;
-                let m = d.add_months(n).ok_or(Code::Range)?;
+                let m = d.add_months(n).ok_or(Stop::Code(Code::Range))?;
                 if business {
                     Ok(V::Date(rules.roll(m, roll.unwrap_or(Roll::Following), &mut step)?))
                 } else {
@@ -1412,7 +1445,7 @@ impl Eval<'_> {
                 }
             }
             _ => {
-                let V::Date(to) = second else { return Err(Code::Type) };
+                let V::Date(to) = second else { return Err(Code::Type.into()) };
                 Ok(V::Num(int(rules.between(d, to, &mut step)?)))
             }
         }
@@ -1576,9 +1609,10 @@ fn fixed(x: &Decimal, digits: &Decimal) -> Result<String, Code> {
     Ok(s)
 }
 
-/// The cells of a computed function's slice: the declared extent within the pattern (15.13),
-/// in key order.
-fn enumerate(f: &Function, slice: &SliceKey) -> Result<Vec<Args>, Code> {
+/// The cells of a slice over a function that is not `stored`: the declared extent within the
+/// pattern (15.13), ranges over arguments without an extent enumerated daily or by 1, in key
+/// order; `E_FORMULA_UNBOUNDED` beyond 1,048,576 cells.
+pub fn extent_cells(f: &Function, slice: &SliceKey) -> Result<Vec<Args>, Code> {
     let mut lists: Vec<(String, Vec<Scalar>)> = Vec::new();
     for (name, p) in &slice.args {
         let decl = f.signature.args.get(name).ok_or(Code::Absent)?;

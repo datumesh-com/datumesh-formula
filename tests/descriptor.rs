@@ -29,7 +29,13 @@ fn code(body: &str, inputs: &[&str], order: bool) -> Option<String> {
     let mut env = env;
     env.add_function(
         "rates.example.org/fx_rate",
-        common::vector("formula/read-positional.json").get("env").unwrap().get("functions").unwrap().get("rates.example.org/fx_rate").unwrap(),
+        common::vector("formula/read-positional.json")
+            .get("env")
+            .unwrap()
+            .get("functions")
+            .unwrap()
+            .get("rates.example.org/fx_rate")
+            .unwrap(),
     )
     .unwrap();
     match check_descriptor("calc.example.net/f", &descriptor(body, inputs, order), &env) {

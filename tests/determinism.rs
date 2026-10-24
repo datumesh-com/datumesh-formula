@@ -130,10 +130,10 @@ fn evaluating_twice_gives_identical_results() {
         let run = || {
             let mut world = base.clone();
             world.bind("calc.example.net/e", &descriptor, "2026-01-01T00:00:00.000000Z").unwrap();
-            let mut fuel = Fuel::new(limit);
+            world.fuel = Fuel::new(limit);
             let cell = CellKey { name: "calc.example.net/e".to_string(), args: args.clone() };
-            let r = world.compute(&cell, asof, &mut fuel);
-            (r.map(|c| (c.outcome, c.receipt_hash)), fuel.used)
+            let r = world.compute(&cell, asof);
+            (r.map(|c| (c.outcome, c.receipt_hash)), world.fuel.used)
         };
         let (a, fa) = run();
         let (b, fb) = run();

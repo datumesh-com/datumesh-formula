@@ -46,8 +46,8 @@ fn eval_x(src: &str, x: &str, ret_unit_one: bool) -> Result<String, Code> {
         args.insert(name.clone(), v);
     }
     let mut world = MemoryWorld::new("2026-06-01T00:00:00.000000Z");
-    let mut fuel = Fuel::new(10_000_000);
-    let o = evaluate(&c, &f, &args, "2026-06-01T00:00:00.000000Z", &mut world, &mut fuel)?;
+    world.fuel = Fuel::new(10_000_000);
+    let o = evaluate(&c, &f, &args, "2026-06-01T00:00:00.000000Z", &mut world).map_err(|s| s.code().unwrap())?;
     Ok(o.value.lexical().to_string())
 }
 

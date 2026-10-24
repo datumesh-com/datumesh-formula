@@ -15,7 +15,7 @@ use datumesh_core::json::Value;
 use datumesh_core::{Scalar, Type};
 
 use crate::env::{Env, EnvError, Function};
-use crate::eval::{self, Args, Binding, CellKey, Fuel, Outcome, SliceKey, Version, World, ZERO_INSTANT};
+use crate::eval::{self, Args, Binding, CellKey, Fuel, Outcome, SliceKey, Stop, Version, World, ZERO_INSTANT};
 use crate::{define, Code, Compiled};
 
 /// The vectors' default fuel (15.12): 10,000,000.
@@ -76,6 +76,8 @@ pub struct MemoryWorld {
     stack: Vec<CellKey>,
     /// The evaluation depth limit, in cells.
     pub max_depth: usize,
+    /// The request's fuel (15.12), shared by every evaluation the world makes.
+    pub fuel: Fuel,
     asof: String,
     /// The receipt conventions.
     pub conventions: Conventions,
@@ -125,6 +127,7 @@ impl MemoryWorld {
             computed: HashMap::new(),
             stack: Vec::new(),
             max_depth: DEFAULT_MAX_DEPTH,
+            fuel: Fuel::new(DEFAULT_FUEL),
             asof: asof.to_string(),
             conventions: Conventions::default(),
         }
@@ -196,7 +199,9 @@ impl MemoryWorld {
         for (n, other) in &self.functions {
             env.functions.insert(n.clone(), (*other.function).clone());
         }
-        let c = Arc::new(define(&f.body, &env).map_err(|e| e.code)?);
+        // Checked against the bindings as they are now: a callee rebound since define time is
+        // checked again, with the same codes (15.8).
+        let c = Arc::new(crate::check_descriptor(name, &f.value, &env).map_err(|e| e.code)?);
         self.compiled.insert(name.to_string(), c.clone());
         Ok(c)
     }
@@ -222,8 +227,9 @@ impl MemoryWorld {
         best.map(|s| s.version.clone())
     }
 
-    /// Evaluate a computed cell as of `asof`, building its receipt.
-    pub fn compute(&mut self, cell: &CellKey, asof: &str, fuel: &mut Fuel) -> Result<Computed, Code> {
+    /// Evaluate a computed cell as of `asof`, building its receipt; fuel is charged to
+    /// [`MemoryWorld::fuel`].
+    pub fn compute(&mut self, cell: &CellKey, asof: &str) -> Result<Computed, Code> {
         if self.stack.contains(cell) {
             return Err(Code::Cycle);
         }
@@ -234,15 +240,43 @@ impl MemoryWorld {
         let f = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.function.clone();
         let saved = std::mem::replace(&mut self.asof, asof.to_string());
         self.stack.push(cell.clone());
-        let r = eval::evaluate(&compiled, &f, &cell.args, asof, self, fuel);
+        let r = eval::evaluate(&compiled, &f, &cell.args, asof, self);
         self.stack.pop();
         self.asof = saved;
-        let outcome = r?;
+        let outcome = r.map_err(|s| match s {
+            Stop::Code(c) => c,
+            Stop::World(never) => match never {},
+        })?;
         let receipt = self.receipt(&f, cell, &outcome);
         let hash = receipt_hash(&receipt);
         let c = Computed { outcome, receipt, receipt_hash: hash.clone() };
         self.computed.insert(hash, c.clone());
         Ok(c)
+    }
+
+    /// The version of a cell as of `at`, without charging the read: a stored version, or the
+    /// computed cell evaluated (memoised).
+    fn version(&mut self, cell: &CellKey, at: &str) -> Result<Option<Version>, Code> {
+        let b = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.clone();
+        if b.function.lang == "stored" {
+            return Ok(self.stored_version(cell, &b.function.hash, at));
+        }
+        let key = (cell.clone(), at.to_string());
+        if let Some(r) = self.memo.get(&key) {
+            return r.clone();
+        }
+        let r = self.compute(cell, at).map(|c| {
+            Some(Version {
+                value: c.outcome.value.clone(),
+                receipt_hash: c.receipt_hash.clone(),
+                tx: c.outcome.tx.clone().unwrap_or_else(|| ZERO_INSTANT.to_string()),
+                asof: c.outcome.receipt_asof.clone(),
+            })
+        });
+        if !matches!(r, Err(c) if c.is_mesh_failure()) {
+            self.memo.insert(key, r.clone());
+        }
+        r
     }
 
     fn receipt(&self, f: &Function, cell: &CellKey, o: &Outcome) -> Value {
@@ -283,51 +317,48 @@ impl MemoryWorld {
 }
 
 impl World for MemoryWorld {
-    fn function(&mut self, name: &str) -> Option<Binding> {
-        self.functions.get(name).cloned()
+    type Error = std::convert::Infallible;
+
+    fn function(&mut self, name: &str, at: Option<&str>) -> Result<Option<Binding>, Self::Error> {
+        let at = at.unwrap_or(&self.asof);
+        Ok(self.functions.get(name).filter(|b| b.start.as_str() <= at).cloned())
     }
 
-    fn read(&mut self, cell: &CellKey, at: Option<&str>, fuel: &mut Fuel) -> Result<Option<Version>, Code> {
-        let b = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.clone();
+    fn read(&mut self, cell: &CellKey, at: Option<&str>) -> Result<Option<Version>, Stop<Self::Error>> {
+        self.charge(1)?;
         let at = at.map(str::to_string).unwrap_or_else(|| self.asof.clone());
-        if b.function.lang == "stored" {
-            return Ok(self.stored_version(cell, &b.function.hash, &at));
-        }
-        let key = (cell.clone(), at.clone());
-        if let Some(r) = self.memo.get(&key) {
-            return r.clone();
-        }
-        let r = match self.compute(cell, &at, fuel) {
-            Ok(c) => Ok(Some(Version {
-                value: c.outcome.value.clone(),
-                receipt_hash: c.receipt_hash.clone(),
-                tx: c.outcome.tx.clone().unwrap_or_else(|| ZERO_INSTANT.to_string()),
-                asof: c.outcome.receipt_asof.clone(),
-            })),
-            Err(c) => Err(c),
-        };
-        if !matches!(r, Err(c) if c.is_mesh_failure()) {
-            self.memo.insert(key, r.clone());
-        }
-        r
+        Ok(self.version(cell, &at)?)
     }
 
-    fn members(&mut self, slice: &SliceKey, _fuel: &mut Fuel) -> Result<Vec<(Args, Version)>, Code> {
+    fn members(&mut self, slice: &SliceKey) -> Result<Vec<(Args, Version)>, Stop<Self::Error>> {
         let b = self.functions.get(&slice.name).ok_or(Code::Unresolved)?.clone();
-        let mut cells: Vec<CellKey> = Vec::new();
-        for s in &self.stored {
-            if s.cell.name == slice.name
-                && s.fn_hash == b.function.hash
-                && slice.matches(&s.cell.args)
-                && !cells.contains(&s.cell)
-            {
-                cells.push(s.cell.clone());
-            }
-        }
+        let asof = self.asof.clone();
         let mut out = Vec::new();
-        for c in cells {
-            if let Some(v) = self.stored_version(&c, &b.function.hash, &self.asof) {
-                out.push((c.args, v));
+        if b.function.lang == "stored" {
+            let mut cells: Vec<CellKey> = Vec::new();
+            for s in &self.stored {
+                if s.cell.name == slice.name
+                    && s.fn_hash == b.function.hash
+                    && slice.matches(&s.cell.args)
+                    && !cells.contains(&s.cell)
+                {
+                    cells.push(s.cell.clone());
+                }
+            }
+            for c in cells {
+                if let Some(v) = self.stored_version(&c, &b.function.hash, &asof) {
+                    out.push((c.args, v));
+                }
+            }
+        } else {
+            // A computed function's slice: every cell of the extent must have a value.
+            for args in eval::extent_cells(&b.function, slice)? {
+                let cell = CellKey { name: slice.name.clone(), args };
+                match self.version(&cell, &asof) {
+                    Ok(Some(v)) => out.push((cell.args, v)),
+                    Err(c) if c.is_mesh_failure() => return Err(c.into()),
+                    Ok(None) | Err(_) => return Err(Code::Absent.into()),
+                }
             }
         }
         out.sort_by(|a, b| {
@@ -339,10 +370,11 @@ impl World for MemoryWorld {
             }
             std::cmp::Ordering::Equal
         });
+        self.charge(1 + out.len() as u64)?;
         Ok(out)
     }
 
-    fn versions(&mut self, cell: &CellKey, from: &str, to: &str, _fuel: &mut Fuel) -> Result<Vec<Version>, Code> {
+    fn versions(&mut self, cell: &CellKey, from: &str, to: &str) -> Result<Vec<Version>, Stop<Self::Error>> {
         let b = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.clone();
         let mut out: Vec<Version> = self
             .stored
@@ -357,7 +389,12 @@ impl World for MemoryWorld {
             .map(|s| s.version.clone())
             .collect();
         out.sort_by(|a, b| a.tx.cmp(&b.tx));
+        self.charge(1 + out.len() as u64)?;
         Ok(out)
+    }
+
+    fn charge(&mut self, n: u64) -> Result<(), Code> {
+        self.fuel.charge(n)
     }
 }
 
@@ -403,8 +440,8 @@ pub fn run_vector(v: &Value) -> Result<Result<VectorResult, Code>, EnvError> {
         ]);
         world.bind(name, &descriptor, ZERO_INSTANT)?;
     }
-    let mut fuel = Fuel::new(limit);
+    world.fuel = Fuel::new(limit);
     let key = CellKey { name: name.to_string(), args };
-    let r = world.compute(&key, asof, &mut fuel).map(|computed| VectorResult { computed, fuel_used: fuel.used });
+    let r = world.compute(&key, asof).map(|computed| VectorResult { computed, fuel_used: world.fuel.used });
     Ok(r)
 }

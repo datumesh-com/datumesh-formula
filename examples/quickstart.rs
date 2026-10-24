@@ -47,11 +47,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut args = Args::new();
     args.insert("d".to_string(), Scalar::from_lexical(Type::Date, "2026-03-07").map_err(|e| format!("{e:?}"))?);
-    let mut fuel = Fuel::new(10_000);
+    world.fuel = Fuel::new(10_000);
     let cell = CellKey { name: "calc.example.net/week_mean".to_string(), args };
-    let r = world.compute(&cell, "2026-03-08T00:00:00.000000Z", &mut fuel).map_err(|c| c.to_string())?;
+    let r = world.compute(&cell, "2026-03-08T00:00:00.000000Z").map_err(|c| c.to_string())?;
     assert_eq!(r.outcome.value.lexical(), "14");
     assert_eq!(r.outcome.lineage.len(), 1); // one slice entry for seven member receipts
-    println!("value {}, inputs {:?}, fuel {}", r.outcome.value.lexical(), r.outcome.lineage, fuel.used);
+    println!("value {}, inputs {:?}, fuel {}", r.outcome.value.lexical(), r.outcome.lineage, world.fuel.used);
     Ok(())
 }
