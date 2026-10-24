@@ -107,7 +107,8 @@ fn args_of(v: &Value) -> Result<Args, EnvError> {
     let m = v.as_object().ok_or_else(|| bad("args"))?;
     let mut out = Args::new();
     for (k, a) in m {
-        let s = scalar_of(a.get("type").ok_or_else(|| bad("arg type"))?, a.get("value").ok_or_else(|| bad("arg value"))?)?;
+        let s =
+            scalar_of(a.get("type").ok_or_else(|| bad("arg type"))?, a.get("value").ok_or_else(|| bad("arg value"))?)?;
         out.insert(k.clone(), s);
     }
     Ok(out)
@@ -208,7 +209,10 @@ impl MemoryWorld {
             if s.cell == *cell && s.fn_hash == fn_hash && s.version.asof.as_str() <= at {
                 let newer = match best {
                     None => true,
-                    Some(b) => (s.version.tx.as_str(), s.version.asof.as_str()) > (b.version.tx.as_str(), b.version.asof.as_str()),
+                    Some(b) => {
+                        (s.version.tx.as_str(), s.version.asof.as_str())
+                            > (b.version.tx.as_str(), b.version.asof.as_str())
+                    }
                 };
                 if newer {
                     best = Some(s);
@@ -312,7 +316,11 @@ impl World for MemoryWorld {
         let b = self.functions.get(&slice.name).ok_or(Code::Unresolved)?.clone();
         let mut cells: Vec<CellKey> = Vec::new();
         for s in &self.stored {
-            if s.cell.name == slice.name && s.fn_hash == b.function.hash && slice.matches(&s.cell.args) && !cells.contains(&s.cell) {
+            if s.cell.name == slice.name
+                && s.fn_hash == b.function.hash
+                && slice.matches(&s.cell.args)
+                && !cells.contains(&s.cell)
+            {
                 cells.push(s.cell.clone());
             }
         }
@@ -322,7 +330,15 @@ impl World for MemoryWorld {
                 out.push((c.args, v));
             }
         }
-        out.sort_by(|a, b| a.0.iter().map(|(_, v)| v.lexical()).cmp(b.0.iter().map(|(_, v)| v.lexical())));
+        out.sort_by(|a, b| {
+            for (x, y) in a.0.values().zip(b.0.values()) {
+                match eval::cmp_scalar(x, y) {
+                    std::cmp::Ordering::Equal => {}
+                    o => return o,
+                }
+            }
+            std::cmp::Ordering::Equal
+        });
         Ok(out)
     }
 

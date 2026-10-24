@@ -80,6 +80,10 @@ impl Date {
 
     /// The date of a day count since 1970-01-01, if within 0001-9999.
     pub fn from_ordinal(z: i64) -> Option<Date> {
+        // 0001-01-01 is -719162 and 9999-12-31 is 2932896.
+        if !(-719_162..=2_932_896).contains(&z) {
+            return None;
+        }
         let z = z + 719468;
         let era = z.div_euclid(146097);
         let doe = z - era * 146097;
@@ -105,7 +109,7 @@ impl Date {
 
     /// Excel's EDATE: `n` months later, clamped to the month's last day.
     pub fn add_months(self, n: i64) -> Option<Date> {
-        let total = i64::from(self.year) * 12 + i64::from(self.month) - 1 + n;
+        let total = (i64::from(self.year) * 12 + i64::from(self.month) - 1).checked_add(n)?;
         let y = total.div_euclid(12);
         let m = total.rem_euclid(12) + 1;
         if !(1..=9999).contains(&y) {

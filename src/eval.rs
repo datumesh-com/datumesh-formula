@@ -92,7 +92,9 @@ impl SliceKey {
                     }
                 }
                 PatternArg::Range(lo, hi) => {
-                    if v.ty() != lo.ty() || cmp_scalar(v, lo) == std::cmp::Ordering::Less || cmp_scalar(v, hi) == std::cmp::Ordering::Greater
+                    if v.ty() != lo.ty()
+                        || cmp_scalar(v, lo) == std::cmp::Ordering::Less
+                        || cmp_scalar(v, hi) == std::cmp::Ordering::Greater
                     {
                         return false;
                     }
@@ -266,6 +268,9 @@ enum V {
     Blob(String),
     Slice(Rc<SliceV>),
 }
+
+/// A group of a slice's members: the other keys' values and the group's members.
+type Group<T> = (Vec<V>, Vec<T>);
 
 /// A slice value: its keys and its members, ascending by key tuple.
 #[derive(Debug)]
@@ -953,7 +958,8 @@ impl Eval<'_> {
         let along = self.along(named);
         let d = check::dimension(&keys, along.as_deref()).map_err(|e| e.code)?;
         let dim = keys[d].clone();
-        let bound_id = if f == "within" { Some(args[2]) } else { named.iter().find(|(k, _)| k == "bound").map(|(_, v)| *v) };
+        let bound_id =
+            if f == "within" { Some(args[2]) } else { named.iter().find(|(k, _)| k == "bound").map(|(_, v)| *v) };
         let method = named.iter().find(|(k, _)| k == "method").and_then(|(_, v)| match self.c.ast.node(*v) {
             Node::Str(s) => Some(s.clone()),
             _ => None,
@@ -994,7 +1000,7 @@ impl Eval<'_> {
             None => None,
         };
         // Groups: the members by the other keys, in key order.
-        let mut groups: Vec<(Vec<V>, Vec<(V, V)>)> = Vec::new();
+        let mut groups: Vec<Group<(V, V)>> = Vec::new();
         for (key, val) in &s.members {
             let g: Vec<V> = key.iter().enumerate().filter(|(i, _)| *i != d).map(|(_, v)| v.clone()).collect();
             let kv = key[d].clone();
@@ -1054,7 +1060,8 @@ impl Eval<'_> {
                     }
                     _ => return Err(Code::Type),
                 };
-                let clamp = |v: i128| v.clamp(i128::from(calendar::min_instant()), i128::from(calendar::max_instant())) as i64;
+                let clamp =
+                    |v: i128| v.clamp(i128::from(calendar::min_instant()), i128::from(calendar::max_instant())) as i64;
                 (V::Instant(clamp(lo)), V::Instant(clamp(hi)))
             }
             Type::Date => {
@@ -1242,7 +1249,7 @@ impl Eval<'_> {
         })?;
         let unit = num_unit(self.ty(args[0])).cloned();
         // Groups by the other keys; each group in dimension order.
-        let mut groups: Vec<(Vec<V>, Vec<(Vec<V>, V)>)> = Vec::new();
+        let mut groups: Vec<Group<(Vec<V>, V)>> = Vec::new();
         for (key, val) in &s.members {
             let g: Vec<V> = key.iter().enumerate().filter(|(i, _)| *i != d).map(|(_, v)| v.clone()).collect();
             match groups.iter_mut().find(|(gk, _)| cmp_keys(gk, &g) == std::cmp::Ordering::Equal) {
@@ -1316,7 +1323,8 @@ impl Eval<'_> {
                 _ => None,
             })
             .collect();
-        let (ft, tt) = (calendar::instant_text(from).ok_or(Code::Range)?, calendar::instant_text(to).ok_or(Code::Range)?);
+        let (ft, tt) =
+            (calendar::instant_text(from).ok_or(Code::Range)?, calendar::instant_text(to).ok_or(Code::Range)?);
         let cell = CellKey { name: fn_name, args: cargs };
         let vs = self.world.versions(&cell, &ft, &tt, self.fuel)?;
         self.charge(1 + vs.len() as u64)?;
@@ -1338,7 +1346,8 @@ impl Eval<'_> {
         self.note_asof(&tt);
         let mut members = Vec::with_capacity(vs.len());
         for v in &vs {
-            members.push((vec![V::Instant(calendar::parse_instant(&v.tx).ok_or(Code::Domain)?)], from_scalar(&v.value)?));
+            members
+                .push((vec![V::Instant(calendar::parse_instant(&v.tx).ok_or(Code::Domain)?)], from_scalar(&v.value)?));
         }
         members.sort_by(|a, b| cmp_keys(&a.0, &b.0));
         let key = KeyTy { name: "tx".to_string(), ty: Type::Instant, unit: None, valid: true };
@@ -1472,7 +1481,9 @@ fn scalar_op(op: Op, l: &V, r: &V, lu: Option<&NumUnit>, ru: Option<&NumUnit>) -
             let sign: i128 = if op == Op::Sub { -1 } else { 1 };
             Ok(V::Instant(instant_ok(i128::from(*t) + sign * i128::from(us))?))
         }
-        (Op::Sub, V::Instant(a), V::Instant(b)) => Ok(V::Num(decimal::rnd(seconds(*a, *b), decimal::PRECISION).check_range()?)),
+        (Op::Sub, V::Instant(a), V::Instant(b)) => {
+            Ok(V::Num(decimal::rnd(seconds(*a, *b), decimal::PRECISION).check_range()?))
+        }
         (Op::Add | Op::Sub, V::Date(d), V::Num(n)) | (Op::Add, V::Num(n), V::Date(d)) => {
             if !n.is_integer() {
                 return Err(Code::Domain);
@@ -1582,7 +1593,8 @@ fn enumerate(f: &Function, slice: &SliceKey) -> Result<Vec<Args>, Code> {
                 };
                 if let PatternArg::Range(lo, hi) = p {
                     vals.retain(|v| {
-                        cmp_scalar(v, lo) != std::cmp::Ordering::Less && cmp_scalar(v, hi) != std::cmp::Ordering::Greater
+                        cmp_scalar(v, lo) != std::cmp::Ordering::Less
+                            && cmp_scalar(v, hi) != std::cmp::Ordering::Greater
                     });
                 }
                 vals.sort_by(cmp_scalar);

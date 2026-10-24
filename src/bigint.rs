@@ -234,11 +234,13 @@ impl Big {
         if s == 0 || self.is_zero() {
             return self.clone();
         }
-        let mut out = vec![0u64; self.limbs.len()];
-        for i in 0..self.limbs.len() {
-            let hi = if i + 1 < self.limbs.len() { self.limbs[i + 1] << (64 - s) } else { 0 };
-            out[i] = (self.limbs[i] >> s) | hi;
-        }
+        let n = self.limbs.len();
+        let out: Vec<u64> = (0..n)
+            .map(|i| {
+                let hi = if i + 1 < n { self.limbs[i + 1] << (64 - s) } else { 0 };
+                (self.limbs[i] >> s) | hi
+            })
+            .collect();
         let mut r = Big { limbs: out };
         r.trim();
         r
@@ -315,7 +317,7 @@ impl Big {
             return Big::zero();
         }
         // Start above the root: 2^ceil(bits/2).
-        let mut x = Big::from_u64(1).shl_by((self.bits() + 1) / 2);
+        let mut x = Big::from_u64(1).shl_by(self.bits().div_ceil(2));
         loop {
             // y = (x + self / x) / 2
             let (q, _) = self.divrem(&x);
@@ -385,7 +387,13 @@ mod tests {
 
     #[test]
     fn digits_round_trip() {
-        for s in ["0", "1", "18446744073709551615", "18446744073709551616", "123456789012345678901234567890123456789012345678901234567890"] {
+        for s in [
+            "0",
+            "1",
+            "18446744073709551615",
+            "18446744073709551616",
+            "123456789012345678901234567890123456789012345678901234567890",
+        ] {
             assert_eq!(b(s).to_digits(), s);
             assert_eq!(b(s).digit_count(), s.len() as u64);
         }

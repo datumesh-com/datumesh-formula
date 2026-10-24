@@ -36,7 +36,8 @@ fn formula_vectors() {
             if c.body != common::string(&v, "body").unwrap() {
                 problems.push(format!("body {:?}", c.body));
             }
-            let inputs: Vec<&str> = common::array(v.get("inputs").unwrap()).iter().map(|x| x.as_str().unwrap()).collect();
+            let inputs: Vec<&str> =
+                common::array(v.get("inputs").unwrap()).iter().map(|x| x.as_str().unwrap()).collect();
             if c.inputs.iter().map(String::as_str).collect::<Vec<_>>() != inputs {
                 problems.push(format!("inputs {:?}", c.inputs));
             }
@@ -58,7 +59,11 @@ fn formula_vectors() {
                     if e.code.as_str() != want {
                         failures.push(format!("{path}: {input:?}: got {e}, expected {want}"));
                     } else if e.token.as_deref() != common::string(&v, "token") {
-                        failures.push(format!("{path}: token {:?}, expected {:?}", e.token, common::string(&v, "token")));
+                        failures.push(format!(
+                            "{path}: token {:?}, expected {:?}",
+                            e.token,
+                            common::string(&v, "token")
+                        ));
                     }
                 }
             }
@@ -94,8 +99,22 @@ fn dynamic_names_fail_at_parse() {
 fn purity_forbidden_tokens() {
     let env = common::formula_env();
     let names = [
-        "now", "today", "rand", "randbetween", "randarray", "indirect", "offset", "info", "cell", "clock", "time", "random",
-        "sleep", "fetch", "http", "eval",
+        "now",
+        "today",
+        "rand",
+        "randbetween",
+        "randarray",
+        "indirect",
+        "offset",
+        "info",
+        "cell",
+        "clock",
+        "time",
+        "random",
+        "sleep",
+        "fetch",
+        "http",
+        "eval",
     ];
     for name in names {
         for written in [name.to_string(), name.to_uppercase(), capitalised(name)] {
@@ -151,8 +170,11 @@ fn units() {
     }
     let src = "rates.example.org/fx_rate(base, quote, d) * (1 + rates.example.org/rate(quote, \"1M\")) / (1 + rates.example.org/rate(base, \"1M\"))";
     let c = define(src, &env).unwrap();
-    assert_eq!(c.returns.to_value(), Value::Object(vec![
-        ("type".to_string(), Value::String("number".to_string())),
-        ("unit".to_string(), Value::String("arg:base^-1 arg:quote".to_string())),
-    ]));
+    assert_eq!(
+        c.returns.to_value(),
+        Value::Object(vec![
+            ("type".to_string(), Value::String("number".to_string())),
+            ("unit".to_string(), Value::String("arg:base^-1 arg:quote".to_string())),
+        ])
+    );
 }

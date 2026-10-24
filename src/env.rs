@@ -135,7 +135,9 @@ impl Signature {
             let extent = match d.get("extent") {
                 None => None,
                 Some(Value::Array(a)) => Some(Extent::Values(
-                    a.iter().map(|x| x.as_str().map(str::to_string).ok_or_else(|| bad("extent value"))).collect::<Result<_, _>>()?,
+                    a.iter()
+                        .map(|x| x.as_str().map(str::to_string).ok_or_else(|| bad("extent value")))
+                        .collect::<Result<_, _>>()?,
                 )),
                 Some(o @ Value::Object(_)) => {
                     let lo = o.get("lo").and_then(Value::as_str).ok_or_else(|| bad("extent lo"))?;
@@ -149,7 +151,9 @@ impl Signature {
         let order = match v.get("order") {
             None => None,
             Some(Value::Array(a)) => Some(
-                a.iter().map(|x| x.as_str().map(str::to_string).ok_or_else(|| bad("order entry"))).collect::<Result<_, _>>()?,
+                a.iter()
+                    .map(|x| x.as_str().map(str::to_string).ok_or_else(|| bad("order entry")))
+                    .collect::<Result<_, _>>()?,
             ),
             Some(_) => return Err(bad("order is not an array")),
         };
@@ -177,9 +181,10 @@ impl Function {
         let lang = code.get("lang").and_then(Value::as_str).ok_or_else(|| bad("code without lang"))?;
         let body = code.get("body").and_then(Value::as_str).ok_or_else(|| bad("code without body"))?;
         let inputs = match v.get("inputs") {
-            Some(Value::Array(a)) => {
-                a.iter().map(|x| x.as_str().map(str::to_string).ok_or_else(|| bad("inputs entry"))).collect::<Result<_, _>>()?
-            }
+            Some(Value::Array(a)) => a
+                .iter()
+                .map(|x| x.as_str().map(str::to_string).ok_or_else(|| bad("inputs entry")))
+                .collect::<Result<_, _>>()?,
             _ => return Err(bad("descriptor without inputs")),
         };
         let signature = Signature::from_value(v.get("signature").ok_or_else(|| bad("descriptor without signature"))?)?;

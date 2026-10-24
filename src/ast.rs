@@ -525,14 +525,9 @@ fn print(ast: &Ast) -> String {
                             seq.push(Item::Text(" ^ "));
                             // An exponent is a postfix expression after any number of minus signs.
                             let mut cur = e;
-                            loop {
-                                match ast.node(cur) {
-                                    Node::Op { op: Op::Neg, args } => {
-                                        seq.push(Item::Text("-"));
-                                        cur = args[0];
-                                    }
-                                    _ => break,
-                                }
+                            while let Node::Op { op: Op::Neg, args } = ast.node(cur) {
+                                seq.push(Item::Text("-"));
+                                cur = args[0];
                             }
                             seq.push(Item::Node(cur, level(ast, cur) != 1));
                         }

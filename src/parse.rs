@@ -90,7 +90,10 @@ pub(crate) struct PArg {
 /// A parse-tree node.
 #[derive(Clone, Debug)]
 pub(crate) enum PNode {
-    Num { text: String, unit: Option<String> },
+    Num {
+        text: String,
+        unit: Option<String>,
+    },
     Str(String),
     Bool(bool),
     Date(String),
@@ -102,9 +105,16 @@ pub(crate) enum PNode {
     If(Id, Id, Id),
     Let(String, Id, Id),
     /// A read: the qualified name or alias (without `@`) and its arguments.
-    Read { name: String, alias: bool, args: Vec<PArg> },
+    Read {
+        name: String,
+        alias: bool,
+        args: Vec<PArg>,
+    },
     /// A built-in call (name lowercased).
-    Call { name: String, args: Vec<PArg> },
+    Call {
+        name: String,
+        args: Vec<PArg>,
+    },
     Lambda(Vec<String>, Id),
 }
 
@@ -125,18 +135,91 @@ pub const MAX_NESTING: u32 = 256;
 
 /// The built-in names of 15.7 (lowercase), with `if`, `and`, `or`.
 pub const BUILTINS: &[&str] = &[
-    "sum", "count", "mean", "min", "max", "first", "last", "median", "stdev", "stdev_p", "at", "latest", "last_before",
-    "first_after", "nearest", "within", "interpolate", "map", "filter", "scan", "window", "otherwise", "asof",
-    "versions", "abs", "floor", "ceiling", "round", "round_up", "round_down", "mod", "sqrt", "exp", "ln", "sin", "cos",
-    "atan2", "pi", "haversine", "convert", "if", "and", "or", "date", "year", "month", "day", "weekday",
-    "end_of_month", "add_days", "add_months", "business_days", "year_fraction", "is_holiday", "date_of", "instant",
-    "len", "upper", "lower", "trim", "concat", "substr", "find", "text", "fixed",
+    "sum",
+    "count",
+    "mean",
+    "min",
+    "max",
+    "first",
+    "last",
+    "median",
+    "stdev",
+    "stdev_p",
+    "at",
+    "latest",
+    "last_before",
+    "first_after",
+    "nearest",
+    "within",
+    "interpolate",
+    "map",
+    "filter",
+    "scan",
+    "window",
+    "otherwise",
+    "asof",
+    "versions",
+    "abs",
+    "floor",
+    "ceiling",
+    "round",
+    "round_up",
+    "round_down",
+    "mod",
+    "sqrt",
+    "exp",
+    "ln",
+    "sin",
+    "cos",
+    "atan2",
+    "pi",
+    "haversine",
+    "convert",
+    "if",
+    "and",
+    "or",
+    "date",
+    "year",
+    "month",
+    "day",
+    "weekday",
+    "end_of_month",
+    "add_days",
+    "add_months",
+    "business_days",
+    "year_fraction",
+    "is_holiday",
+    "date_of",
+    "instant",
+    "len",
+    "upper",
+    "lower",
+    "trim",
+    "concat",
+    "substr",
+    "find",
+    "text",
+    "fixed",
 ];
 
 /// Function names that do not exist, when called (15.2.1 rule 3).
 pub const FORBIDDEN: &[&str] = &[
-    "now", "today", "rand", "randbetween", "randarray", "indirect", "offset", "info", "cell", "clock", "time", "random",
-    "sleep", "fetch", "http", "eval",
+    "now",
+    "today",
+    "rand",
+    "randbetween",
+    "randarray",
+    "indirect",
+    "offset",
+    "info",
+    "cell",
+    "clock",
+    "time",
+    "random",
+    "sleep",
+    "fetch",
+    "http",
+    "eval",
 ];
 
 /// Parse a lexed body.
@@ -529,7 +612,10 @@ impl<'a> Parser<'a> {
             Kind::Qualified | Kind::Alias => {
                 self.bump();
                 if !self.peek().is("(") {
-                    return Err(err(Code::Syntax, format!("{} is not called: there are no function values", t.describe())));
+                    return Err(err(
+                        Code::Syntax,
+                        format!("{} is not called: there are no function values", t.describe()),
+                    ));
                 }
                 let args = self.args(true, "")?;
                 Ok(self.push(PNode::Read { name: t.text.clone(), alias: t.kind == Kind::Alias, args }))
@@ -630,7 +716,7 @@ impl<'a> Parser<'a> {
                 self.bump();
                 self.bump();
             }
-                        let value = if read && self.peek().is("*") && (self.peek_at(1).is(",") || self.peek_at(1).is(")")) {
+            let value = if read && self.peek().is("*") && (self.peek_at(1).is(",") || self.peek_at(1).is(")")) {
                 self.bump();
                 PVal::Open
             } else if self.peek().is("*") && (self.peek_at(1).is(",") || self.peek_at(1).is(")")) {

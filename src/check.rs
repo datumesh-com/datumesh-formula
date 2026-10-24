@@ -186,7 +186,9 @@ fn adopt(bare_zero: bool, u: &NumUnit) -> Result<NumUnit, Error> {
 /// Equal units, a bare literal adopting the other side's.
 fn same_unit(a: &NumUnit, b: &NumUnit, what: &str) -> Result<NumUnit, Error> {
     match (a, b) {
-        (NumUnit::Varies, _) | (_, NumUnit::Varies) => Err(e(Code::UnitUnknown, format!("{what}: the unit varies by member"))),
+        (NumUnit::Varies, _) | (_, NumUnit::Varies) => {
+            Err(e(Code::UnitUnknown, format!("{what}: the unit varies by member")))
+        }
         (NumUnit::Bare { zero: z1 }, NumUnit::Bare { zero: z2 }) => Ok(NumUnit::Bare { zero: *z1 && *z2 }),
         (NumUnit::Bare { zero }, u) | (u, NumUnit::Bare { zero }) => adopt(*zero, u),
         (NumUnit::Known(x), NumUnit::Known(y)) => {
@@ -322,7 +324,10 @@ impl Checker<'_> {
                             return Err(e(Code::SliceValue, "a slice where a scalar is required"));
                         }
                         if acc != Ty::Bool {
-                            return Err(e(Code::Type, format!("{} {} ...: and and or take booleans", acc.name(), op.text())));
+                            return Err(e(
+                                Code::Type,
+                                format!("{} {} ...: and and or take booleans", acc.name(), op.text()),
+                            ));
                         }
                     }
                     let rt = self.node(r)?;
@@ -471,8 +476,8 @@ impl Checker<'_> {
                 // + - * / : joins over slices.
                 match (l, r) {
                     (Ty::Slice(le, lk), Ty::Slice(re, rk)) => {
-                        let same = lk.len() == rk.len()
-                            && lk.iter().zip(rk).all(|(a, b)| a.name == b.name && a.ty == b.ty);
+                        let same =
+                            lk.len() == rk.len() && lk.iter().zip(rk).all(|(a, b)| a.name == b.name && a.ty == b.ty);
                         if !same {
                             return Err(e(Code::Join, "an operator over two slices with different keys"));
                         }
@@ -578,13 +583,17 @@ impl Checker<'_> {
         // Argument expressions, ascending by label.
         let mut bound: Vec<(String, Option<Ty>)> = Vec::new();
         for (name, a) in args {
-            let decl = sig.args.get(name).ok_or_else(|| e(Code::ArgUnknown, format!("{fn_name} has no argument {name}")))?;
+            let decl =
+                sig.args.get(name).ok_or_else(|| e(Code::ArgUnknown, format!("{fn_name} has no argument {name}")))?;
             match a {
                 ReadArg::Open => bound.push((name.clone(), None)),
                 ReadArg::Expr(x) => {
                     if let Node::Call { fn_name: f, .. } = ast.node(*x) {
                         if f == "within" {
-                            return Err(e(Code::Unsupported, "a key-set argument (a read over the keys of a slice) is 1.3b"));
+                            return Err(e(
+                                Code::Unsupported,
+                                "a key-set argument (a read over the keys of a slice) is 1.3b",
+                            ));
                         }
                     }
                     let t = self.node(*x)?;
@@ -595,7 +604,10 @@ impl Checker<'_> {
                 }
                 ReadArg::Range(lo, hi) => {
                     if matches!(decl.ty, Type::Boolean | Type::Blob) {
-                        return Err(e(Code::SliceBound, format!("a range over the {} argument {name}", decl.ty.as_str())));
+                        return Err(e(
+                            Code::SliceBound,
+                            format!("a range over the {} argument {name}", decl.ty.as_str()),
+                        ));
                     }
                     let a = self.scalar_of(*lo)?;
                     let b = self.scalar_of(*hi)?;
@@ -616,7 +628,9 @@ impl Checker<'_> {
                     Node::Var(n) => match self.scope.get(n).and_then(|(_, _, s)| s.clone()) {
                         Some(UnitSource::Arg(q)) => Ok(NumUnit::atom(&format!("arg:{q}"))),
                         Some(UnitSource::Literal(l)) => Ok(NumUnit::atom(&l)),
-                        None => Err(e(Code::UnitUnknown, format!("the unit of {fn_name} cannot be determined statically"))),
+                        None => {
+                            Err(e(Code::UnitUnknown, format!("the unit of {fn_name} cannot be determined statically")))
+                        }
                     },
                     _ => Err(e(Code::UnitUnknown, format!("the unit of {fn_name} cannot be determined statically"))),
                 },
@@ -650,7 +664,8 @@ impl Checker<'_> {
                             same_unit(got, &want, &format!("{fn_name}({name})"))?;
                         }
                     }
-                    let is_range = matches!(args.iter().find(|(n, _)| n == name).map(|(_, a)| a), Some(ReadArg::Range(..)));
+                    let is_range =
+                        matches!(args.iter().find(|(n, _)| n == name).map(|(_, a)| a), Some(ReadArg::Range(..)));
                     if is_range {
                         let unit = match decl.ty {
                             Type::Number => Some(match &decl.unit {
@@ -699,13 +714,19 @@ impl Checker<'_> {
                     Some(x) => extent_size(decl.ty, x),
                     None => {
                         if !matches!(decl.ty, Type::Date | Type::Number) {
-                            return Err(e(Code::Unbounded, format!("a range over {fn_name}({name}) cannot be enumerated")));
+                            return Err(e(
+                                Code::Unbounded,
+                                format!("a range over {fn_name}({name}) cannot be enumerated"),
+                            ));
                         }
                         match range_size(self.ast, decl.ty, *lo, *hi) {
                             Some(n) => n,
                             None => {
                                 if decl.ty == Type::Number && !self.integer_valued(*lo, *hi) {
-                                    return Err(e(Code::Unbounded, format!("a range over {fn_name}({name}) cannot be enumerated")));
+                                    return Err(e(
+                                        Code::Unbounded,
+                                        format!("a range over {fn_name}({name}) cannot be enumerated"),
+                                    ));
                                 }
                                 1
                             }
@@ -1017,7 +1038,10 @@ impl Checker<'_> {
                 "roll" if rolls => match str_literal(self.ast, *v) {
                     Some(r) if ROLLS.contains(&r) => {}
                     _ => {
-                        return Err(e(Code::Enum, "roll is a string literal, one of following, modified_following, preceding"))
+                        return Err(e(
+                            Code::Enum,
+                            "roll is a string literal, one of following, modified_following, preceding",
+                        ))
                     }
                 },
                 _ => {}

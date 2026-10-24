@@ -4,10 +4,10 @@
 
 mod common;
 
+use datumesh_core::{Scalar, Type};
 use datumesh_formula::eval::{evaluate, Args, Fuel};
 use datumesh_formula::memory::MemoryWorld;
 use datumesh_formula::{canonical_ast, define, Code, Env};
-use datumesh_core::{Scalar, Type};
 
 fn env() -> Env {
     let mut env = common::formula_env();
@@ -18,7 +18,8 @@ fn env() -> Env {
 fn eval_x(src: &str, x: &str, ret_unit_one: bool) -> Result<String, Code> {
     let mut env = env();
     if ret_unit_one {
-        env.signature.returns_unit = Some(datumesh_formula::UnitDecl::Simple(datumesh_formula::UnitSide::Literal("1".to_string())));
+        env.signature.returns_unit =
+            Some(datumesh_formula::UnitDecl::Simple(datumesh_formula::UnitSide::Literal("1".to_string())));
     }
     let c = define(src, &env).map_err(|e| e.code)?;
     // Round trip without an environment.

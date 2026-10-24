@@ -29,7 +29,8 @@ fn check(kind: &str) -> (usize, usize, Vec<String>) {
             if value != *v.get("value").unwrap() {
                 problems.push(format!("value {}", String::from_utf8(value.to_jcs()).unwrap()));
             }
-            let lineage: Vec<&str> = common::array(v.get("lineage").unwrap()).iter().map(|x| x.as_str().unwrap()).collect();
+            let lineage: Vec<&str> =
+                common::array(v.get("lineage").unwrap()).iter().map(|x| x.as_str().unwrap()).collect();
             if o.lineage.iter().map(String::as_str).collect::<Vec<_>>() != lineage {
                 problems.push(format!("lineage {:?}", o.lineage));
             }
@@ -108,8 +109,11 @@ fn excel_vectors() {
 fn fib_90_exact() {
     let v = common::vector("formula-eval/fib-90.json");
     let r = run_vector(&v).unwrap().unwrap();
-    assert_eq!(r.computed.outcome.value.to_value(), Value::Object(vec![
-        ("type".to_string(), Value::String("number".to_string())),
-        ("value".to_string(), Value::String("2880067194370816120".to_string())),
-    ]));
+    assert_eq!(
+        r.computed.outcome.value.to_value(),
+        Value::Object(vec![
+            ("type".to_string(), Value::String("number".to_string())),
+            ("value".to_string(), Value::String("2880067194370816120".to_string())),
+        ])
+    );
 }

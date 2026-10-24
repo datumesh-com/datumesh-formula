@@ -17,9 +17,26 @@ fn known_descriptors() -> BTreeMap<String, Value> {
     for kind in ["formula", "formula-eval", "excel"] {
         for (_, v) in common::vectors_of_kind(kind) {
             let fs: Vec<Value> = match kind {
-                "formula" => v.get("env").unwrap().get("functions").unwrap().as_object().unwrap().iter().map(|(_, d)| d.clone()).collect(),
-                _ => v.get("world").unwrap().get("functions").unwrap().as_object().unwrap().iter()
-                    .map(|(_, f)| f.get("descriptor").unwrap().clone()).collect(),
+                "formula" => v
+                    .get("env")
+                    .unwrap()
+                    .get("functions")
+                    .unwrap()
+                    .as_object()
+                    .unwrap()
+                    .iter()
+                    .map(|(_, d)| d.clone())
+                    .collect(),
+                _ => v
+                    .get("world")
+                    .unwrap()
+                    .get("functions")
+                    .unwrap()
+                    .as_object()
+                    .unwrap()
+                    .iter()
+                    .map(|(_, f)| f.get("descriptor").unwrap().clone())
+                    .collect(),
             };
             for d in fs {
                 out.insert(datumesh_core::sha256_hex(&d.to_jcs()), d);
@@ -103,7 +120,9 @@ fn slice_receipts_evaluate_to_their_values_and_lineage() {
         assert_eq!(c.outcome.value.to_value(), *value, "{path}: value");
         let want: Vec<String> = match rc.get("lineage") {
             Some(l) => common::array(l).iter().map(|x| x.as_str().unwrap().to_string()).collect(),
-            None => common::array(receipt.get("inputs").unwrap()).iter().map(|x| x.as_str().unwrap().to_string()).collect(),
+            None => {
+                common::array(receipt.get("inputs").unwrap()).iter().map(|x| x.as_str().unwrap().to_string()).collect()
+            }
         };
         assert_eq!(c.outcome.lineage, want, "{path}: lineage");
         if let Some(ms) = rc.get("manifests").and_then(Value::as_object) {

@@ -229,7 +229,7 @@ impl Resolver<'_> {
                 Ok(self.push(Node::Call { fn_name: name.to_string(), args: vals, named: Vec::new() }))
             }
             Params::Asof => {
-                if args.len() != 0 && args.len() != 2 {
+                if !args.is_empty() && args.len() != 2 {
                     return Err(e(Code::Arity, "asof() or asof(cell, T)"));
                 }
                 let mut vals = Vec::new();

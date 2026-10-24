@@ -67,7 +67,11 @@ const VALUES: &[(&str, Type, &[&str])] = &[
     ("n", Type::Number, &["0", "1", "2", "5", "10", "-1"]),
     ("d", Type::Date, &["2026-03-01", "2026-03-03", "2026-03-10", "2024-01-31", "2027-01-01", "2026-04-30"]),
     ("d2", Type::Date, &["2026-03-04", "2026-04-10", "2025-12-31"]),
-    ("t", Type::Instant, &["2026-03-01T10:00:00.000000Z", "2026-03-01T10:05:00.000000Z", "2026-03-01T11:00:00.000000Z"]),
+    (
+        "t",
+        Type::Instant,
+        &["2026-03-01T10:00:00.000000Z", "2026-03-01T10:05:00.000000Z", "2026-03-01T11:00:00.000000Z"],
+    ),
     ("s", Type::String, &["kew", "ely", "bolt", "acme", "Zürich", "  a  b "]),
     ("t1", Type::Number, &["20", "-3.5"]),
     ("plat", Type::Number, &["51.5", "0"]),
@@ -93,7 +97,10 @@ fn evaluating_twice_gives_identical_results() {
         let c = match (&first, &second) {
             (Ok(a), Ok(b)) => {
                 assert_eq!(a.ast.to_jcs(), b.ast.to_jcs(), "{src}");
-                assert_eq!((&a.body, &a.inputs, &a.returns, a.asof_dependent), (&b.body, &b.inputs, &b.returns, b.asof_dependent));
+                assert_eq!(
+                    (&a.body, &a.inputs, &a.returns, a.asof_dependent),
+                    (&b.body, &b.inputs, &b.returns, b.asof_dependent)
+                );
                 a
             }
             (Err(a), Err(b)) => {
