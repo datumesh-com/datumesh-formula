@@ -211,6 +211,21 @@ pub struct Ast {
 }
 
 impl Ast {
+    /// An AST from its arena and root, if every node refers only to nodes before it (as a
+    /// parse builds them) and the root is in the arena.
+    pub fn from_parts(nodes: Vec<Node>, root: NodeId) -> Option<Ast> {
+        let ast = Ast { nodes, root };
+        if root as usize >= ast.nodes.len() {
+            return None;
+        }
+        for i in 0..ast.nodes.len() {
+            if ast.children(i as NodeId).iter().any(|&c| c as usize >= i) {
+                return None;
+            }
+        }
+        Some(ast)
+    }
+
     /// The root node's id.
     pub fn root(&self) -> NodeId {
         self.root

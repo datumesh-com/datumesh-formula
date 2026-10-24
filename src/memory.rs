@@ -66,6 +66,7 @@ pub struct Computed {
 }
 
 /// An in-memory world.
+#[derive(Clone)]
 pub struct MemoryWorld {
     functions: BTreeMap<String, Binding>,
     stored: Vec<Stored>,

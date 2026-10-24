@@ -6,7 +6,7 @@ mod common;
 
 use std::collections::BTreeSet;
 
-use common::gen::{body, Rng, KINDS};
+use common::generate::{body, Rng, KINDS};
 use datumesh_core::json::Value;
 use datumesh_core::{Scalar, Type};
 use datumesh_formula::eval::{CellKey, Fuel};

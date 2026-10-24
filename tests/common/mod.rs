@@ -1,6 +1,8 @@
 //! Loading the vendored spec-0.4.0 vectors (`spec-vectors/`, from datumesh-spec commit dedd132).
 #![allow(dead_code)]
 
+pub mod generate;
+
 use std::path::{Path, PathBuf};
 
 use datumesh_core::json::{self, Value};

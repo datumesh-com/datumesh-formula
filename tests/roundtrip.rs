@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::gen::{random_ast, Rng};
+use common::generate::{random_ast, Rng};
 use datumesh_formula::canonical_ast;
 
 #[test]

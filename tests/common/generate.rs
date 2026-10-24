@@ -125,7 +125,8 @@ impl TreeGen<'_> {
                     args.push((l.to_string(), a));
                 }
                 args.sort_by(|a, b| a.0.cmp(&b.0));
-                self.push(Node::Read { fn_name: self.rng.pick(FNS).to_string(), args })
+                let fn_name = self.rng.pick(FNS).to_string();
+                self.push(Node::Read { fn_name, args })
             }
             _ => self.call(d),
         }
@@ -164,7 +165,8 @@ impl TreeGen<'_> {
                 let body = self.expr(d);
                 self.push(Node::Lambda { params, body })
             } else if (name == "scan" && i == 1) || (name == "window" && i == 2) {
-                self.push(Node::Agg(self.rng.pick(&["sum", "mean", "max"]).to_string()))
+                let a = self.rng.pick(&["sum", "mean", "max"]).to_string();
+                self.push(Node::Agg(a))
             } else {
                 self.expr(d)
             };
@@ -174,7 +176,8 @@ impl TreeGen<'_> {
         for p in optional {
             if self.rng.chance(500) {
                 let v = if *p == "along" {
-                    self.push(Node::Key(self.rng.pick(NAMES).to_string()))
+                    let k = self.rng.pick(NAMES).to_string();
+                    self.push(Node::Key(k))
                 } else {
                     self.expr(d)
                 };

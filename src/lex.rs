@@ -290,6 +290,46 @@ fn qualified_shape(b: &[u8], i: usize) -> Option<usize> {
     Some(j)
 }
 
+/// The end of `index:<period>=<canonical number>` at `k`, the longest canonical match.
+fn index_unit_end(b: &[u8], k: usize) -> Option<usize> {
+    let mut j = k + 6;
+    let digits = |j: usize, n: usize| b.len() >= j + n && b[j..j + n].iter().all(u8::is_ascii_digit);
+    if !digits(j, 4) {
+        return None;
+    }
+    j += 4;
+    for _ in 0..2 {
+        if b.get(j) == Some(&b'-') && digits(j + 1, 2) {
+            j += 3;
+        }
+    }
+    if b.get(j) != Some(&b'=') {
+        return None;
+    }
+    j += 1;
+    let start = j;
+    while j < b.len() && b[j].is_ascii_digit() {
+        j += 1;
+    }
+    if j == start || (j - start > 1 && b[start] == b'0') {
+        return None;
+    }
+    if b.get(j) == Some(&b'.') {
+        let mut f = j + 1;
+        let mut last_nonzero = None;
+        while f < b.len() && b[f].is_ascii_digit() {
+            if b[f] != b'0' {
+                last_nonzero = Some(f);
+            }
+            f += 1;
+        }
+        if let Some(z) = last_nonzero {
+            j = z + 1;
+        }
+    }
+    Some(j)
+}
+
 /// L6: the longest listed unit at `k` not followed by a word character; a keyword is not a
 /// suffix; any other word is `E_FORMULA_UNIT`.
 fn unit_suffix(src: &str, k: usize) -> Result<(Option<String>, usize), Error> {
@@ -300,15 +340,13 @@ fn unit_suffix(src: &str, k: usize) -> Result<(Option<String>, usize), Error> {
     let rest = &src[k..];
     // Index units.
     if rest.starts_with("index:") {
-        let mut j = k + 6;
-        while j < b.len() && (b[j].is_ascii_digit() || b[j] == b'-' || b[j] == b'=' || b[j] == b'.') {
-            j += 1;
+        if let Some(j) = index_unit_end(b, k) {
+            let text = &src[k..j];
+            if units::is_index_unit(text) && !b.get(j).is_some_and(|&c| is_word_char(c)) {
+                return Ok((Some(text.to_string()), j));
+            }
         }
-        let text = &src[k..j];
-        if units::is_index_unit(text) && !b.get(j).is_some_and(|&c| is_word_char(c)) {
-            return Ok((Some(text.to_string()), j));
-        }
-        return Err(err(Code::Unit, k, format!("not a listed unit: {text}")));
+        return Err(err(Code::Unit, k, "not a listed unit: index"));
     }
     for u in units::suffix_units() {
         if rest.starts_with(u) && !b.get(k + u.len()).is_some_and(|&c| is_word_char(c)) {
