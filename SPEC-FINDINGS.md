@@ -116,7 +116,13 @@ no member after `x`, unlike linear interpolation.
 D4. **Order of `asof(c, T)` and `versions(c, from, to)`.** The times are evaluated, and
 `E_FORMULA_FUTURE` reported, before the cell's arguments.
 
-D5. **`find`** with `start` past the end gives 0, not a fault; `start < 1` is `E_FORMULA_DOMAIN`.
+D5. **Which operations round.** 15.9.2 lists `mod` with `floor`, `ceiling` and the roundings as
+"exact, then the range rule"; the reference rounds `mod`'s exact remainder to 34 digits like every
+operation (`mod(-0.5916666164260777265771311705176397, 2)` has 34 digits, not 35), and leaves
+`floor`, `ceiling`, `round*`, `abs` and unary minus exact (a 39-digit argument stays 39 digits).
+This crate does the same.
+
+D6. **`find`** with `start` past the end gives 0, not a fault; `start < 1` is `E_FORMULA_DOMAIN`.
 **`round`** with a huge `digits` is exact (no fault); with a huge negative one it is 0.
 
 ## E. Defects of the reference found on the way (black box)

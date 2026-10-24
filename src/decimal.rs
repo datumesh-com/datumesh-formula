@@ -440,9 +440,9 @@ pub fn div(a: &Decimal, b: &Decimal) -> Result<Decimal, Code> {
     div_round(a, b, PRECISION, Mode::HalfEven).check_range()
 }
 
-/// `-a`, rounded and range-checked like every operation.
+/// `-a`: exact (the reference does not round a negation), then the range rule.
 pub fn negate(a: &Decimal) -> Result<Decimal, Code> {
-    result(a.neg())
+    a.neg().check_range()
 }
 
 /// `x ^ n` for an integer `n` with `abs(n) <= 1024`: the exact power rounded once; for `n < 0`,
@@ -543,14 +543,16 @@ pub enum RoundMode {
     Down,
 }
 
-/// Excel's MOD: `x - divisor * floor(x / divisor)`, exact; the sign of the divisor.
+/// Excel's MOD: `x - divisor * floor(x / divisor)`, the exact remainder rounded once; the sign
+/// of the divisor.
 pub fn modulo(x: &Decimal, d: &Decimal) -> Result<Decimal, Code> {
     if d.is_zero() {
         return Err(Code::DivZero);
     }
     // floor(x / d) exactly: the quotient rounded toward minus infinity at the units digit.
     let q = floor_div(x, d);
-    sub_exact(x, &mul_exact(d, &q)).check_range()
+    // The exact remainder, rounded once like every operation (15.9.1).
+    result(sub_exact(x, &mul_exact(d, &q)))
 }
 
 /// `floor(a / b)`, exact.
