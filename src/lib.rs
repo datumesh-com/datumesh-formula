@@ -3,9 +3,25 @@
 //!
 //! - [`define`] lexes, parses, resolves and checks a body against an [`Env`], giving the
 //!   canonical AST, its hash, the printed `code.body`, the derived `inputs`, the return type and
-//!   unit, and whether the function is asof-dependent.
-//! - [`decimal`] is the exact decimal arithmetic of 15.9 with the 40-digit algorithms.
-//! - [`eval`] evaluates a defined function over a [`eval::World`] with fuel and lineage.
+//!   unit, and whether the function is asof-dependent. [`canonical_ast`] parses without an
+//!   environment: for every canonical AST, `parse(print(ast)) = ast`.
+//! - [`decimal`] is the exact decimal arithmetic of 15.9 with the 40-digit algorithms, on
+//!   integers only.
+//! - [`eval`] evaluates a defined function over a [`eval::World`] with fuel, faults and lineage;
+//!   [`memory::MemoryWorld`] is a world in memory (the vectors' world).
+//!
+//! ```
+//! use datumesh_core::json;
+//! use datumesh_formula::{define, Env, Signature};
+//!
+//! let signature = json::parse(br#"{"args": {"a": {"type": "number", "unit": "EUR", "valid": false}},
+//!     "order": ["a"], "returns": {"type": "number", "unit": "EUR"}}"#).unwrap();
+//! let env = Env::new("calc.example.net/f", Signature::from_value(&signature).unwrap());
+//! let c = define("ROUND(a * 1.2, 2)", &env).unwrap();
+//! assert_eq!(c.body, "round(a * 1.2, digits: 2)\n");
+//! assert!(c.inputs.is_empty());
+//! assert_eq!(define("a + 1 USD", &env).unwrap_err().code.as_str(), "E_FORMULA_UNIT_MISMATCH");
+//! ```
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
