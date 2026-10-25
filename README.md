@@ -258,4 +258,39 @@ Dependencies: `datumesh-core` 0.3.4 for strict JSON, JCS, SHA-256, the string ru
 dependency of the engine) for the callees and `publish`. Without the feature, the language alone.
 
 
+## Benchmark
+
+`examples/bench.rs` (`cargo run --release --example bench`), against PostgreSQL 16 with default
+settings on the development host (6 vCPU, 15 GB RAM), one call at a time, the engine's memo on;
+the full run is in `bench/2026-10-25-0.1.0.md`.
+
+| Parse and define (per function, p50) | nodes | `canonical_ast` | `define` | `define_function` (store) |
+|---|---:|---:|---:|---:|
+| `ROUND(x * 1.2 + 3 / x - 2 ^ 3, 2)` | 13 | 13 µs | 20 µs | 152 µs |
+| `SUM(bench.example.org/s(*))` | 3 | 3.6 µs | 4.3 µs | 614 µs |
+| `LAST_BEFORE(bench.example.org/s(*), x, 10)` | 5 | 9.1 µs | 13 µs | 668 µs |
+| a 1,000-term sum of products | 3,999 | 4.9 ms | 9.2 ms | 23 ms |
+
+Define costs 1.2 to 2.9 µs per node; `define_function` adds the store's binding and descriptor
+queries per callee (about 0.5 ms).
+
+Evaluation per node: an arithmetic node costs 2.3 µs through the engine (the difference between
+cold `get`s of a 3,999-node body, 15 ms, and of `x`, 6.0 ms: evaluating, signing and storing), and
+248 ns in the evaluator alone.
+
+| Slice reader | members | cold `get` | warm `get` | fresh engine (validated) | evaluator alone, per member | memo per member |
+|---|---:|---:|---:|---:|---:|---:|
+| `sum` | 1,000 | 464 ms | 0.42 ms | 255 ms | 3.0 µs | 469 B |
+| `median` | 1,000 | 249 ms | 0.42 ms | 263 ms | 3.0 µs | 469 B |
+| `last_before` | 1,000 | 256 ms | 0.52 ms | 317 ms | 3.8 µs | 469 B |
+| running `scan` | 1,000 | 234 ms | 0.35 ms | 238 ms | 4.9 µs | 469 B |
+| `sum` | 100,000 | 20 s | 0.42 ms | 15 s | 8.8 µs | 467 B |
+| `median` | 100,000 | 15 s | 0.36 ms | 15 s | 11 µs | 467 B |
+| `last_before` | 100,000 | 15 s | 0.32 ms | 15 s | 10 µs | 467 B |
+| running `scan` | 100,000 | 14 s | 0.49 ms | 15 s | 12 µs | 467 B |
+
+A cold slice read is dominated by the store's `slice_members` (about 150 µs per member at
+100,000, receipt bytes included); the evaluator's own work is under a tenth of it. Memory per
+slice input: 467 B per member in the engine's memo, 104 B per member in the evaluator's slice value.
+
 Licensed under Apache-2.0.
