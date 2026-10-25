@@ -117,3 +117,21 @@ fn fib_90_exact() {
         ])
     );
 }
+
+/// asof(c, T): the cell's arguments are evaluated before its name is resolved as of T, so a
+/// fault in an argument is reported before E_FORMULA_UNRESOLVED (T before the binding), as
+/// the reference does.
+#[test]
+fn asof_arguments_before_resolution_as_of_t() {
+    let mut v = common::vector("formula-eval/asof-read.json");
+    let body = "asof(data.example.org/price(item: text(1 / 0)), 2025-06-01T00:00:00.000000Z)\n";
+    let text = String::from_utf8(v.to_jcs()).unwrap().replace(
+        "asof(data.example.org/price(item: s), 2026-03-15T00:00:00.000000Z)\\n",
+        &body.replace('\n', "\\n"),
+    );
+    v = datumesh_core::json::parse(text.as_bytes()).unwrap();
+    assert_eq!(run_vector(&v).unwrap().unwrap_err().as_str(), "E_FORMULA_DIV_ZERO");
+    let text = text.replace("text(1 / 0)", "s");
+    let v = datumesh_core::json::parse(text.as_bytes()).unwrap();
+    assert_eq!(run_vector(&v).unwrap().unwrap_err().as_str(), "E_FORMULA_UNRESOLVED");
+}
