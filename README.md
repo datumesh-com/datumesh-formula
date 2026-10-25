@@ -45,7 +45,7 @@ fn key_doc(host: &str, key: &SigningKey) -> String {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let store = Arc::new(PgStore::connect(&std::env::var("DATABASE_URL")?)?);
-    migrate::apply(&*store)?;
+    migrate::apply(&store)?;
     let publisher = SigningKey::from_seed(&[1; 32]);
     let mesh = SigningKey::from_seed(&[2; 32]);
     let mut keys = Keys::new();

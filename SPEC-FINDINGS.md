@@ -2,8 +2,9 @@
 
 **Status at spec `f3d3e2c` (final spec-0.4.0):** every entry below is settled in the text; each
 ends with the sentence that settles it. One change followed: HAVERSINE now forms
-`(lat2 - lat1) * RAD_PER_DEG` (D1). Still open on this crate's side: the section-7 canonical-form
-check that 15.6 puts first in the descriptor checks (D8), for phase B; and two orders found later (F1, F2), not yet in the text.
+`(lat2 - lat1) * RAD_PER_DEG` (D1). D8 is done in the crate since phase B (`check_descriptor`
+checks the section-7 form first). Not yet in the text: two orders found in phase A (F1, F2) and
+three readings of phase B (G1-G3), proposed for a text-only spec-0.4.1.
 
 This crate was written from `SPEC.md` (commit `dedd132`, then `18be70f`, whose changes outside section 15 touch nothing implemented here except that a range admits members in the type's order, which the crate already did, and a version slice with `from` after `to` is empty, as here), `units.md`, `schemas/`, `vectors/` and the
 contract, without reading `tools/*.py`, `tests/*`, `crosscheck/*` (except its README) or
@@ -159,7 +160,7 @@ only that the read answers as of `T`.
 D8. **Descriptor checks (15.6).** `E_FORMULA_ORDER` comes first, then the body's own codes
 (compiled against the descriptor's signature), then `E_FORMULA_NOT_CANONICAL`, then
 `E_FORMULA_INPUTS` (black box, `check_descriptor`).
-**Settled at f3d3e2c:** SPEC 15.6: "They are checked in this order: the descriptor's canonical form (7), `E_FORMULA_ORDER`, ...". Still open in this crate: the leading section-7 canonical-form check is not done by `check_descriptor` (datumesh-core 0.3.3 cannot read `order`/`extent`); phase B, with a core that does, adds it.
+**Settled at f3d3e2c:** SPEC 15.6: "They are checked in this order: the descriptor's canonical form (7), `E_FORMULA_ORDER`, ...". Done in phase B: `check_descriptor` checks the form with datumesh-core 0.3.4's `FunctionDescriptor` first (`DefineError::Descriptor`, a core code such as `E_CANON_SET`), and `define_function` checks the signature's form before `E_FORMULA_ORDER`.
 
 ## E. Defects of the reference found on the way (black box)
 
@@ -194,3 +195,28 @@ F2. **When fixed fuel is charged.** The 15.12 table gives the fuel of `sqrt`, `e
 before the arguments are evaluated (`ln(1 / 0)` with fuel 50 is `E_FORMULA_BUDGET`, with 100
 `E_FORMULA_DIV_ZERO`); powers (integer `abs(n)`, non-integer 130) and text fuel, which depend on
 values, come after. Proposal: say so in the table.
+
+## G. Found in phase B, through the engine (not settled in the text)
+
+G1. **A computed slice with a member that faults: which members are evaluated, and charged.**
+15.13 says every member of a slice over a computed function must have a value, or the read is
+`E_FORMULA_ABSENT`; 15.12 says evaluation is strict and left to right and fuel covers "the computed
+inputs it evaluates". The vectors (`formula-eval/member-fault-caught`, fuel 7) evaluate the members
+in key order and stop at the first without a value: the later members are not evaluated and cost
+nothing. datumesh-engine 0.3.0 evaluates every missing member before the reader runs again (fuel
+16 there), so the normative fuel differs in this one case. Proposal: "the members of a slice over a
+computed function are evaluated in key order; the first without a value ends the read
+(`E_FORMULA_ABSENT`), and no later member is evaluated or charged".
+
+G2. **"A callee name rebound since define time is checked again": against which bindings.** The
+crate reads it as: the body is checked against each callee as bound when the read's name resolves
+(as of the evaluation asof, or as of `T` in `asof(c, T)`), with the define-time codes; a callee
+that is not read in this evaluation does not make it fail. Proposal: say so, and that a name read
+as of `T` is checked against its binding as of `T`.
+
+G3. **Evaluation codes that are neither faults nor the mesh's failures.** 15.12 assigns envelopes
+to faults (`not_covered` with `fault`), to `E_FORMULA_NOT_COVERED` and to budget, cycle and depth,
+but not to `E_FORMULA_UNRESOLVED` at a `T` before a binding, nor to a define-time code reported
+when a rebound callee no longer checks. The crate reports them as the engine's runtime error (an
+`error` envelope, `E_EVAL_UNAVAILABLE`). Proposal: state that every other evaluation code is a
+mesh failure.

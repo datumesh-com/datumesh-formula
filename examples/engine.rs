@@ -7,7 +7,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use datumesh_core::json::{self, Value};
-use datumesh_core::{verify, Arg, Args, Cell, CellRef, Keys, Level, Receipt, ReceiptBuilder, Resolver, Scalar, SigningKey, Type};
+use datumesh_core::{
+    verify, Arg, Args, Cell, CellRef, Keys, Level, Receipt, ReceiptBuilder, Resolver, Scalar, SigningKey, Type,
+};
 use datumesh_engine::{Answer, Engine};
 use datumesh_formula::definition::{define_function, publish};
 use datumesh_formula::runtime::FormulaRuntime;
@@ -18,12 +20,15 @@ const T0: &str = "2026-01-01T00:00:00.000000Z";
 /// A key document publishing `key` for `host`, as https://<host>/.well-known/datumesh.json serves it.
 fn key_doc(host: &str, key: &SigningKey) -> String {
     let public: String = key.public_key().iter().map(|b| format!("{b:02x}")).collect();
-    format!(r#"{{"host":"{host}","keys":[{{"alg":"ed25519","id":"{}","public":"{public}","valid_from":"{T0}"}}],"proto":"datumesh/1"}}"#, key.key_id())
+    format!(
+        r#"{{"host":"{host}","keys":[{{"alg":"ed25519","id":"{}","public":"{public}","valid_from":"{T0}"}}],"proto":"datumesh/1"}}"#,
+        key.key_id()
+    )
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let store = Arc::new(PgStore::connect(&std::env::var("DATABASE_URL")?)?);
-    migrate::apply(&*store)?;
+    migrate::apply(&store)?;
     let publisher = SigningKey::from_seed(&[1; 32]);
     let mesh = SigningKey::from_seed(&[2; 32]);
     let mut keys = Keys::new();
@@ -45,11 +50,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // A formula function over it: the mean over the seven days to d, with VAT. Its inputs are
     // derived from the body; define checks it against the store's bindings and gives the
     // canonical descriptor, which publish stores and binds.
-    let signature = json::parse(br#"{"args":{"d":{"type":"date","valid":true},"item":{"type":"string","valid":false}},
-        "order":["item","d"],"returns":{"type":"number","unit":"EUR"}}"#)?;
+    let signature = json::parse(
+        br#"{"args":{"d":{"type":"date","valid":true},"item":{"type":"string","valid":false}},
+        "order":["item","d"],"returns":{"type":"number","unit":"EUR"}}"#,
+    )?;
     let source = "ROUND(MEAN(prices.example.org/daily(item, [d - 6..d])) * 1.2, 2)";
     let def = define_function("shop.example.com/week_price", source, &signature, &BTreeMap::new(), &*store, T0)?;
-    assert_eq!(def.descriptor.body, "round(mean(prices.example.org/daily(date: [d - 6..d], item: item)) * 1.2, digits: 2)\n");
+    assert_eq!(
+        def.descriptor.body,
+        "round(mean(prices.example.org/daily(date: [d - 6..d], item: item)) * 1.2, digits: 2)\n"
+    );
     assert_eq!(def.descriptor.inputs, ["prices.example.org/daily"]);
     if store.resolve_name("shop.example.com/week_price", T0)?.is_none() {
         publish(&*store, &def, T0)?;
@@ -65,7 +75,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ("item".to_string(), Arg::Value(item.clone())),
         ]
         .into();
-        let cell = Cell { ns: "prices.example.org".into(), fn_name: "daily".into(), fn_hash: daily_hash.clone(), args: a };
+        let cell =
+            Cell { ns: "prices.example.org".into(), fn_name: "daily".into(), fn_hash: daily_hash.clone(), args: a };
         if store.latest(&cell.id())?.is_some() {
             continue;
         }
@@ -107,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let receipt = Receipt::from_json(&bytes)?;
     assert_eq!(receipt.value().lexical(), "15.6"); // mean 13, times 1.2
-    // One input: the slice of the seven prices (slice-as-lineage), its manifest in the store.
+                                                   // One input: the slice of the seven prices (slice-as-lineage), its manifest in the store.
     assert_eq!(receipt.inputs().len(), 1);
     assert!(store.manifest(&receipt.inputs()[0]).is_some());
     let result = verify(&bytes, &keys, Some(&engine), None);
