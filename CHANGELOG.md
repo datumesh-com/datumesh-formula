@@ -2,7 +2,7 @@
 
 All notable changes to `datumesh-formula`.
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-10-25)
 
 The formula dialect of spec-0.4.0 (section 15), on `datumesh-core` 0.3.4 and, with the default
 feature `engine`, `datumesh-engine` 0.3.0 and `datumesh-store` 0.3.1.
