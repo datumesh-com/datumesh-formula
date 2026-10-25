@@ -12,7 +12,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 out="$root/tools/out"; mkdir -p "$out"
 py() { docker run --rm -i -v "$root/tools:/t:ro" -v "$out:/o" python:3.13-slim python3 -I /t/decimal_crosscheck.py "$@"; }
 py generate "$N" "$SEED" > "$out/decimal-cases.jsonl"
-"$root/tools/cargo.sh" 1.99 build --release --example formula_runner >&2
+"$root/tools/cargo.sh" 1.99 build --release --no-default-features --example formula_runner >&2
 runner() { docker run --rm -i -v "$root:/w:ro" -w /w rust:1.99 /w/target-1.99/release/examples/formula_runner; }
 runner < "$out/decimal-cases.jsonl" > "$out/decimal-crate.jsonl"
 py python /o/decimal-cases.jsonl > "$out/decimal-python.jsonl"

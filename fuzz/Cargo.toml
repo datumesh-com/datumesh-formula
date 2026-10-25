@@ -9,8 +9,8 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-datumesh-core = "0.3.3"
-datumesh-formula = { path = ".." }
+datumesh-core = "0.3.4"
+datumesh-formula = { path = "..", default-features = false }
 
 [[bin]]
 name = "parse"
