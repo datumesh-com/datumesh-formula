@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub mod generate;
+pub mod union;
 
 use std::path::{Path, PathBuf};
 
