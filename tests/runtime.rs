@@ -84,6 +84,8 @@ fn future_before_the_arguments_without_asof_dependence() {
         "2026-01-05T00:00:00.000000Z",
         "2026-01-05T00:00:00.000000Z",
     );
+    let names = r#"{"args":{"n":{"type":"number","unit":"1","valid":false}},"order":["n"],"returns":"string"}"#;
+    m.stored("rates.example.org/rate_name", names, T0);
     let sig = r#"{"args":{"n":{"type":"number","unit":"1","valid":false},"t":{"type":"instant","valid":false}},"order":["n","t"],"returns":{"type":"number","unit":"1"}}"#;
     let d = m.define("calc.example.net/then", r#"asof(rates.example.org/rate(concat("E", text(1 / n))), t)"#, sig, T0);
     assert!(!d.compiled.asof_dependent);
@@ -93,6 +95,18 @@ fn future_before_the_arguments_without_asof_dependence() {
     // T after the asof: E_FORMULA_FUTURE, though the argument divides by zero.
     assert_eq!(get("0", A2).unwrap(), Answer::NotCovered { fault: Some(Fault::Future) });
     assert_eq!(get("1", A2).unwrap(), Answer::NotCovered { fault: Some(Fault::Future) });
+    // An argument that reads a cell without a value: still E_FORMULA_FUTURE when T is after.
+    m.define(
+        "calc.example.net/then_name",
+        r#"asof(rates.example.org/rate(rates.example.org/rate_name(n)), t)"#,
+        sig,
+        T0,
+    );
+    let get2 = |n: &str, t: &str| {
+        engine.get(&cell_ref("calc.example.net/then_name", &[("n", num(n)), ("t", instant(t))]), Some(A))
+    };
+    assert_eq!(get2("1", A2).unwrap(), Answer::NotCovered { fault: Some(Fault::Future) });
+    assert_eq!(get2("1", "2026-01-20T00:00:00.000000Z").unwrap(), Answer::NotCovered { fault: None });
     // T at or before it: the argument's fault.
     assert_eq!(get("0", "2026-01-20T00:00:00.000000Z").unwrap(), Answer::NotCovered { fault: Some(Fault::DivZero) });
     // A value: the receipt's asof is T's, not the request's (the function is not asof-dependent).

@@ -202,11 +202,8 @@ impl Mesh {
         }
         std::fs::create_dir_all(&dir).unwrap();
         let r = Receipt::from_json(bytes).unwrap();
-        let keys: Vec<(String, Value)> = self
-            .hosts
-            .iter()
-            .map(|h| (h.clone(), Value::String(String::from_utf8(key_doc(h)).unwrap())))
-            .collect();
+        let keys: Vec<(String, Value)> =
+            self.hosts.iter().map(|h| (h.clone(), Value::String(String::from_utf8(key_doc(h)).unwrap()))).collect();
         let manifests: Vec<(String, Value)> = r
             .inputs()
             .iter()

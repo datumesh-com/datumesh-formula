@@ -148,7 +148,8 @@ fn generated_bodies_through_two_fresh_engines() {
         let inner = world.evaluated().iter().any(|(k, _, _)| *k != key);
         let issued = match &mem {
             Ok(x) if x.outcome.receipt_asof.as_str() > KEYS_FROM => x.outcome.receipt_asof.clone(),
-            _ => KEYS_FROM.to_string(),
+            // No value: the inputs the engine signs on the way have asofs up to the request's.
+            _ => c.asof.to_string(),
         };
         ma.clock.set(&issued);
         mb.clock.set(&issued);
