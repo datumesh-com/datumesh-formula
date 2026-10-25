@@ -1,0 +1,949 @@
+pub mod datumesh_formula
+pub mod datumesh_formula::ast
+pub enum datumesh_formula::ast::Node
+pub datumesh_formula::ast::Node::Agg(alloc::string::String)
+pub datumesh_formula::ast::Node::Bool(bool)
+pub datumesh_formula::ast::Node::Call
+pub datumesh_formula::ast::Node::Call::args: alloc::vec::Vec<datumesh_formula::ast::NodeId>
+pub datumesh_formula::ast::Node::Call::fn_name: alloc::string::String
+pub datumesh_formula::ast::Node::Call::named: alloc::vec::Vec<(alloc::string::String, datumesh_formula::ast::NodeId)>
+pub datumesh_formula::ast::Node::Date(alloc::string::String)
+pub datumesh_formula::ast::Node::If
+pub datumesh_formula::ast::Node::If::cond: datumesh_formula::ast::NodeId
+pub datumesh_formula::ast::Node::If::els: datumesh_formula::ast::NodeId
+pub datumesh_formula::ast::Node::If::then: datumesh_formula::ast::NodeId
+pub datumesh_formula::ast::Node::Instant(alloc::string::String)
+pub datumesh_formula::ast::Node::Key(alloc::string::String)
+pub datumesh_formula::ast::Node::Lambda
+pub datumesh_formula::ast::Node::Lambda::body: datumesh_formula::ast::NodeId
+pub datumesh_formula::ast::Node::Lambda::params: alloc::vec::Vec<alloc::string::String>
+pub datumesh_formula::ast::Node::Let
+pub datumesh_formula::ast::Node::Let::body: datumesh_formula::ast::NodeId
+pub datumesh_formula::ast::Node::Let::name: alloc::string::String
+pub datumesh_formula::ast::Node::Let::value: datumesh_formula::ast::NodeId
+pub datumesh_formula::ast::Node::Num
+pub datumesh_formula::ast::Node::Num::unit: core::option::Option<alloc::string::String>
+pub datumesh_formula::ast::Node::Num::value: alloc::string::String
+pub datumesh_formula::ast::Node::Op
+pub datumesh_formula::ast::Node::Op::args: alloc::vec::Vec<datumesh_formula::ast::NodeId>
+pub datumesh_formula::ast::Node::Op::op: datumesh_formula::ast::Op
+pub datumesh_formula::ast::Node::Read
+pub datumesh_formula::ast::Node::Read::args: alloc::vec::Vec<(alloc::string::String, datumesh_formula::ast::ReadArg)>
+pub datumesh_formula::ast::Node::Read::fn_name: alloc::string::String
+pub datumesh_formula::ast::Node::Str(alloc::string::String)
+pub datumesh_formula::ast::Node::Var(alloc::string::String)
+impl core::clone::Clone for datumesh_formula::ast::Node
+pub fn datumesh_formula::ast::Node::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::ast::Node
+impl core::cmp::PartialEq for datumesh_formula::ast::Node
+pub fn datumesh_formula::ast::Node::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::ast::Node
+pub fn datumesh_formula::ast::Node::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::ast::Node
+pub enum datumesh_formula::ast::Op
+pub datumesh_formula::ast::Op::Add
+pub datumesh_formula::ast::Op::And
+pub datumesh_formula::ast::Op::Cat
+pub datumesh_formula::ast::Op::Div
+pub datumesh_formula::ast::Op::Eq
+pub datumesh_formula::ast::Op::Ge
+pub datumesh_formula::ast::Op::Gt
+pub datumesh_formula::ast::Op::Le
+pub datumesh_formula::ast::Op::Lt
+pub datumesh_formula::ast::Op::Mul
+pub datumesh_formula::ast::Op::Ne
+pub datumesh_formula::ast::Op::Neg
+pub datumesh_formula::ast::Op::Not
+pub datumesh_formula::ast::Op::Or
+pub datumesh_formula::ast::Op::Pow
+pub datumesh_formula::ast::Op::Sub
+impl datumesh_formula::ast::Op
+pub fn datumesh_formula::ast::Op::is_comparison(self) -> bool
+pub fn datumesh_formula::ast::Op::text(self) -> &'static str
+impl core::clone::Clone for datumesh_formula::ast::Op
+pub fn datumesh_formula::ast::Op::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::ast::Op
+impl core::cmp::PartialEq for datumesh_formula::ast::Op
+pub fn datumesh_formula::ast::Op::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::ast::Op
+pub fn datumesh_formula::ast::Op::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for datumesh_formula::ast::Op
+impl core::marker::StructuralPartialEq for datumesh_formula::ast::Op
+pub enum datumesh_formula::ast::ReadArg
+pub datumesh_formula::ast::ReadArg::Expr(datumesh_formula::ast::NodeId)
+pub datumesh_formula::ast::ReadArg::Open
+pub datumesh_formula::ast::ReadArg::Range(datumesh_formula::ast::NodeId, datumesh_formula::ast::NodeId)
+impl core::clone::Clone for datumesh_formula::ast::ReadArg
+pub fn datumesh_formula::ast::ReadArg::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::ast::ReadArg
+impl core::cmp::PartialEq for datumesh_formula::ast::ReadArg
+pub fn datumesh_formula::ast::ReadArg::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::ast::ReadArg
+pub fn datumesh_formula::ast::ReadArg::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::ast::ReadArg
+pub struct datumesh_formula::ast::Ast
+impl datumesh_formula::ast::Ast
+pub fn datumesh_formula::ast::Ast::body(&self) -> alloc::string::String
+pub fn datumesh_formula::ast::Ast::depth(&self) -> usize
+pub fn datumesh_formula::ast::Ast::from_parts(alloc::vec::Vec<datumesh_formula::ast::Node>, datumesh_formula::ast::NodeId) -> core::option::Option<datumesh_formula::ast::Ast>
+pub fn datumesh_formula::ast::Ast::hash(&self) -> alloc::string::String
+pub fn datumesh_formula::ast::Ast::node(&self, datumesh_formula::ast::NodeId) -> &datumesh_formula::ast::Node
+pub fn datumesh_formula::ast::Ast::node_count(&self) -> usize
+pub fn datumesh_formula::ast::Ast::print(&self) -> alloc::string::String
+pub fn datumesh_formula::ast::Ast::reads_asof(&self) -> bool
+pub fn datumesh_formula::ast::Ast::root(&self) -> datumesh_formula::ast::NodeId
+pub fn datumesh_formula::ast::Ast::to_jcs(&self) -> alloc::vec::Vec<u8>
+impl core::clone::Clone for datumesh_formula::ast::Ast
+pub fn datumesh_formula::ast::Ast::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::ast::Ast
+impl core::cmp::PartialEq for datumesh_formula::ast::Ast
+pub fn datumesh_formula::ast::Ast::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::ast::Ast
+pub fn datumesh_formula::ast::Ast::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::ast::Ast
+pub type datumesh_formula::ast::NodeId = u32
+pub mod datumesh_formula::calendar
+pub enum datumesh_formula::calendar::Roll
+pub datumesh_formula::calendar::Roll::Following
+pub datumesh_formula::calendar::Roll::ModifiedFollowing
+pub datumesh_formula::calendar::Roll::Preceding
+impl datumesh_formula::calendar::Roll
+pub fn datumesh_formula::calendar::Roll::from_name(&str) -> core::option::Option<datumesh_formula::calendar::Roll>
+impl core::clone::Clone for datumesh_formula::calendar::Roll
+pub fn datumesh_formula::calendar::Roll::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::calendar::Roll
+impl core::cmp::PartialEq for datumesh_formula::calendar::Roll
+pub fn datumesh_formula::calendar::Roll::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::calendar::Roll
+pub fn datumesh_formula::calendar::Roll::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for datumesh_formula::calendar::Roll
+impl core::marker::StructuralPartialEq for datumesh_formula::calendar::Roll
+pub enum datumesh_formula::calendar::Weekend
+pub datumesh_formula::calendar::Weekend::FriSat
+pub datumesh_formula::calendar::Weekend::None
+pub datumesh_formula::calendar::Weekend::SatSun
+pub datumesh_formula::calendar::Weekend::Sun
+impl datumesh_formula::calendar::Weekend
+pub fn datumesh_formula::calendar::Weekend::from_name(&str) -> core::option::Option<datumesh_formula::calendar::Weekend>
+pub fn datumesh_formula::calendar::Weekend::is_weekend(self, datumesh_formula::calendar::Date) -> bool
+impl core::clone::Clone for datumesh_formula::calendar::Weekend
+pub fn datumesh_formula::calendar::Weekend::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::calendar::Weekend
+impl core::cmp::PartialEq for datumesh_formula::calendar::Weekend
+pub fn datumesh_formula::calendar::Weekend::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::calendar::Weekend
+pub fn datumesh_formula::calendar::Weekend::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for datumesh_formula::calendar::Weekend
+impl core::marker::StructuralPartialEq for datumesh_formula::calendar::Weekend
+pub struct datumesh_formula::calendar::BusinessDays<'a>
+pub datumesh_formula::calendar::BusinessDays::holidays: &'a [datumesh_formula::calendar::Date]
+pub datumesh_formula::calendar::BusinessDays::weekend: datumesh_formula::calendar::Weekend
+impl datumesh_formula::calendar::BusinessDays<'_>
+pub fn datumesh_formula::calendar::BusinessDays<'_>::add(&self, datumesh_formula::calendar::Date, i64, &mut dyn core::ops::function::FnMut(u64) -> core::result::Result<(), datumesh_formula::Code>) -> core::result::Result<datumesh_formula::calendar::Date, datumesh_formula::Code>
+pub fn datumesh_formula::calendar::BusinessDays<'_>::between(&self, datumesh_formula::calendar::Date, datumesh_formula::calendar::Date, &mut dyn core::ops::function::FnMut(u64) -> core::result::Result<(), datumesh_formula::Code>) -> core::result::Result<i64, datumesh_formula::Code>
+pub fn datumesh_formula::calendar::BusinessDays<'_>::is_business(&self, datumesh_formula::calendar::Date) -> bool
+pub fn datumesh_formula::calendar::BusinessDays<'_>::roll(&self, datumesh_formula::calendar::Date, datumesh_formula::calendar::Roll, &mut dyn core::ops::function::FnMut(u64) -> core::result::Result<(), datumesh_formula::Code>) -> core::result::Result<datumesh_formula::calendar::Date, datumesh_formula::Code>
+pub struct datumesh_formula::calendar::Date
+pub datumesh_formula::calendar::Date::day: u32
+pub datumesh_formula::calendar::Date::month: u32
+pub datumesh_formula::calendar::Date::year: i32
+impl datumesh_formula::calendar::Date
+pub fn datumesh_formula::calendar::Date::add_months(self, i64) -> core::option::Option<datumesh_formula::calendar::Date>
+pub fn datumesh_formula::calendar::Date::end_of_month(self) -> datumesh_formula::calendar::Date
+pub fn datumesh_formula::calendar::Date::from_ordinal(i64) -> core::option::Option<datumesh_formula::calendar::Date>
+pub fn datumesh_formula::calendar::Date::new(i64, i64, i64) -> core::option::Option<datumesh_formula::calendar::Date>
+pub fn datumesh_formula::calendar::Date::ordinal(self) -> i64
+pub fn datumesh_formula::calendar::Date::parse(&str) -> core::option::Option<datumesh_formula::calendar::Date>
+pub fn datumesh_formula::calendar::Date::text(self) -> alloc::string::String
+pub fn datumesh_formula::calendar::Date::weekday(self) -> u32
+impl core::clone::Clone for datumesh_formula::calendar::Date
+pub fn datumesh_formula::calendar::Date::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::calendar::Date
+impl core::cmp::Ord for datumesh_formula::calendar::Date
+pub fn datumesh_formula::calendar::Date::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for datumesh_formula::calendar::Date
+pub fn datumesh_formula::calendar::Date::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for datumesh_formula::calendar::Date
+pub fn datumesh_formula::calendar::Date::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for datumesh_formula::calendar::Date
+pub fn datumesh_formula::calendar::Date::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_formula::calendar::Date
+pub fn datumesh_formula::calendar::Date::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for datumesh_formula::calendar::Date
+impl core::marker::StructuralPartialEq for datumesh_formula::calendar::Date
+pub const datumesh_formula::calendar::CONVENTIONS: &[&str]
+pub const datumesh_formula::calendar::DAY_MICROS: i64
+pub fn datumesh_formula::calendar::date_of(datumesh_formula::calendar::Micros) -> core::option::Option<datumesh_formula::calendar::Date>
+pub fn datumesh_formula::calendar::days_in_month(i32, u32) -> u32
+pub fn datumesh_formula::calendar::instant_text(datumesh_formula::calendar::Micros) -> core::option::Option<alloc::string::String>
+pub fn datumesh_formula::calendar::is_leap(i32) -> bool
+pub fn datumesh_formula::calendar::max_instant() -> datumesh_formula::calendar::Micros
+pub fn datumesh_formula::calendar::min_instant() -> datumesh_formula::calendar::Micros
+pub fn datumesh_formula::calendar::parse_instant(&str) -> core::option::Option<datumesh_formula::calendar::Micros>
+pub fn datumesh_formula::calendar::year_fraction(datumesh_formula::calendar::Date, datumesh_formula::calendar::Date, &str) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub type datumesh_formula::calendar::Micros = i64
+pub mod datumesh_formula::decimal
+pub enum datumesh_formula::decimal::RoundMode
+pub datumesh_formula::decimal::RoundMode::Down
+pub datumesh_formula::decimal::RoundMode::Nearest
+pub datumesh_formula::decimal::RoundMode::Up
+impl core::clone::Clone for datumesh_formula::decimal::RoundMode
+pub fn datumesh_formula::decimal::RoundMode::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::decimal::RoundMode
+impl core::cmp::PartialEq for datumesh_formula::decimal::RoundMode
+pub fn datumesh_formula::decimal::RoundMode::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::decimal::RoundMode
+pub fn datumesh_formula::decimal::RoundMode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for datumesh_formula::decimal::RoundMode
+impl core::marker::StructuralPartialEq for datumesh_formula::decimal::RoundMode
+pub struct datumesh_formula::decimal::Decimal
+impl datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::abs(&self) -> datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::canonical_len(&self) -> u64
+pub fn datumesh_formula::decimal::Decimal::ceiling(&self) -> datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::check_range(self) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::Decimal::floor(&self) -> datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::from_i128(i128) -> datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::from_i64(i64) -> datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::is_integer(&self) -> bool
+pub fn datumesh_formula::decimal::Decimal::is_negative(&self) -> bool
+pub fn datumesh_formula::decimal::Decimal::is_zero(&self) -> bool
+pub fn datumesh_formula::decimal::Decimal::neg(&self) -> datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::parse(&str) -> core::option::Option<datumesh_formula::decimal::Decimal>
+pub fn datumesh_formula::decimal::Decimal::to_canonical(&self) -> alloc::string::String
+pub fn datumesh_formula::decimal::Decimal::to_i64(&self) -> core::option::Option<i64>
+pub fn datumesh_formula::decimal::Decimal::zero() -> datumesh_formula::decimal::Decimal
+impl core::clone::Clone for datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::decimal::Decimal
+impl core::cmp::Ord for datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::cmp(&self, &datumesh_formula::decimal::Decimal) -> core::cmp::Ordering
+impl core::cmp::PartialEq for datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::partial_cmp(&self, &datumesh_formula::decimal::Decimal) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::Decimal::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_formula::decimal::Decimal
+pub const datumesh_formula::decimal::MAX_CHARS: usize
+pub const datumesh_formula::decimal::PRECISION: u64
+pub const datumesh_formula::decimal::WORKING: u64
+pub fn datumesh_formula::decimal::add(&datumesh_formula::decimal::Decimal, &datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::apply(&str, &[&str]) -> core::result::Result<alloc::string::String, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::atan2(&datumesh_formula::decimal::Decimal, &datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::cos(&datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::div(&datumesh_formula::decimal::Decimal, &datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::exp(&datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::haversine(&datumesh_formula::decimal::Decimal, &datumesh_formula::decimal::Decimal, &datumesh_formula::decimal::Decimal, &datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::ln(&datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::mean(&[datumesh_formula::decimal::Decimal]) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::median(&[datumesh_formula::decimal::Decimal]) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::modulo(&datumesh_formula::decimal::Decimal, &datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::mul(&datumesh_formula::decimal::Decimal, &datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::negate(&datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::pi() -> datumesh_formula::decimal::Decimal
+pub fn datumesh_formula::decimal::pow_expln(&datumesh_formula::decimal::Decimal, &datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::power(&datumesh_formula::decimal::Decimal, &datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::power_int(&datumesh_formula::decimal::Decimal, &datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::round_digits(&datumesh_formula::decimal::Decimal, &datumesh_formula::decimal::Decimal, datumesh_formula::decimal::RoundMode) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::sin(&datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::sqrt(&datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::stdev(&[datumesh_formula::decimal::Decimal]) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::stdev_p(&[datumesh_formula::decimal::Decimal]) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::sub(&datumesh_formula::decimal::Decimal, &datumesh_formula::decimal::Decimal) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub fn datumesh_formula::decimal::sum(&[datumesh_formula::decimal::Decimal]) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
+pub mod datumesh_formula::definition
+pub struct datumesh_formula::definition::Callee
+pub datumesh_formula::definition::Callee::descriptor: datumesh_core::json::Value
+pub datumesh_formula::definition::Callee::fn_hash: alloc::string::String
+pub datumesh_formula::definition::Callee::start: alloc::string::String
+impl core::clone::Clone for datumesh_formula::definition::Callee
+pub fn datumesh_formula::definition::Callee::clone(&self) -> Self
+impl core::cmp::PartialEq for datumesh_formula::definition::Callee
+pub fn datumesh_formula::definition::Callee::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::definition::Callee
+pub fn datumesh_formula::definition::Callee::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::definition::Callee
+pub struct datumesh_formula::definition::Definition
+pub datumesh_formula::definition::Definition::bytes: alloc::vec::Vec<u8>
+pub datumesh_formula::definition::Definition::callees: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub datumesh_formula::definition::Definition::compiled: datumesh_formula::Compiled
+pub datumesh_formula::definition::Definition::descriptor: datumesh_core::descriptor::FunctionDescriptor
+pub datumesh_formula::definition::Definition::fn_hash: alloc::string::String
+pub datumesh_formula::definition::Definition::name: alloc::string::String
+impl core::clone::Clone for datumesh_formula::definition::Definition
+pub fn datumesh_formula::definition::Definition::clone(&self) -> Self
+impl core::fmt::Debug for datumesh_formula::definition::Definition
+pub fn datumesh_formula::definition::Definition::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const datumesh_formula::definition::LATEST: &str
+pub trait datumesh_formula::definition::Callees
+pub fn datumesh_formula::definition::Callees::callee(&self, &str, &str) -> core::result::Result<core::option::Option<datumesh_formula::definition::Callee>, alloc::string::String>
+impl datumesh_formula::definition::Callees for datumesh_formula::Env
+pub fn datumesh_formula::Env::callee(&self, &str, &str) -> core::result::Result<core::option::Option<datumesh_formula::definition::Callee>, alloc::string::String>
+pub fn datumesh_formula::definition::define_function(&str, &str, &datumesh_core::json::Value, &alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>, &dyn datumesh_formula::definition::Callees, &str) -> core::result::Result<datumesh_formula::definition::Definition, datumesh_formula::DefineError>
+pub mod datumesh_formula::eval
+pub enum datumesh_formula::eval::PatternArg
+pub datumesh_formula::eval::PatternArg::Open
+pub datumesh_formula::eval::PatternArg::Range(datumesh_core::model::Scalar, datumesh_core::model::Scalar)
+pub datumesh_formula::eval::PatternArg::Value(datumesh_core::model::Scalar)
+impl core::clone::Clone for datumesh_formula::eval::PatternArg
+pub fn datumesh_formula::eval::PatternArg::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::eval::PatternArg
+impl core::cmp::PartialEq for datumesh_formula::eval::PatternArg
+pub fn datumesh_formula::eval::PatternArg::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::eval::PatternArg
+pub fn datumesh_formula::eval::PatternArg::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::eval::PatternArg
+pub enum datumesh_formula::eval::Stop<E>
+pub datumesh_formula::eval::Stop::Code(datumesh_formula::Code)
+pub datumesh_formula::eval::Stop::World(E)
+impl<E> datumesh_formula::eval::Stop<E>
+pub fn datumesh_formula::eval::Stop<E>::code(&self) -> core::option::Option<datumesh_formula::Code>
+impl<E: core::clone::Clone> core::clone::Clone for datumesh_formula::eval::Stop<E>
+pub fn datumesh_formula::eval::Stop<E>::clone(&self) -> Self
+impl<E: core::cmp::Eq> core::cmp::Eq for datumesh_formula::eval::Stop<E>
+impl<E: core::cmp::PartialEq> core::cmp::PartialEq for datumesh_formula::eval::Stop<E>
+pub fn datumesh_formula::eval::Stop<E>::eq(&self, &Self) -> bool
+impl<E: core::cmp::PartialEq> core::marker::StructuralPartialEq for datumesh_formula::eval::Stop<E>
+impl<E: core::fmt::Debug> core::fmt::Debug for datumesh_formula::eval::Stop<E>
+pub fn datumesh_formula::eval::Stop<E>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<E> core::convert::From<datumesh_formula::Code> for datumesh_formula::eval::Stop<E>
+pub fn datumesh_formula::eval::Stop<E>::from(datumesh_formula::Code) -> datumesh_formula::eval::Stop<E>
+pub struct datumesh_formula::eval::Binding
+pub datumesh_formula::eval::Binding::function: alloc::rcs::arc::Arc<datumesh_formula::Function>
+pub datumesh_formula::eval::Binding::start: alloc::string::String
+impl core::clone::Clone for datumesh_formula::eval::Binding
+pub fn datumesh_formula::eval::Binding::clone(&self) -> Self
+impl core::fmt::Debug for datumesh_formula::eval::Binding
+pub fn datumesh_formula::eval::Binding::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct datumesh_formula::eval::CellKey
+pub datumesh_formula::eval::CellKey::args: datumesh_formula::eval::Args
+pub datumesh_formula::eval::CellKey::name: alloc::string::String
+impl core::clone::Clone for datumesh_formula::eval::CellKey
+pub fn datumesh_formula::eval::CellKey::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::eval::CellKey
+impl core::cmp::Ord for datumesh_formula::eval::CellKey
+pub fn datumesh_formula::eval::CellKey::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for datumesh_formula::eval::CellKey
+pub fn datumesh_formula::eval::CellKey::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for datumesh_formula::eval::CellKey
+pub fn datumesh_formula::eval::CellKey::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for datumesh_formula::eval::CellKey
+pub fn datumesh_formula::eval::CellKey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_formula::eval::CellKey
+pub fn datumesh_formula::eval::CellKey::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_formula::eval::CellKey
+pub struct datumesh_formula::eval::Fuel
+pub datumesh_formula::eval::Fuel::limit: u64
+pub datumesh_formula::eval::Fuel::used: u64
+impl datumesh_formula::eval::Fuel
+pub fn datumesh_formula::eval::Fuel::charge(&mut self, u64) -> core::result::Result<(), datumesh_formula::Code>
+pub fn datumesh_formula::eval::Fuel::new(u64) -> datumesh_formula::eval::Fuel
+impl core::clone::Clone for datumesh_formula::eval::Fuel
+pub fn datumesh_formula::eval::Fuel::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::eval::Fuel
+impl core::cmp::PartialEq for datumesh_formula::eval::Fuel
+pub fn datumesh_formula::eval::Fuel::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::eval::Fuel
+pub fn datumesh_formula::eval::Fuel::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for datumesh_formula::eval::Fuel
+impl core::marker::StructuralPartialEq for datumesh_formula::eval::Fuel
+pub struct datumesh_formula::eval::Manifest
+pub datumesh_formula::eval::Manifest::entry: alloc::string::String
+pub datumesh_formula::eval::Manifest::members: alloc::vec::Vec<alloc::string::String>
+pub datumesh_formula::eval::Manifest::slice: datumesh_core::json::Value
+impl datumesh_formula::eval::Manifest
+pub fn datumesh_formula::eval::Manifest::to_value(&self) -> datumesh_core::json::Value
+impl core::clone::Clone for datumesh_formula::eval::Manifest
+pub fn datumesh_formula::eval::Manifest::clone(&self) -> Self
+impl core::cmp::PartialEq for datumesh_formula::eval::Manifest
+pub fn datumesh_formula::eval::Manifest::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::eval::Manifest
+pub fn datumesh_formula::eval::Manifest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::eval::Manifest
+pub struct datumesh_formula::eval::Outcome
+pub datumesh_formula::eval::Outcome::lineage: alloc::vec::Vec<alloc::string::String>
+pub datumesh_formula::eval::Outcome::manifests: alloc::vec::Vec<datumesh_formula::eval::Manifest>
+pub datumesh_formula::eval::Outcome::receipt_asof: alloc::string::String
+pub datumesh_formula::eval::Outcome::tx: core::option::Option<alloc::string::String>
+pub datumesh_formula::eval::Outcome::value: datumesh_core::model::Scalar
+impl core::clone::Clone for datumesh_formula::eval::Outcome
+pub fn datumesh_formula::eval::Outcome::clone(&self) -> Self
+impl core::cmp::PartialEq for datumesh_formula::eval::Outcome
+pub fn datumesh_formula::eval::Outcome::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::eval::Outcome
+pub fn datumesh_formula::eval::Outcome::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::eval::Outcome
+pub struct datumesh_formula::eval::SliceKey
+pub datumesh_formula::eval::SliceKey::args: alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_formula::eval::PatternArg>
+pub datumesh_formula::eval::SliceKey::name: alloc::string::String
+impl datumesh_formula::eval::SliceKey
+pub fn datumesh_formula::eval::SliceKey::matches(&self, &datumesh_formula::eval::Args) -> bool
+impl core::clone::Clone for datumesh_formula::eval::SliceKey
+pub fn datumesh_formula::eval::SliceKey::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::eval::SliceKey
+impl core::cmp::PartialEq for datumesh_formula::eval::SliceKey
+pub fn datumesh_formula::eval::SliceKey::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::eval::SliceKey
+pub fn datumesh_formula::eval::SliceKey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::eval::SliceKey
+pub struct datumesh_formula::eval::Version
+pub datumesh_formula::eval::Version::asof: alloc::string::String
+pub datumesh_formula::eval::Version::receipt_hash: alloc::string::String
+pub datumesh_formula::eval::Version::tx: alloc::string::String
+pub datumesh_formula::eval::Version::value: datumesh_core::model::Scalar
+impl core::clone::Clone for datumesh_formula::eval::Version
+pub fn datumesh_formula::eval::Version::clone(&self) -> Self
+impl core::cmp::PartialEq for datumesh_formula::eval::Version
+pub fn datumesh_formula::eval::Version::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::eval::Version
+pub fn datumesh_formula::eval::Version::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::eval::Version
+pub const datumesh_formula::eval::ZERO_INSTANT: &str
+pub trait datumesh_formula::eval::World
+pub type datumesh_formula::eval::World::Error
+pub fn datumesh_formula::eval::World::asof(&mut self) -> core::result::Result<alloc::string::String, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::eval::World::charge(&mut self, u64) -> core::result::Result<(), datumesh_formula::Code>
+pub fn datumesh_formula::eval::World::function(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::Binding>, Self::Error>
+pub fn datumesh_formula::eval::World::members(&mut self, &datumesh_formula::eval::SliceKey) -> core::result::Result<alloc::vec::Vec<(datumesh_formula::eval::Args, datumesh_formula::eval::Version)>, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::eval::World::read(&mut self, &datumesh_formula::eval::CellKey, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::Version>, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::eval::World::rebound(&mut self, &str, &datumesh_formula::eval::Binding) -> core::result::Result<core::option::Option<alloc::rcs::arc::Arc<datumesh_formula::Compiled>>, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::eval::World::versions(&mut self, &datumesh_formula::eval::CellKey, &str, &str) -> core::result::Result<alloc::vec::Vec<datumesh_formula::eval::Version>, datumesh_formula::eval::Stop<Self::Error>>
+impl datumesh_formula::eval::World for datumesh_formula::memory::MemoryWorld
+pub type datumesh_formula::memory::MemoryWorld::Error = never
+pub fn datumesh_formula::memory::MemoryWorld::asof(&mut self) -> core::result::Result<alloc::string::String, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::memory::MemoryWorld::charge(&mut self, u64) -> core::result::Result<(), datumesh_formula::Code>
+pub fn datumesh_formula::memory::MemoryWorld::function(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::Binding>, Self::Error>
+pub fn datumesh_formula::memory::MemoryWorld::members(&mut self, &datumesh_formula::eval::SliceKey) -> core::result::Result<alloc::vec::Vec<(datumesh_formula::eval::Args, datumesh_formula::eval::Version)>, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::memory::MemoryWorld::read(&mut self, &datumesh_formula::eval::CellKey, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::Version>, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::memory::MemoryWorld::rebound(&mut self, &str, &datumesh_formula::eval::Binding) -> core::result::Result<core::option::Option<alloc::rcs::arc::Arc<datumesh_formula::Compiled>>, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::memory::MemoryWorld::versions(&mut self, &datumesh_formula::eval::CellKey, &str, &str) -> core::result::Result<alloc::vec::Vec<datumesh_formula::eval::Version>, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::eval::cell_object(&datumesh_formula::Function, &datumesh_formula::eval::CellKey) -> datumesh_core::json::Value
+pub fn datumesh_formula::eval::cmp_scalar(&datumesh_core::model::Scalar, &datumesh_core::model::Scalar) -> core::cmp::Ordering
+pub fn datumesh_formula::eval::evaluate<W: datumesh_formula::eval::World + ?core::marker::Sized>(&datumesh_formula::Compiled, &datumesh_formula::Function, &datumesh_formula::eval::Args, &str, &mut W) -> core::result::Result<datumesh_formula::eval::Outcome, datumesh_formula::eval::Stop<<W as datumesh_formula::eval::World>::Error>>
+pub fn datumesh_formula::eval::evaluate_value<W: datumesh_formula::eval::World + ?core::marker::Sized>(&datumesh_formula::Compiled, &datumesh_formula::Function, &datumesh_formula::eval::Args, &mut W) -> core::result::Result<datumesh_core::model::Scalar, datumesh_formula::eval::Stop<<W as datumesh_formula::eval::World>::Error>>
+pub fn datumesh_formula::eval::extent_cells(&datumesh_formula::Function, &datumesh_formula::eval::SliceKey) -> core::result::Result<alloc::vec::Vec<datumesh_formula::eval::Args>, datumesh_formula::Code>
+pub fn datumesh_formula::eval::member_bytes(usize) -> usize
+pub fn datumesh_formula::eval::slice_entry(&datumesh_core::json::Value, &[alloc::string::String]) -> alloc::string::String
+pub fn datumesh_formula::eval::slice_object(&datumesh_formula::Function, &datumesh_formula::eval::SliceKey) -> datumesh_core::json::Value
+pub type datumesh_formula::eval::Args = alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_core::model::Scalar>
+pub mod datumesh_formula::memory
+pub struct datumesh_formula::memory::Computed
+pub datumesh_formula::memory::Computed::outcome: datumesh_formula::eval::Outcome
+pub datumesh_formula::memory::Computed::receipt: datumesh_core::json::Value
+pub datumesh_formula::memory::Computed::receipt_hash: alloc::string::String
+impl core::clone::Clone for datumesh_formula::memory::Computed
+pub fn datumesh_formula::memory::Computed::clone(&self) -> Self
+impl core::fmt::Debug for datumesh_formula::memory::Computed
+pub fn datumesh_formula::memory::Computed::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct datumesh_formula::memory::Conventions
+pub datumesh_formula::memory::Conventions::computed_by: alloc::string::String
+pub datumesh_formula::memory::Conventions::issued_from: alloc::string::String
+pub datumesh_formula::memory::Conventions::licence: alloc::string::String
+pub datumesh_formula::memory::Conventions::summary: alloc::string::String
+impl core::clone::Clone for datumesh_formula::memory::Conventions
+pub fn datumesh_formula::memory::Conventions::clone(&self) -> Self
+impl core::default::Default for datumesh_formula::memory::Conventions
+pub fn datumesh_formula::memory::Conventions::default() -> datumesh_formula::memory::Conventions
+impl core::fmt::Debug for datumesh_formula::memory::Conventions
+pub fn datumesh_formula::memory::Conventions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct datumesh_formula::memory::MemoryWorld
+pub datumesh_formula::memory::MemoryWorld::conventions: datumesh_formula::memory::Conventions
+pub datumesh_formula::memory::MemoryWorld::fuel: datumesh_formula::eval::Fuel
+pub datumesh_formula::memory::MemoryWorld::max_depth: usize
+impl datumesh_formula::memory::MemoryWorld
+pub fn datumesh_formula::memory::MemoryWorld::add_receipt(&mut self, &datumesh_core::json::Value) -> core::result::Result<(), datumesh_formula::EnvError>
+pub fn datumesh_formula::memory::MemoryWorld::bind(&mut self, &str, &datumesh_core::json::Value, &str) -> core::result::Result<(), datumesh_formula::EnvError>
+pub fn datumesh_formula::memory::MemoryWorld::compute(&mut self, &datumesh_formula::eval::CellKey, &str) -> core::result::Result<datumesh_formula::memory::Computed, datumesh_formula::Code>
+pub fn datumesh_formula::memory::MemoryWorld::computed(&self, &str) -> core::option::Option<&datumesh_formula::memory::Computed>
+pub fn datumesh_formula::memory::MemoryWorld::evaluated(&self) -> alloc::vec::Vec<(datumesh_formula::eval::CellKey, alloc::string::String, datumesh_formula::eval::Version)>
+pub fn datumesh_formula::memory::MemoryWorld::from_value(&datumesh_core::json::Value, &str) -> core::result::Result<datumesh_formula::memory::MemoryWorld, datumesh_formula::EnvError>
+pub fn datumesh_formula::memory::MemoryWorld::new(&str) -> datumesh_formula::memory::MemoryWorld
+impl core::clone::Clone for datumesh_formula::memory::MemoryWorld
+pub fn datumesh_formula::memory::MemoryWorld::clone(&self) -> Self
+impl datumesh_formula::eval::World for datumesh_formula::memory::MemoryWorld
+pub type datumesh_formula::memory::MemoryWorld::Error = never
+pub fn datumesh_formula::memory::MemoryWorld::asof(&mut self) -> core::result::Result<alloc::string::String, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::memory::MemoryWorld::charge(&mut self, u64) -> core::result::Result<(), datumesh_formula::Code>
+pub fn datumesh_formula::memory::MemoryWorld::function(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::Binding>, Self::Error>
+pub fn datumesh_formula::memory::MemoryWorld::members(&mut self, &datumesh_formula::eval::SliceKey) -> core::result::Result<alloc::vec::Vec<(datumesh_formula::eval::Args, datumesh_formula::eval::Version)>, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::memory::MemoryWorld::read(&mut self, &datumesh_formula::eval::CellKey, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::Version>, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::memory::MemoryWorld::rebound(&mut self, &str, &datumesh_formula::eval::Binding) -> core::result::Result<core::option::Option<alloc::rcs::arc::Arc<datumesh_formula::Compiled>>, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::memory::MemoryWorld::versions(&mut self, &datumesh_formula::eval::CellKey, &str, &str) -> core::result::Result<alloc::vec::Vec<datumesh_formula::eval::Version>, datumesh_formula::eval::Stop<Self::Error>>
+pub struct datumesh_formula::memory::VectorResult
+pub datumesh_formula::memory::VectorResult::computed: datumesh_formula::memory::Computed
+pub datumesh_formula::memory::VectorResult::evaluated: alloc::vec::Vec<(datumesh_formula::eval::CellKey, alloc::string::String, datumesh_formula::eval::Version)>
+pub datumesh_formula::memory::VectorResult::fuel_used: u64
+impl core::clone::Clone for datumesh_formula::memory::VectorResult
+pub fn datumesh_formula::memory::VectorResult::clone(&self) -> Self
+impl core::fmt::Debug for datumesh_formula::memory::VectorResult
+pub fn datumesh_formula::memory::VectorResult::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const datumesh_formula::memory::DEFAULT_FUEL: u64
+pub const datumesh_formula::memory::DEFAULT_MAX_DEPTH: usize
+pub fn datumesh_formula::memory::receipt_hash(&datumesh_core::json::Value) -> alloc::string::String
+pub fn datumesh_formula::memory::run_vector(&datumesh_core::json::Value) -> core::result::Result<core::result::Result<datumesh_formula::memory::VectorResult, datumesh_formula::Code>, datumesh_formula::EnvError>
+pub mod datumesh_formula::names
+pub fn datumesh_formula::names::is_dns_name(&str) -> bool
+pub fn datumesh_formula::names::is_function_name(&str) -> bool
+pub fn datumesh_formula::names::is_name(&str) -> bool
+pub mod datumesh_formula::text
+pub const datumesh_formula::text::MAX_STRING_BYTES: usize
+pub fn datumesh_formula::text::find(&str, &str, i64) -> core::result::Result<i64, datumesh_formula::Code>
+pub fn datumesh_formula::text::finish(alloc::string::String) -> core::result::Result<alloc::string::String, datumesh_formula::Code>
+pub fn datumesh_formula::text::len(&str) -> usize
+pub fn datumesh_formula::text::lower(&str) -> alloc::string::String
+pub fn datumesh_formula::text::substr(&str, i64, i64) -> core::result::Result<alloc::string::String, datumesh_formula::Code>
+pub fn datumesh_formula::text::trim(&str) -> alloc::string::String
+pub fn datumesh_formula::text::upper(&str) -> alloc::string::String
+pub mod datumesh_formula::units
+pub struct datumesh_formula::units::Unit(_)
+impl datumesh_formula::units::Unit
+pub fn datumesh_formula::units::Unit::atom(&str) -> datumesh_formula::units::Unit
+pub fn datumesh_formula::units::Unit::is_one(&self) -> bool
+pub fn datumesh_formula::units::Unit::mul(&self, &datumesh_formula::units::Unit, i64) -> datumesh_formula::units::Unit
+pub fn datumesh_formula::units::Unit::one() -> datumesh_formula::units::Unit
+pub fn datumesh_formula::units::Unit::pow(&self, i64) -> datumesh_formula::units::Unit
+pub fn datumesh_formula::units::Unit::single(&self) -> core::option::Option<&str>
+pub fn datumesh_formula::units::Unit::sqrt(&self) -> core::option::Option<datumesh_formula::units::Unit>
+pub fn datumesh_formula::units::Unit::text(&self) -> alloc::string::String
+impl core::clone::Clone for datumesh_formula::units::Unit
+pub fn datumesh_formula::units::Unit::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::units::Unit
+impl core::cmp::Ord for datumesh_formula::units::Unit
+pub fn datumesh_formula::units::Unit::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for datumesh_formula::units::Unit
+pub fn datumesh_formula::units::Unit::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for datumesh_formula::units::Unit
+pub fn datumesh_formula::units::Unit::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::default::Default for datumesh_formula::units::Unit
+pub fn datumesh_formula::units::Unit::default() -> Self
+impl core::fmt::Debug for datumesh_formula::units::Unit
+pub fn datumesh_formula::units::Unit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_formula::units::Unit
+pub fn datumesh_formula::units::Unit::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_formula::units::Unit
+pub const datumesh_formula::units::CURRENCIES: &[&str]
+pub const datumesh_formula::units::PHYSICAL: &[&str]
+pub const datumesh_formula::units::RATIOS: &[&str]
+pub fn datumesh_formula::units::is_currency(&str) -> bool
+pub fn datumesh_formula::units::is_index_unit(&str) -> bool
+pub fn datumesh_formula::units::is_unit(&str) -> bool
+#[non_exhaustive] pub enum datumesh_formula::Code
+pub datumesh_formula::Code::Absent
+pub datumesh_formula::Code::Alias
+pub datumesh_formula::Code::Along
+pub datumesh_formula::Code::Ambiguous
+pub datumesh_formula::Code::ArgDuplicate
+pub datumesh_formula::Code::ArgMissing
+pub datumesh_formula::Code::ArgOrder
+pub datumesh_formula::Code::ArgUnknown
+pub datumesh_formula::Code::Arity
+pub datumesh_formula::Code::Budget
+pub datumesh_formula::Code::Chain
+pub datumesh_formula::Code::Cycle
+pub datumesh_formula::Code::Date
+pub datumesh_formula::Code::Depth
+pub datumesh_formula::Code::DivZero
+pub datumesh_formula::Code::Domain
+pub datumesh_formula::Code::DynamicName
+pub datumesh_formula::Code::Empty
+pub datumesh_formula::Code::Enum
+pub datumesh_formula::Code::Exponent
+pub datumesh_formula::Code::Forbidden
+pub datumesh_formula::Code::Future
+pub datumesh_formula::Code::Inputs
+pub datumesh_formula::Code::Instant
+pub datumesh_formula::Code::Join
+pub datumesh_formula::Code::LambdaParam
+pub datumesh_formula::Code::LambdaRead
+pub datumesh_formula::Code::Limit
+pub datumesh_formula::Code::Metric
+pub datumesh_formula::Code::Name
+pub datumesh_formula::Code::NotCanonical
+pub datumesh_formula::Code::NotCovered
+pub datumesh_formula::Code::Number
+pub datumesh_formula::Code::Order
+pub datumesh_formula::Code::Placement
+pub datumesh_formula::Code::Positional
+pub datumesh_formula::Code::Range
+pub datumesh_formula::Code::Reserved
+pub datumesh_formula::Code::ReturnType
+pub datumesh_formula::Code::ReturnUnit
+pub datumesh_formula::Code::Shadow
+pub datumesh_formula::Code::SliceBound
+pub datumesh_formula::Code::SliceValue
+pub datumesh_formula::Code::String
+pub datumesh_formula::Code::Syntax
+pub datumesh_formula::Code::TxArg
+pub datumesh_formula::Code::Type
+pub datumesh_formula::Code::Unbounded
+pub datumesh_formula::Code::Unit
+pub datumesh_formula::Code::UnitMismatch
+pub datumesh_formula::Code::UnitOffset
+pub datumesh_formula::Code::UnitUnknown
+pub datumesh_formula::Code::UnknownFunction
+pub datumesh_formula::Code::UnknownName
+pub datumesh_formula::Code::Unresolved
+pub datumesh_formula::Code::Unsupported
+impl datumesh_formula::Code
+pub const datumesh_formula::Code::ALL: &'static [datumesh_formula::Code]
+pub const fn datumesh_formula::Code::as_str(self) -> &'static str
+pub fn datumesh_formula::Code::from_name(&str) -> core::option::Option<datumesh_formula::Code>
+impl datumesh_formula::Code
+pub const fn datumesh_formula::Code::is_catchable(self) -> bool
+pub const fn datumesh_formula::Code::is_fault(self) -> bool
+pub const fn datumesh_formula::Code::is_mesh_failure(self) -> bool
+impl core::clone::Clone for datumesh_formula::Code
+pub fn datumesh_formula::Code::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::Code
+impl core::cmp::Ord for datumesh_formula::Code
+pub fn datumesh_formula::Code::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for datumesh_formula::Code
+pub fn datumesh_formula::Code::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for datumesh_formula::Code
+pub fn datumesh_formula::Code::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<datumesh_formula::Code> for datumesh_formula::Error
+pub fn datumesh_formula::Error::from(datumesh_formula::Code) -> datumesh_formula::Error
+impl core::fmt::Debug for datumesh_formula::Code
+pub fn datumesh_formula::Code::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for datumesh_formula::Code
+pub fn datumesh_formula::Code::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_formula::Code
+pub fn datumesh_formula::Code::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for datumesh_formula::Code
+impl core::marker::StructuralPartialEq for datumesh_formula::Code
+impl<E> core::convert::From<datumesh_formula::Code> for datumesh_formula::eval::Stop<E>
+pub fn datumesh_formula::eval::Stop<E>::from(datumesh_formula::Code) -> datumesh_formula::eval::Stop<E>
+#[non_exhaustive] pub enum datumesh_formula::DefineError
+pub datumesh_formula::DefineError::Callees(alloc::string::String)
+pub datumesh_formula::DefineError::Descriptor(datumesh_core::error::Error)
+pub datumesh_formula::DefineError::Formula(datumesh_formula::Error)
+impl datumesh_formula::DefineError
+pub fn datumesh_formula::DefineError::code(&self) -> &str
+pub fn datumesh_formula::DefineError::formula_code(&self) -> core::option::Option<datumesh_formula::Code>
+impl core::clone::Clone for datumesh_formula::DefineError
+pub fn datumesh_formula::DefineError::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::DefineError
+impl core::cmp::PartialEq for datumesh_formula::DefineError
+pub fn datumesh_formula::DefineError::eq(&self, &Self) -> bool
+impl core::convert::From<datumesh_formula::Error> for datumesh_formula::DefineError
+pub fn datumesh_formula::DefineError::from(datumesh_formula::Error) -> datumesh_formula::DefineError
+impl core::error::Error for datumesh_formula::DefineError
+impl core::fmt::Debug for datumesh_formula::DefineError
+pub fn datumesh_formula::DefineError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for datumesh_formula::DefineError
+pub fn datumesh_formula::DefineError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::DefineError
+pub enum datumesh_formula::Extent
+pub datumesh_formula::Extent::Range(alloc::string::String, alloc::string::String)
+pub datumesh_formula::Extent::Values(alloc::vec::Vec<alloc::string::String>)
+impl core::clone::Clone for datumesh_formula::Extent
+pub fn datumesh_formula::Extent::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::Extent
+impl core::cmp::PartialEq for datumesh_formula::Extent
+pub fn datumesh_formula::Extent::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::Extent
+pub fn datumesh_formula::Extent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::Extent
+pub enum datumesh_formula::Node
+pub datumesh_formula::Node::Agg(alloc::string::String)
+pub datumesh_formula::Node::Bool(bool)
+pub datumesh_formula::Node::Call
+pub datumesh_formula::Node::Call::args: alloc::vec::Vec<datumesh_formula::ast::NodeId>
+pub datumesh_formula::Node::Call::fn_name: alloc::string::String
+pub datumesh_formula::Node::Call::named: alloc::vec::Vec<(alloc::string::String, datumesh_formula::ast::NodeId)>
+pub datumesh_formula::Node::Date(alloc::string::String)
+pub datumesh_formula::Node::If
+pub datumesh_formula::Node::If::cond: datumesh_formula::ast::NodeId
+pub datumesh_formula::Node::If::els: datumesh_formula::ast::NodeId
+pub datumesh_formula::Node::If::then: datumesh_formula::ast::NodeId
+pub datumesh_formula::Node::Instant(alloc::string::String)
+pub datumesh_formula::Node::Key(alloc::string::String)
+pub datumesh_formula::Node::Lambda
+pub datumesh_formula::Node::Lambda::body: datumesh_formula::ast::NodeId
+pub datumesh_formula::Node::Lambda::params: alloc::vec::Vec<alloc::string::String>
+pub datumesh_formula::Node::Let
+pub datumesh_formula::Node::Let::body: datumesh_formula::ast::NodeId
+pub datumesh_formula::Node::Let::name: alloc::string::String
+pub datumesh_formula::Node::Let::value: datumesh_formula::ast::NodeId
+pub datumesh_formula::Node::Num
+pub datumesh_formula::Node::Num::unit: core::option::Option<alloc::string::String>
+pub datumesh_formula::Node::Num::value: alloc::string::String
+pub datumesh_formula::Node::Op
+pub datumesh_formula::Node::Op::args: alloc::vec::Vec<datumesh_formula::ast::NodeId>
+pub datumesh_formula::Node::Op::op: datumesh_formula::ast::Op
+pub datumesh_formula::Node::Read
+pub datumesh_formula::Node::Read::args: alloc::vec::Vec<(alloc::string::String, datumesh_formula::ast::ReadArg)>
+pub datumesh_formula::Node::Read::fn_name: alloc::string::String
+pub datumesh_formula::Node::Str(alloc::string::String)
+pub datumesh_formula::Node::Var(alloc::string::String)
+impl core::clone::Clone for datumesh_formula::ast::Node
+pub fn datumesh_formula::ast::Node::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::ast::Node
+impl core::cmp::PartialEq for datumesh_formula::ast::Node
+pub fn datumesh_formula::ast::Node::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::ast::Node
+pub fn datumesh_formula::ast::Node::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::ast::Node
+pub enum datumesh_formula::NumUnit
+pub datumesh_formula::NumUnit::Bare
+pub datumesh_formula::NumUnit::Bare::zero: bool
+pub datumesh_formula::NumUnit::Known(datumesh_formula::units::Unit)
+pub datumesh_formula::NumUnit::Varies
+impl datumesh_formula::NumUnit
+pub fn datumesh_formula::NumUnit::text(&self) -> alloc::string::String
+impl core::clone::Clone for datumesh_formula::NumUnit
+pub fn datumesh_formula::NumUnit::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::NumUnit
+impl core::cmp::PartialEq for datumesh_formula::NumUnit
+pub fn datumesh_formula::NumUnit::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::NumUnit
+pub fn datumesh_formula::NumUnit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::NumUnit
+pub enum datumesh_formula::Op
+pub datumesh_formula::Op::Add
+pub datumesh_formula::Op::And
+pub datumesh_formula::Op::Cat
+pub datumesh_formula::Op::Div
+pub datumesh_formula::Op::Eq
+pub datumesh_formula::Op::Ge
+pub datumesh_formula::Op::Gt
+pub datumesh_formula::Op::Le
+pub datumesh_formula::Op::Lt
+pub datumesh_formula::Op::Mul
+pub datumesh_formula::Op::Ne
+pub datumesh_formula::Op::Neg
+pub datumesh_formula::Op::Not
+pub datumesh_formula::Op::Or
+pub datumesh_formula::Op::Pow
+pub datumesh_formula::Op::Sub
+impl datumesh_formula::ast::Op
+pub fn datumesh_formula::ast::Op::is_comparison(self) -> bool
+pub fn datumesh_formula::ast::Op::text(self) -> &'static str
+impl core::clone::Clone for datumesh_formula::ast::Op
+pub fn datumesh_formula::ast::Op::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::ast::Op
+impl core::cmp::PartialEq for datumesh_formula::ast::Op
+pub fn datumesh_formula::ast::Op::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::ast::Op
+pub fn datumesh_formula::ast::Op::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for datumesh_formula::ast::Op
+impl core::marker::StructuralPartialEq for datumesh_formula::ast::Op
+pub enum datumesh_formula::ReadArg
+pub datumesh_formula::ReadArg::Expr(datumesh_formula::ast::NodeId)
+pub datumesh_formula::ReadArg::Open
+pub datumesh_formula::ReadArg::Range(datumesh_formula::ast::NodeId, datumesh_formula::ast::NodeId)
+impl core::clone::Clone for datumesh_formula::ast::ReadArg
+pub fn datumesh_formula::ast::ReadArg::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::ast::ReadArg
+impl core::cmp::PartialEq for datumesh_formula::ast::ReadArg
+pub fn datumesh_formula::ast::ReadArg::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::ast::ReadArg
+pub fn datumesh_formula::ast::ReadArg::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::ast::ReadArg
+pub enum datumesh_formula::Ty
+pub datumesh_formula::Ty::Blob
+pub datumesh_formula::Ty::Bool
+pub datumesh_formula::Ty::Date
+pub datumesh_formula::Ty::Instant
+pub datumesh_formula::Ty::Num(datumesh_formula::NumUnit)
+pub datumesh_formula::Ty::Slice(alloc::boxed::Box<datumesh_formula::Ty>, alloc::vec::Vec<datumesh_formula::KeyTy>)
+pub datumesh_formula::Ty::Str
+impl core::clone::Clone for datumesh_formula::Ty
+pub fn datumesh_formula::Ty::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::Ty
+impl core::cmp::PartialEq for datumesh_formula::Ty
+pub fn datumesh_formula::Ty::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::Ty
+pub fn datumesh_formula::Ty::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::Ty
+pub enum datumesh_formula::UnitDecl
+pub datumesh_formula::UnitDecl::Rate(datumesh_formula::UnitSide, datumesh_formula::UnitSide)
+pub datumesh_formula::UnitDecl::Simple(datumesh_formula::UnitSide)
+impl core::clone::Clone for datumesh_formula::UnitDecl
+pub fn datumesh_formula::UnitDecl::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::UnitDecl
+impl core::cmp::PartialEq for datumesh_formula::UnitDecl
+pub fn datumesh_formula::UnitDecl::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::UnitDecl
+pub fn datumesh_formula::UnitDecl::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::UnitDecl
+pub enum datumesh_formula::UnitSide
+pub datumesh_formula::UnitSide::Arg(alloc::string::String)
+pub datumesh_formula::UnitSide::Literal(alloc::string::String)
+impl core::clone::Clone for datumesh_formula::UnitSide
+pub fn datumesh_formula::UnitSide::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::UnitSide
+impl core::cmp::PartialEq for datumesh_formula::UnitSide
+pub fn datumesh_formula::UnitSide::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::UnitSide
+pub fn datumesh_formula::UnitSide::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::UnitSide
+pub struct datumesh_formula::ArgDecl
+pub datumesh_formula::ArgDecl::extent: core::option::Option<datumesh_formula::Extent>
+pub datumesh_formula::ArgDecl::ty: datumesh_core::model::Type
+pub datumesh_formula::ArgDecl::unit: core::option::Option<datumesh_formula::UnitDecl>
+pub datumesh_formula::ArgDecl::valid: bool
+impl core::clone::Clone for datumesh_formula::ArgDecl
+pub fn datumesh_formula::ArgDecl::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::ArgDecl
+impl core::cmp::PartialEq for datumesh_formula::ArgDecl
+pub fn datumesh_formula::ArgDecl::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::ArgDecl
+pub fn datumesh_formula::ArgDecl::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::ArgDecl
+pub struct datumesh_formula::Ast
+impl datumesh_formula::ast::Ast
+pub fn datumesh_formula::ast::Ast::body(&self) -> alloc::string::String
+pub fn datumesh_formula::ast::Ast::depth(&self) -> usize
+pub fn datumesh_formula::ast::Ast::from_parts(alloc::vec::Vec<datumesh_formula::ast::Node>, datumesh_formula::ast::NodeId) -> core::option::Option<datumesh_formula::ast::Ast>
+pub fn datumesh_formula::ast::Ast::hash(&self) -> alloc::string::String
+pub fn datumesh_formula::ast::Ast::node(&self, datumesh_formula::ast::NodeId) -> &datumesh_formula::ast::Node
+pub fn datumesh_formula::ast::Ast::node_count(&self) -> usize
+pub fn datumesh_formula::ast::Ast::print(&self) -> alloc::string::String
+pub fn datumesh_formula::ast::Ast::reads_asof(&self) -> bool
+pub fn datumesh_formula::ast::Ast::root(&self) -> datumesh_formula::ast::NodeId
+pub fn datumesh_formula::ast::Ast::to_jcs(&self) -> alloc::vec::Vec<u8>
+impl core::clone::Clone for datumesh_formula::ast::Ast
+pub fn datumesh_formula::ast::Ast::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::ast::Ast
+impl core::cmp::PartialEq for datumesh_formula::ast::Ast
+pub fn datumesh_formula::ast::Ast::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::ast::Ast
+pub fn datumesh_formula::ast::Ast::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::ast::Ast
+pub struct datumesh_formula::Compiled
+pub datumesh_formula::Compiled::asof_dependent: bool
+pub datumesh_formula::Compiled::ast: datumesh_formula::ast::Ast
+pub datumesh_formula::Compiled::body: alloc::string::String
+pub datumesh_formula::Compiled::inputs: alloc::vec::Vec<alloc::string::String>
+pub datumesh_formula::Compiled::returns: datumesh_formula::Returns
+impl datumesh_formula::Compiled
+pub fn datumesh_formula::Compiled::type_of(&self, datumesh_formula::ast::NodeId) -> core::option::Option<&datumesh_formula::Ty>
+pub fn datumesh_formula::Compiled::types_eq(&self, &datumesh_formula::Compiled) -> bool
+impl core::clone::Clone for datumesh_formula::Compiled
+pub fn datumesh_formula::Compiled::clone(&self) -> Self
+impl core::fmt::Debug for datumesh_formula::Compiled
+pub fn datumesh_formula::Compiled::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct datumesh_formula::Env
+pub datumesh_formula::Env::aliases: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub datumesh_formula::Env::functions: alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_formula::Function>
+pub datumesh_formula::Env::name: alloc::string::String
+pub datumesh_formula::Env::signature: datumesh_formula::Signature
+impl datumesh_formula::Env
+pub fn datumesh_formula::Env::add_function(&mut self, &str, &datumesh_core::json::Value) -> core::result::Result<(), datumesh_formula::EnvError>
+pub fn datumesh_formula::Env::from_value(&datumesh_core::json::Value) -> core::result::Result<datumesh_formula::Env, datumesh_formula::EnvError>
+pub fn datumesh_formula::Env::lang_of(&self, &str) -> core::option::Option<&str>
+pub fn datumesh_formula::Env::new(&str, datumesh_formula::Signature) -> datumesh_formula::Env
+pub fn datumesh_formula::Env::signature_of(&self, &str) -> core::option::Option<&datumesh_formula::Signature>
+impl core::clone::Clone for datumesh_formula::Env
+pub fn datumesh_formula::Env::clone(&self) -> Self
+impl core::cmp::PartialEq for datumesh_formula::Env
+pub fn datumesh_formula::Env::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::Env
+pub fn datumesh_formula::Env::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::Env
+impl datumesh_formula::definition::Callees for datumesh_formula::Env
+pub fn datumesh_formula::Env::callee(&self, &str, &str) -> core::result::Result<core::option::Option<datumesh_formula::definition::Callee>, alloc::string::String>
+pub struct datumesh_formula::EnvError(pub alloc::string::String)
+impl core::clone::Clone for datumesh_formula::EnvError
+pub fn datumesh_formula::EnvError::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::EnvError
+impl core::cmp::PartialEq for datumesh_formula::EnvError
+pub fn datumesh_formula::EnvError::eq(&self, &Self) -> bool
+impl core::error::Error for datumesh_formula::EnvError
+impl core::fmt::Debug for datumesh_formula::EnvError
+pub fn datumesh_formula::EnvError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for datumesh_formula::EnvError
+pub fn datumesh_formula::EnvError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::EnvError
+pub struct datumesh_formula::Error
+pub datumesh_formula::Error::code: datumesh_formula::Code
+pub datumesh_formula::Error::detail: alloc::string::String
+pub datumesh_formula::Error::token: core::option::Option<alloc::string::String>
+impl datumesh_formula::Error
+pub fn datumesh_formula::Error::new(datumesh_formula::Code, impl core::convert::Into<alloc::string::String>) -> datumesh_formula::Error
+impl core::clone::Clone for datumesh_formula::Error
+pub fn datumesh_formula::Error::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::Error
+impl core::cmp::PartialEq for datumesh_formula::Error
+pub fn datumesh_formula::Error::eq(&self, &Self) -> bool
+impl core::convert::From<datumesh_formula::Code> for datumesh_formula::Error
+pub fn datumesh_formula::Error::from(datumesh_formula::Code) -> datumesh_formula::Error
+impl core::convert::From<datumesh_formula::Error> for datumesh_formula::DefineError
+pub fn datumesh_formula::DefineError::from(datumesh_formula::Error) -> datumesh_formula::DefineError
+impl core::error::Error for datumesh_formula::Error
+impl core::fmt::Debug for datumesh_formula::Error
+pub fn datumesh_formula::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for datumesh_formula::Error
+pub fn datumesh_formula::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::Error
+pub struct datumesh_formula::Function
+pub datumesh_formula::Function::body: alloc::string::String
+pub datumesh_formula::Function::hash: alloc::string::String
+pub datumesh_formula::Function::inputs: alloc::vec::Vec<alloc::string::String>
+pub datumesh_formula::Function::lang: alloc::string::String
+pub datumesh_formula::Function::signature: datumesh_formula::Signature
+pub datumesh_formula::Function::value: datumesh_core::json::Value
+impl datumesh_formula::Function
+pub fn datumesh_formula::Function::from_value(&datumesh_core::json::Value) -> core::result::Result<datumesh_formula::Function, datumesh_formula::EnvError>
+impl core::clone::Clone for datumesh_formula::Function
+pub fn datumesh_formula::Function::clone(&self) -> Self
+impl core::cmp::PartialEq for datumesh_formula::Function
+pub fn datumesh_formula::Function::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::Function
+pub fn datumesh_formula::Function::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::Function
+pub struct datumesh_formula::KeyTy
+pub datumesh_formula::KeyTy::name: alloc::string::String
+pub datumesh_formula::KeyTy::ty: datumesh_core::model::Type
+pub datumesh_formula::KeyTy::unit: core::option::Option<datumesh_formula::NumUnit>
+pub datumesh_formula::KeyTy::valid: bool
+impl core::clone::Clone for datumesh_formula::KeyTy
+pub fn datumesh_formula::KeyTy::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::KeyTy
+impl core::cmp::PartialEq for datumesh_formula::KeyTy
+pub fn datumesh_formula::KeyTy::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::KeyTy
+pub fn datumesh_formula::KeyTy::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::KeyTy
+pub struct datumesh_formula::Returns
+pub datumesh_formula::Returns::ty: datumesh_core::model::Type
+pub datumesh_formula::Returns::unit: core::option::Option<alloc::string::String>
+impl datumesh_formula::Returns
+pub fn datumesh_formula::Returns::to_value(&self) -> datumesh_core::json::Value
+impl core::clone::Clone for datumesh_formula::Returns
+pub fn datumesh_formula::Returns::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::Returns
+impl core::cmp::PartialEq for datumesh_formula::Returns
+pub fn datumesh_formula::Returns::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::Returns
+pub fn datumesh_formula::Returns::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::Returns
+pub struct datumesh_formula::Signature
+pub datumesh_formula::Signature::args: alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_formula::ArgDecl>
+pub datumesh_formula::Signature::order: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub datumesh_formula::Signature::returns: datumesh_core::model::Type
+pub datumesh_formula::Signature::returns_unit: core::option::Option<datumesh_formula::UnitDecl>
+impl datumesh_formula::Signature
+pub fn datumesh_formula::Signature::from_value(&datumesh_core::json::Value) -> core::result::Result<datumesh_formula::Signature, datumesh_formula::EnvError>
+impl core::clone::Clone for datumesh_formula::Signature
+pub fn datumesh_formula::Signature::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::Signature
+impl core::cmp::PartialEq for datumesh_formula::Signature
+pub fn datumesh_formula::Signature::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::Signature
+pub fn datumesh_formula::Signature::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::Signature
+pub const datumesh_formula::BUILTIN_NAMES: &[&str]
+pub const datumesh_formula::FORBIDDEN_NAMES: &[&str]
+pub const datumesh_formula::MAX_NESTING: u32
+pub const datumesh_formula::MAX_NODES: usize
+pub fn datumesh_formula::canonical_ast(&str, core::option::Option<&datumesh_formula::Env>) -> core::result::Result<datumesh_formula::ast::Ast, datumesh_formula::Error>
+pub fn datumesh_formula::check_descriptor(&str, &datumesh_core::json::Value, &datumesh_formula::Env) -> core::result::Result<datumesh_formula::Compiled, datumesh_formula::DefineError>
+pub fn datumesh_formula::define(&str, &datumesh_formula::Env) -> core::result::Result<datumesh_formula::Compiled, datumesh_formula::Error>
+pub type datumesh_formula::NodeId = u32

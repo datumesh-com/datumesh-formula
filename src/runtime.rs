@@ -1,5 +1,5 @@
 //! The engine's [`Runtime`] for `lang = "formula"` (feature `engine`): the evaluator of
-//! [`eval`](crate::eval) over the engine's [`Inputs`], as a [`World`].
+//! [`eval`] over the engine's [`Inputs`], as a [`World`].
 //!
 //! - A descriptor is checked (15.6, [`check_descriptor`]) against its callees as bound now in
 //!   the runtime's [`Callees`] (the store), and compiled once per function hash. When a read's

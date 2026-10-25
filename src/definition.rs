@@ -96,7 +96,7 @@ pub struct Definition {
     /// The descriptor: `code.lang` `formula`, `code.body` the printed AST and one LF, `inputs`
     /// derived, the signature as given (with `order` and extents).
     pub descriptor: FunctionDescriptor,
-    /// Its canonical bytes (JCS), what [`publish`] stores.
+    /// Its canonical bytes (JCS), what `publish` stores (feature `engine`).
     pub bytes: Vec<u8>,
     /// The function hash: SHA-256 of the bytes.
     pub fn_hash: String,

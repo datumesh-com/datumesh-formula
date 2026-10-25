@@ -4,7 +4,7 @@
 # and non-integer powers; sin, cos, atan2 and haversine against the reference tool run as a black
 # box, when a datumesh-spec checkout is given.
 #   tools/decimal_crosscheck.sh [N=10000] [SEED=1] [SPEC_DIR]
-# Writes tools/out/. REF_IMAGE (default python:3.13-slim, PyNaCl installed on the fly) runs
+# NATIVE=1 builds with the local cargo (CI). Writes tools/out/. REF_IMAGE (default python:3.13-slim, PyNaCl installed on the fly) runs
 # the reference.
 set -e
 N="${1:-10000}"; SEED="${2:-1}"; SPEC="$3"
@@ -12,8 +12,13 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 out="$root/tools/out"; mkdir -p "$out"
 py() { docker run --rm -i -v "$root/tools:/t:ro" -v "$out:/o" python:3.13-slim python3 -I /t/decimal_crosscheck.py "$@"; }
 py generate "$N" "$SEED" > "$out/decimal-cases.jsonl"
-"$root/tools/cargo.sh" 1.99 build --release --no-default-features --example formula_runner >&2
-runner() { docker run --rm -i -v "$root:/w:ro" -w /w rust:1.99 /w/target-1.99/release/examples/formula_runner; }
+if [ -n "$NATIVE" ]; then
+  (cd "$root" && cargo build --release --locked --no-default-features --example formula_runner) >&2
+  runner() { "$root/target/release/examples/formula_runner"; }
+else
+  "$root/tools/cargo.sh" 1.99 build --release --no-default-features --example formula_runner >&2
+  runner() { docker run --rm -i -v "$root:/w:ro" -w /w rust:1.99 /w/target-1.99/release/examples/formula_runner; }
+fi
 runner < "$out/decimal-cases.jsonl" > "$out/decimal-crate.jsonl"
 py python /o/decimal-cases.jsonl > "$out/decimal-python.jsonl"
 py compare /o/decimal-cases.jsonl /o/decimal-crate.jsonl /o/decimal-python.jsonl

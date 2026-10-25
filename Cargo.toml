@@ -39,3 +39,11 @@ opt-level = 3
 
 [profile.test]
 opt-level = 2
+
+[[example]]
+name = "engine"
+required-features = ["engine"]
+
+[[example]]
+name = "bench"
+required-features = ["engine"]
