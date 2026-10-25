@@ -214,6 +214,14 @@ pub trait World {
     /// given the asof and never asks.
     fn asof(&mut self) -> Result<String, Stop<Self::Error>>;
 
+    /// Whether the world's error says that a read cell has no value, so that the evaluation
+    /// has none either (the order of `E_FORMULA_FUTURE` applies to it as to a code). Provided:
+    /// `false`.
+    fn no_value(error: &Self::Error) -> bool {
+        let _ = error;
+        false
+    }
+
     /// A read's name resolved to `binding` (as of the evaluation asof, or as of `T` in
     /// `asof(c, T)`): when the body was compiled against another function for that name, the
     /// world checks the body again (15.8: "a callee name rebound since define time is checked
@@ -552,7 +560,11 @@ impl<W: World + ?Sized> Eval<'_, W> {
     /// `E_FORMULA_FUTURE` is reported before anything after the times (15.13): when the asof
     /// is not known yet and a later step failed with a code, `T` after the asof is the failure.
     fn future_first(&mut self, t: Micros, e: Stop<W::Error>) -> Stop<W::Error> {
-        if !matches!(e, Stop::Code(_)) {
+        let reportable = match &e {
+            Stop::Code(_) => true,
+            Stop::World(w) => W::no_value(w),
+        };
+        if !reportable {
             return e;
         }
         match self.now() {

@@ -389,6 +389,10 @@ impl World for EngineWorld<'_> {
         Ok(self.inputs.asof())
     }
 
+    fn no_value(error: &EvalError) -> bool {
+        matches!(error, EvalError::InputNotCovered { .. })
+    }
+
     fn rebound(&mut self, name: &str, binding: &Binding) -> Result<Option<Arc<Compiled>>, Stop<EvalError>> {
         let same = if name == self.p.env.name {
             binding.function.hash == self.p.function.hash
