@@ -863,10 +863,9 @@ pub fn haversine(lat1: &Decimal, lon1: &Decimal, lat2: &Decimal, lon2: &Decimal)
     let one = int(1);
     let phi1 = radians40(lat1);
     let phi2 = radians40(lat2);
-    let lam1 = radians40(lon1);
-    let lam2 = radians40(lon2);
-    let dphi = sub_p(&phi2, &phi1, w);
-    let dlam = sub_p(&lam2, &lam1, w);
+    // 15.9.3: dphi = (lat2 - lat1) * RAD_PER_DEG and dlambda likewise, each step at 40 digits.
+    let dphi = radians40(&sub_p(lat2, lat1, w));
+    let dlam = radians40(&sub_p(lon2, lon1, w));
     let s1 = sincos40(&div_p(&dphi, &two, w))?.0;
     let s2 = sincos40(&div_p(&dlam, &two, w))?.0;
     let c1 = sincos40(&phi1)?.1;
