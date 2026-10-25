@@ -232,7 +232,11 @@ impl Mesh {
     /// Record the publisher's version of a stored cell: `value` at `tx`, as of `asof`.
     pub fn record(&self, name: &str, cell_args: &[(&str, Scalar)], value: Scalar, tx: &str, asof: &str) -> String {
         let (ns, f) = name.rsplit_once('/').unwrap();
-        let fn_hash = self.store.resolve_name(name, "9999-12-31T23:59:59.999999Z").unwrap().expect("bound");
+        // The function the name means at tx, or (a history recorded before the binding) now.
+        let fn_hash = match self.store.resolve_name(name, tx).unwrap() {
+            Some(h) => h,
+            None => self.store.resolve_name(name, "9999-12-31T23:59:59.999999Z").unwrap().expect("bound"),
+        };
         let descriptor =
             datumesh_core::FunctionDescriptor::from_json(&self.store.descriptor(&fn_hash).unwrap()).unwrap();
         let a = args(cell_args);
