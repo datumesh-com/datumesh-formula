@@ -40,7 +40,7 @@ fn code(body: &str, inputs: &[&str], order: bool) -> Option<String> {
     .unwrap();
     match check_descriptor("calc.example.net/f", &descriptor(body, inputs, order), &env) {
         Ok(_) => None,
-        Err(e) => Some(e.code.as_str().to_string()),
+        Err(e) => Some(e.code().to_string()),
     }
 }
 
