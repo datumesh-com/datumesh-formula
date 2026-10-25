@@ -3,7 +3,7 @@
 **Status at spec `f3d3e2c` (final spec-0.4.0):** every entry below is settled in the text; each
 ends with the sentence that settles it. One change followed: HAVERSINE now forms
 `(lat2 - lat1) * RAD_PER_DEG` (D1). Still open on this crate's side: the section-7 canonical-form
-check that 15.6 puts first in the descriptor checks (D8), for phase B.
+check that 15.6 puts first in the descriptor checks (D8), for phase B; and two orders found later (F1, F2), not yet in the text.
 
 This crate was written from `SPEC.md` (commit `dedd132`, then `18be70f`, whose changes outside section 15 touch nothing implemented here except that a range admits members in the type's order, which the crate already did, and a version slice with `from` after `to` is empty, as here), `units.md`, `schemas/`, `vectors/` and the
 contract, without reading `tools/*.py`, `tests/*`, `crosscheck/*` (except its README) or
@@ -181,3 +181,16 @@ with `RecursionError`; the node limit is 65,536. This crate accepts and evaluate
 passes walk operator chains iteratively).
 
 **Settled at f3d3e2c:** SPEC 15.3, **Limits**: "An operator chain is not nesting: `a + a + … + a` is accepted up to the node limit"; fixed in the reference.
+## F. Found after f3d3e2c (not settled in the text; the crate follows the reference, black box)
+
+F1. **`asof(c, T)`: arguments before the name.** 15.13 says the times are evaluated before the
+cell's arguments and that `c`'s name resolves as of `T`, but not whether the name resolves before
+or after the arguments. The reference evaluates the arguments first: in
+`asof(f(x: text(1 / 0)), T)` with `T` before `f`'s binding began, `E_FORMULA_DIV_ZERO` is reported,
+not `E_FORMULA_UNRESOLVED`. Proposal: "then the cell's arguments, then its name as of `T`".
+
+F2. **When fixed fuel is charged.** The 15.12 table gives the fuel of `sqrt`, `exp`, `ln`, `sin`,
+`cos`, `atan2` and `haversine` but not when it is charged. The reference charges it at the call,
+before the arguments are evaluated (`ln(1 / 0)` with fuel 50 is `E_FORMULA_BUDGET`, with 100
+`E_FORMULA_DIV_ZERO`); powers (integer `abs(n)`, non-integer 130) and text fuel, which depend on
+values, come after. Proposal: say so in the table.

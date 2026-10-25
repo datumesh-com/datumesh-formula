@@ -863,32 +863,32 @@ impl<W: World + ?Sized> Eval<'_, W> {
     #[inline(never)]
     #[allow(unused_variables)]
     fn b_sqrt(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        self.charge(10)?; // charged at the call, before the argument
         let x = self.node(args[0])?;
-        self.charge(10)?;
         Ok(V::Num(decimal::sqrt(num(&x)?)?))
     }
 
     #[inline(never)]
     #[allow(unused_variables)]
     fn b_exp(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        self.charge(50)?; // charged at the call, before the argument
         let x = self.node(args[0])?;
-        self.charge(50)?;
         Ok(V::Num(decimal::exp(num(&x)?)?))
     }
 
     #[inline(never)]
     #[allow(unused_variables)]
     fn b_ln(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        self.charge(80)?; // charged at the call, before the argument
         let x = self.node(args[0])?;
-        self.charge(80)?;
         Ok(V::Num(decimal::ln(num(&x)?)?))
     }
 
     #[inline(never)]
     #[allow(unused_variables)]
     fn b_sin(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        self.charge(50)?; // charged at the call, before the argument
         let x = self.node(args[0])?;
-        self.charge(50)?;
         let mut r = num(&x)?.clone();
         if num_unit(self.ty(args[0])).and_then(|u| u.text().into()).as_deref() == Some("deg") {
             r = decimal::radians40(&r);
@@ -901,20 +901,20 @@ impl<W: World + ?Sized> Eval<'_, W> {
     #[inline(never)]
     #[allow(unused_variables)]
     fn b_atan2(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        self.charge(60)?; // charged at the call, before the arguments
         let y = self.node(args[0])?;
         let x = self.node(args[1])?;
-        self.charge(60)?;
         Ok(V::Num(decimal::atan2(num(&y)?, num(&x)?)?))
     }
 
     #[inline(never)]
     #[allow(unused_variables)]
     fn b_haversine(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
+        self.charge(400)?; // charged at the call, before the arguments
         let mut v = Vec::with_capacity(4);
         for a in args {
             v.push(num(&self.node(*a)?)?.clone());
         }
-        self.charge(400)?;
         Ok(V::Num(decimal::haversine(&v[0], &v[1], &v[2], &v[3])?))
     }
 
@@ -1440,17 +1440,24 @@ impl<W: World + ?Sized> Eval<'_, W> {
         if t > self.asof {
             return Err(Code::Future.into());
         }
-        // The name resolves as of T.
+        // The cell's arguments, then its name resolved as of T (as the reference orders them).
+        let Node::Read { args: rargs, .. } = self.c.ast.node(cell_id) else { return Err(Code::TxArg.into()) };
+        let rargs = rargs.clone();
+        let mut args = Args::new();
+        for (name, a) in &rargs {
+            let ReadArg::Expr(x) = a else { return Err(Code::TxArg.into()) };
+            let v = self.node(*x)?;
+            args.insert(name.clone(), to_scalar(&v)?);
+        }
         let tt = calendar::instant_text(t).ok_or(Code::Range)?;
         let b = self.binding(&fn_name, Some(&tt))?;
-        let pattern = self.read_args(cell_id, &b.function)?;
-        let args: Args = pattern
-            .into_iter()
-            .filter_map(|(k, p)| match p {
-                PatternArg::Value(v) => Some((k, v)),
-                _ => None,
-            })
-            .collect();
+        for (name, v) in &args {
+            match b.function.signature.args.get(name) {
+                Some(d) if d.ty == v.ty() => {}
+                Some(_) => return Err(Code::Type.into()),
+                None => return Err(Code::Unresolved.into()),
+            }
+        }
         let cell = CellKey { name: fn_name, args };
         let v = self.world.read(&cell, Some(&tt))?.ok_or(Stop::Code(Code::NotCovered))?;
         self.lineage.insert(v.receipt_hash.clone());

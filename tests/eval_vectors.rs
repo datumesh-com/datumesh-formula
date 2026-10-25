@@ -154,7 +154,10 @@ fn transcendental_fuel_is_charged_before_the_arguments() {
         let text = String::from_utf8(v.to_jcs())
             .unwrap()
             .replace("\"body\":\"abs(a)\\n\"", &format!("\"body\":\"{body}\\n\""))
-            .replace("\"returns\":{\"type\":\"number\",\"unit\":\"EUR\"}", &format!("\"returns\":{{\"type\":\"number\",\"unit\":\"{unit}\"}}"))
+            .replace(
+                "\"returns\":{\"type\":\"number\",\"unit\":\"EUR\"}",
+                &format!("\"returns\":{{\"type\":\"number\",\"unit\":\"{unit}\"}}"),
+            )
             .replacen("{", &format!("{{\"fuel\":{fuel},"), 1);
         let v = datumesh_core::json::parse(text.as_bytes()).unwrap();
         assert_eq!(run_vector(&v).unwrap().unwrap_err().as_str(), want, "{body} with fuel {fuel}");
