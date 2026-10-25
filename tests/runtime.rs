@@ -18,7 +18,9 @@ const A: &str = "2026-02-01T00:00:00.000000Z";
 const A2: &str = "2026-04-01T00:00:00.000000Z";
 
 fn lag_sig(unit: &str) -> String {
-    format!(r#"{{"args":{{"k":{{"type":"string","valid":false}}}},"order":["k"],"returns":{{"type":"number","unit":"{unit}"}}}}"#)
+    format!(
+        r#"{{"args":{{"k":{{"type":"string","valid":false}}}},"order":["k"],"returns":{{"type":"number","unit":"{unit}"}}}}"#
+    )
 }
 
 #[test]
@@ -70,14 +72,22 @@ fn a_rebinding_that_breaks_the_body_fails_only_where_it_holds() {
 #[test]
 fn future_before_the_arguments_without_asof_dependence() {
     let m = Mesh::new(&["rates.example.org"]);
-    let rate = r#"{"args":{"ccy":{"type":"string","valid":false}},"order":["ccy"],"returns":{"type":"number","unit":"1"}}"#;
+    let rate =
+        r#"{"args":{"ccy":{"type":"string","valid":false}},"order":["ccy"],"returns":{"type":"number","unit":"1"}}"#;
     m.stored("rates.example.org/rate", rate, T0);
-    m.record("rates.example.org/rate", &[("ccy", text("E1"))], num("1.25"), "2026-01-05T00:00:00.000000Z", "2026-01-05T00:00:00.000000Z");
+    m.record(
+        "rates.example.org/rate",
+        &[("ccy", text("E1"))],
+        num("1.25"),
+        "2026-01-05T00:00:00.000000Z",
+        "2026-01-05T00:00:00.000000Z",
+    );
     let sig = r#"{"args":{"n":{"type":"number","unit":"1","valid":false},"t":{"type":"instant","valid":false}},"order":["n","t"],"returns":{"type":"number","unit":"1"}}"#;
     let d = m.define("calc.example.net/then", r#"asof(rates.example.org/rate(concat("E", text(1 / n))), t)"#, sig, T0);
     assert!(!d.compiled.asof_dependent);
     let (engine, _) = m.engine();
-    let get = |n: &str, t: &str| engine.get(&cell_ref("calc.example.net/then", &[("n", num(n)), ("t", instant(t))]), Some(A));
+    let get =
+        |n: &str, t: &str| engine.get(&cell_ref("calc.example.net/then", &[("n", num(n)), ("t", instant(t))]), Some(A));
     // T after the asof: E_FORMULA_FUTURE, though the argument divides by zero.
     assert_eq!(get("0", A2).unwrap(), Answer::NotCovered { fault: Some(Fault::Future) });
     assert_eq!(get("1", A2).unwrap(), Answer::NotCovered { fault: Some(Fault::Future) });

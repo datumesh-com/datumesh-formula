@@ -5,7 +5,9 @@
 //!   the runtime's [`Callees`] (the store), and compiled once per function hash. When a read's
 //!   name resolves, at evaluation, to a function other than the one the body was checked
 //!   against (a callee rebound, or a name read as of an earlier `T`), the body is checked again
-//!   against it (15.8), with the same codes.
+//!   against it (15.8), with the same codes. A body that does not check against the latest
+//!   bindings is checked against those of the evaluation asof (`Inputs::binding`, which relies
+//!   on every callee's name for that evaluation).
 //! - Reads go through the engine: `read_cell`, `read_asof`, `read_slice`, `read_versions` and
 //!   `binding`, which charge them as 15.12 says; the evaluator charges every node and built-in
 //!   to the [`Budget`]. The engine derives the lineage, the manifests, `tx` and `asof`.
@@ -57,6 +59,9 @@ struct Counters {
 /// A check again after a rebinding: the body compiled anew when its types changed, or the code.
 type Recheck = Result<Option<Arc<Compiled>>, Code>;
 
+/// A function hash and the hashes of its callees as an evaluation saw them.
+type PreparedKey = (String, Vec<String>);
+
 /// A descriptor compiled against its callees.
 struct Prepared {
     function: Arc<Function>,
@@ -68,6 +73,9 @@ struct Prepared {
 pub struct FormulaRuntime {
     callees: Arc<dyn Callees + Send + Sync>,
     prepared: Mutex<HashMap<String, Arc<Prepared>>>,
+    /// Descriptors compiled against the bindings an evaluation saw: (function hash, callee
+    /// hashes) to the compiled body.
+    prepared_at: Mutex<HashMap<PreparedKey, Arc<Prepared>>>,
     /// Checks again after a rebinding: (function hash, name, callee hash) to the result.
     rechecked: Mutex<HashMap<(String, String, String), Recheck>>,
     functions: Mutex<HashMap<String, Arc<Function>>>,
@@ -99,6 +107,7 @@ impl FormulaRuntime {
         FormulaRuntime {
             callees,
             prepared: Mutex::new(HashMap::new()),
+            prepared_at: Mutex::new(HashMap::new()),
             rechecked: Mutex::new(HashMap::new()),
             functions: Mutex::new(HashMap::new()),
             counters: Counters::default(),
@@ -151,6 +160,44 @@ impl FormulaRuntime {
         Ok(p)
     }
 
+    /// The descriptor checked against its callees as bound as of the evaluation asof (the
+    /// engine's `binding`, which relies on each name as a read does): for a body that does not
+    /// check against the latest bindings, at an asof where an earlier one holds.
+    fn prepare_at(
+        &self,
+        d: &FunctionDescriptor,
+        name: &str,
+        inputs: &mut dyn Inputs,
+    ) -> Result<Arc<Prepared>, EvalError> {
+        let value = d.to_value();
+        let function = Arc::new(Function::from_value(&value).map_err(|e| EvalError::Runtime(e.to_string()))?);
+        let mut env = Env::new(name, function.signature.clone());
+        let mut hashes = Vec::new();
+        for callee in &d.inputs {
+            if callee == name {
+                continue;
+            }
+            if let Some(b) = inputs.binding(callee, None)? {
+                let f = self.function_of(&b.fn_hash, &b.descriptor)?;
+                env.functions.insert(callee.clone(), (*f).clone());
+                hashes.push(b.fn_hash);
+            } else {
+                hashes.push(String::new());
+            }
+        }
+        let key = (function.hash.clone(), hashes);
+        if let Some(p) = self.prepared_at.lock().unwrap_or_else(|p| p.into_inner()).get(&key) {
+            return Ok(p.clone());
+        }
+        let compiled = Arc::new(check_descriptor(name, &value, &env).map_err(|e| match e {
+            DefineError::Formula(e) => runtime_error(e.code, &e.detail),
+            other => EvalError::Runtime(other.to_string()),
+        })?);
+        let p = Arc::new(Prepared { function, env, compiled });
+        self.prepared_at.lock().unwrap_or_else(|p| p.into_inner()).insert(key, p.clone());
+        Ok(p)
+    }
+
     /// The body checked again with `name` meaning `function` (15.8).
     fn recheck(&self, p: &Prepared, name: &str, function: &Function) -> Result<Option<Arc<Compiled>>, Code> {
         let key = (p.function.hash.clone(), name.to_string(), function.hash.clone());
@@ -196,10 +243,12 @@ impl Runtime for FormulaRuntime {
     ) -> Result<Scalar, EvalError> {
         self.counters.attempts.fetch_add(1, Ordering::Relaxed);
         let name = cell.function_name();
-        let p = self.prepare(descriptor, &name).map_err(|e| match e {
-            DefineError::Formula(e) => runtime_error(e.code, &e.detail),
-            other => EvalError::Runtime(other.to_string()),
-        })?;
+        let p = match self.prepare(descriptor, &name) {
+            Ok(p) => p,
+            // Against the latest bindings the body does not check: against those of the asof.
+            Err(DefineError::Formula(_)) => self.prepare_at(descriptor, &name, inputs)?,
+            Err(other) => return Err(EvalError::Runtime(other.to_string())),
+        };
         let mut args = Args::new();
         for (k, a) in &cell.args {
             match a {
