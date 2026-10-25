@@ -39,9 +39,11 @@ fn a_rebound_callee_is_checked_again_and_evaluated_with_its_types() {
         let (b, r) = receipt(engine.get(&cell_ref("calc.example.net/later", &t), Some(A)));
         assert_eq!(r.value().lexical(), "2026-01-10T00:30:00.000000Z");
         assert_eq!(datumesh_core::verify(&b, &m.keys, Some(&engine), None).level, Some(Level::Recomputed));
+        m.dump("runtime", &b);
         let (b, r) = receipt(engine.get(&cell_ref("calc.example.net/later", &t), Some(A2)));
         assert_eq!(r.value().lexical(), "2026-01-10T02:00:00.000000Z");
         assert_eq!(datumesh_core::verify(&b, &m.keys, Some(&engine), None).level, Some(Level::Recomputed));
+        m.dump("runtime", &b);
     }
 }
 

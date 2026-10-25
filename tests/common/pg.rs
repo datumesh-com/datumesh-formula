@@ -163,6 +163,8 @@ pub struct Mesh {
     pub store: Arc<PgStore>,
     pub keys: Keys,
     pub clock: TestClock,
+    /// The hosts whose key documents the store and `keys` hold.
+    pub hosts: Vec<String>,
 }
 
 impl Mesh {
@@ -170,7 +172,7 @@ impl Mesh {
     pub fn new(hosts: &[&str]) -> Mesh {
         let db = TestDb::migrated();
         let store = Arc::new(db.store());
-        let mut m = Mesh { db, store, keys: Keys::new(), clock: TestClock::new(NOW) };
+        let mut m = Mesh { db, store, keys: Keys::new(), clock: TestClock::new(NOW), hosts: Vec::new() };
         m.add_host(MESH);
         for h in hosts {
             m.add_host(h);
@@ -183,6 +185,47 @@ impl Mesh {
             self.store.put_namespace(host, &key_doc(host), KEYS_FROM).unwrap();
         }
         self.keys.insert_response(host, 200, Some(&key_doc(host)));
+        if !self.hosts.iter().any(|h| h == host) {
+            self.hosts.push(host.to_string());
+        }
+    }
+
+    /// With `FORMULA_CROSSCHECK_DIR` set, appends a receipt the engine signed (and that the
+    /// test verified at recomputed) to `<dir>/<test>.jsonl` for `tools/crosscheck.sh`: one line
+    /// `{"hash", "keys": {host: key document text}, "manifests": {entry: manifest text},
+    /// "receipt": receipt text}`, the manifests of its slice entries from the store.
+    pub fn dump(&self, test: &str, bytes: &[u8]) {
+        use std::io::Write;
+        let Ok(dir) = std::env::var("FORMULA_CROSSCHECK_DIR") else { return };
+        if dir.is_empty() {
+            return;
+        }
+        std::fs::create_dir_all(&dir).unwrap();
+        let r = Receipt::from_json(bytes).unwrap();
+        let keys: Vec<(String, Value)> = self
+            .hosts
+            .iter()
+            .map(|h| (h.clone(), Value::String(String::from_utf8(key_doc(h)).unwrap())))
+            .collect();
+        let manifests: Vec<(String, Value)> = r
+            .inputs()
+            .iter()
+            .filter(|e| e.starts_with("slice:"))
+            .map(|e| {
+                let m = self.store.manifest(e).expect("the manifest of a slice entry is stored");
+                (e.clone(), Value::String(String::from_utf8(m.into_owned()).unwrap()))
+            })
+            .collect();
+        let line = Value::Object(vec![
+            ("hash".into(), Value::String(r.hash().to_string())),
+            ("keys".into(), Value::Object(keys)),
+            ("manifests".into(), Value::Object(manifests)),
+            ("receipt".into(), Value::String(String::from_utf8(bytes.to_vec()).unwrap())),
+        ]);
+        let mut text = line.to_jcs();
+        text.push(b'\n');
+        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(format!("{dir}/{test}.jsonl")).unwrap();
+        f.write_all(&text).unwrap();
     }
 
     pub fn shared(&self) -> Arc<dyn Store + Send + Sync> {

@@ -28,10 +28,12 @@ const A: &str = "2026-06-01T00:00:00.000000Z";
 
 const N1: &str = r#"{"type":"number","unit":"1","valid":false}"#;
 
+/// The receipt verifies at recomputed with the engine as resolver; it joins the cross-check set.
 fn recomputes(m: &Mesh, engine: &datumesh_engine::Engine, bytes: &[u8]) {
     let r = verify(bytes, &m.keys, Some(engine), None);
     assert_eq!(r.level, Some(Level::Recomputed), "{:?}", r.error());
     assert_eq!(r.code, None);
+    m.dump("brief", bytes);
 }
 
 // ---------------------------------------------------------------------------------------------

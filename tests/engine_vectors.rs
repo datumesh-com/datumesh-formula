@@ -217,6 +217,7 @@ fn check_vector(path: &str, v: &Value) -> Result<(), String> {
             if verified.level != Some(datumesh_core::Level::Recomputed) {
                 problems.push(format!("verifies at {:?}: {:?}", verified.level, verified.error()));
             }
+            mesh.dump(common::string(v, "kind").unwrap(), &bytes);
         }
         other => problems.push(format!("answer {other:?}")),
     }

@@ -15,5 +15,5 @@ fi
 exec docker run --rm -i --network datumesh -v "$HOME/.cache/datumesh-cargo:/usr/local/cargo/registry" -v "$root:/w" -w /w \
   -e CARGO_TARGET_DIR="/w/target-$tag" -e CARGO_TERM_COLOR=never \
   -e DATABASE_URL="${DATABASE_URL:-postgres://postgres:postgres@datumesh-pg:5432/postgres}" \
-  -e RUSTDOCFLAGS -e RUST_TEST_THREADS -e FORMULA_FUZZ_CASES -e FORMULA_ROUNDTRIP_CASES -e FORMULA_ENGINE_CASES \
+  -e RUSTDOCFLAGS -e RUST_TEST_THREADS -e FORMULA_FUZZ_CASES -e FORMULA_ROUNDTRIP_CASES -e FORMULA_ENGINE_CASES -e FORMULA_CROSSCHECK_DIR \
   "$image" cargo "$@"
