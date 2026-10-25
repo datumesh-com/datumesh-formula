@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use datumesh_core::json::{self, Value};
-use datumesh_core::{Arg, Args, CellRef, Keys, Receipt, ReceiptBuilder, Scalar, SigningKey, Type};
+use datumesh_core::{Arg, Args, CellRef, Keys, Receipt, ReceiptBuilder, Resolver, Scalar, SigningKey, Type};
 use datumesh_engine::{Answer, Clock, Engine, EngineBuilder, EngineError};
 use datumesh_formula::definition::{define_function, publish, Definition};
 use datumesh_formula::runtime::FormulaRuntime;
@@ -29,6 +29,8 @@ pub const SUMMARY: &str = "Computed by the Datumesh formula reference evaluator.
 /// The start of every test key's window, and the earliest `issued` of a computed receipt.
 pub const KEYS_FROM: &str = "2020-01-01T00:00:00.000000Z";
 pub const MIN_INSTANT: &str = "0001-01-01T00:00:00.000000Z";
+/// The clock of a mesh until a test sets it: after every asof the tests request.
+pub const NOW: &str = "2026-12-31T00:00:00.000000Z";
 
 pub fn admin_url() -> String {
     std::env::var("DATABASE_URL").expect("DATABASE_URL names a PostgreSQL 16 database (see README)")
@@ -168,7 +170,7 @@ impl Mesh {
     pub fn new(hosts: &[&str]) -> Mesh {
         let db = TestDb::migrated();
         let store = Arc::new(db.store());
-        let mut m = Mesh { db, store, keys: Keys::new(), clock: TestClock::new("2026-01-01T00:00:00.000000Z") };
+        let mut m = Mesh { db, store, keys: Keys::new(), clock: TestClock::new(NOW) };
         m.add_host(MESH);
         for h in hosts {
             m.add_host(h);
@@ -230,8 +232,9 @@ impl Mesh {
     /// Record the publisher's version of a stored cell: `value` at `tx`, as of `asof`.
     pub fn record(&self, name: &str, cell_args: &[(&str, Scalar)], value: Scalar, tx: &str, asof: &str) -> String {
         let (ns, f) = name.rsplit_once('/').unwrap();
-        let fn_hash = self.store.resolve_name(name, tx).unwrap().expect("bound");
-        let descriptor = datumesh_core::FunctionDescriptor::from_json(&self.store.descriptor(&fn_hash).unwrap()).unwrap();
+        let fn_hash = self.store.resolve_name(name, "9999-12-31T23:59:59.999999Z").unwrap().expect("bound");
+        let descriptor =
+            datumesh_core::FunctionDescriptor::from_json(&self.store.descriptor(&fn_hash).unwrap()).unwrap();
         let a = args(cell_args);
         let valid: Args = a
             .iter()

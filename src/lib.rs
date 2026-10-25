@@ -32,6 +32,7 @@ pub mod calendar;
 mod casing_table;
 mod check;
 pub mod decimal;
+pub mod definition;
 mod env;
 mod error;
 pub mod eval;
@@ -40,6 +41,8 @@ pub mod memory;
 pub mod names;
 mod parse;
 mod resolve;
+#[cfg(feature = "engine")]
+pub mod runtime;
 pub mod text;
 pub mod units;
 
@@ -49,7 +52,7 @@ use datumesh_core::Type;
 pub use ast::{Ast, Node, NodeId, Op, ReadArg};
 pub use check::{KeyTy, NumUnit, Ty};
 pub use env::{ArgDecl, Env, EnvError, Extent, Function, Signature, UnitDecl, UnitSide};
-pub use error::{Code, Error};
+pub use error::{Code, DefineError, Error};
 pub use parse::{BUILTINS as BUILTIN_NAMES, FORBIDDEN as FORBIDDEN_NAMES, MAX_NESTING};
 pub use resolve::MAX_NODES;
 
@@ -92,6 +95,11 @@ pub struct Compiled {
 }
 
 impl Compiled {
+    /// Whether two compilations of one body give every node the same type and unit.
+    pub fn types_eq(&self, other: &Compiled) -> bool {
+        self.types == other.types
+    }
+
     /// The checker's type of a node, when it has one.
     pub fn type_of(&self, id: NodeId) -> Option<&Ty> {
         self.types.get(id as usize).and_then(Option::as_ref)
@@ -107,6 +115,27 @@ pub fn canonical_ast(source: &str, env: Option<&Env>) -> Result<Ast, Error> {
         let tree = parse::parse(&tokens)?;
         resolve::resolve(&tree, env)
     })
+}
+
+/// The fully qualified names `source` reads (aliases resolved through `aliases`; an unknown
+/// alias is left for resolution to report), after lexing and parsing it.
+pub(crate) fn read_names(
+    source: &str,
+    aliases: &std::collections::BTreeMap<String, String>,
+) -> Result<std::collections::BTreeSet<String>, Error> {
+    let tokens = lex::lex(source)?;
+    let tree = deep(tokens.len(), || parse::parse(&tokens))?;
+    let mut names = std::collections::BTreeSet::new();
+    for node in &tree.nodes {
+        if let parse::PNode::Read { name, alias, .. } = node {
+            if !*alias {
+                names.insert(name.clone());
+            } else if let Some(n) = aliases.get(name) {
+                names.insert(n.clone());
+            }
+        }
+    }
+    Ok(names)
 }
 
 /// Run `f`, on a thread with a large stack when the body is long enough to nest deeply: the
@@ -138,28 +167,32 @@ fn deep<T: Send>(tokens: usize, f: impl FnOnce() -> T + Send) -> T {
     }
 }
 
-/// Check a formula descriptor (15.6): it must have `signature.order` (`E_FORMULA_ORDER`), its
-/// body must define against `env`'s functions and aliases with the descriptor's own signature,
-/// be the print of its canonical AST followed by one LF (`E_FORMULA_NOT_CANONICAL`), and declare
-/// exactly the derived inputs (`E_FORMULA_INPUTS`), in that order. A descriptor of another
-/// language, or one this crate cannot read, is `E_FORMULA_SYNTAX`.
-pub fn check_descriptor(name: &str, descriptor: &Value, env: &Env) -> Result<Compiled, Error> {
+/// Check a formula descriptor (15.6), in this order: its canonical form of section 7
+/// ([`DefineError::Descriptor`], with the core's code), `signature.order` (`E_FORMULA_ORDER`),
+/// its body defined against `env`'s functions and aliases with the descriptor's own signature
+/// (the body's codes), the body the print of its canonical AST followed by one LF
+/// (`E_FORMULA_NOT_CANONICAL`), and exactly the derived inputs (`E_FORMULA_INPUTS`). A
+/// descriptor of another language is `E_FORMULA_SYNTAX`.
+pub fn check_descriptor(name: &str, descriptor: &Value, env: &Env) -> Result<Compiled, DefineError> {
+    datumesh_core::FunctionDescriptor::from_value(descriptor).map_err(DefineError::Descriptor)?;
     let f = Function::from_value(descriptor).map_err(|e| Error::new(Code::Syntax, e.0))?;
     if f.lang != "formula" {
-        return Err(Error::new(Code::Syntax, format!("code.lang is {}, not formula", f.lang)));
+        return Err(Error::new(Code::Syntax, format!("code.lang is {}, not formula", f.lang)).into());
     }
     if f.signature.order.is_none() {
-        return Err(Error::new(Code::Order, "a formula descriptor declares signature.order"));
+        return Err(Error::new(Code::Order, "a formula descriptor declares signature.order").into());
     }
     let mut env = env.clone();
     env.name = name.to_string();
     env.signature = f.signature.clone();
     let c = define(&f.body, &env)?;
     if c.body != f.body {
-        return Err(Error::new(Code::NotCanonical, format!("the body is not the print of its AST: {:?}", c.body)));
+        return Err(
+            Error::new(Code::NotCanonical, format!("the body is not the print of its AST: {:?}", c.body)).into()
+        );
     }
     if c.inputs != f.inputs {
-        return Err(Error::new(Code::Inputs, format!("inputs are {:?}, derived {:?}", f.inputs, c.inputs)));
+        return Err(Error::new(Code::Inputs, format!("inputs are {:?}, derived {:?}", f.inputs, c.inputs)).into());
     }
     Ok(c)
 }

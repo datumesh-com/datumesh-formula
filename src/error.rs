@@ -147,3 +147,55 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+/// Why a formula function could not be defined, or a formula descriptor fails its checks
+/// (15.6): the descriptor's canonical form of section 7 (a core code such as `E_SCHEMA` or
+/// `E_CANON_SET`), a formula code, or the callee source's own failure.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DefineError {
+    /// The descriptor is not in the canonical form of section 7.
+    Descriptor(datumesh_core::Error),
+    /// A formula code of 15.11.
+    Formula(Error),
+    /// The callees could not be read (a store failure).
+    Callees(String),
+}
+
+impl DefineError {
+    /// The code: the core's (section 7) or the formula's; for a callee source's failure, which
+    /// has no code, the text `callees unavailable`.
+    pub fn code(&self) -> &str {
+        match self {
+            DefineError::Descriptor(e) => e.code_str(),
+            DefineError::Formula(e) => e.code.as_str(),
+            DefineError::Callees(_) => "callees unavailable",
+        }
+    }
+
+    /// The formula code, when it is one.
+    pub fn formula_code(&self) -> Option<Code> {
+        match self {
+            DefineError::Formula(e) => Some(e.code),
+            _ => None,
+        }
+    }
+}
+
+impl From<Error> for DefineError {
+    fn from(e: Error) -> DefineError {
+        DefineError::Formula(e)
+    }
+}
+
+impl fmt::Display for DefineError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DefineError::Descriptor(e) => write!(f, "{}: {}", e.code_str(), e.detail()),
+            DefineError::Formula(e) => write!(f, "{e}"),
+            DefineError::Callees(m) => write!(f, "the callees could not be read: {m}"),
+        }
+    }
+}
+
+impl std::error::Error for DefineError {}

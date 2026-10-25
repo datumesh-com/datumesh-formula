@@ -226,6 +226,18 @@ impl Ast {
         Some(ast)
     }
 
+    /// Whether the body reads the evaluation asof: `asof()`, or `latest` with a bound (15.12:
+    /// the function is asof-dependent). The checker derives the same flag.
+    pub fn reads_asof(&self) -> bool {
+        self.nodes.iter().any(|n| match n {
+            Node::Call { fn_name, args, named } => {
+                (fn_name == "asof" && args.is_empty())
+                    || (fn_name == "latest" && named.iter().any(|(k, _)| k == "bound"))
+            }
+            _ => false,
+        })
+    }
+
     /// The root node's id.
     pub fn root(&self) -> NodeId {
         self.root

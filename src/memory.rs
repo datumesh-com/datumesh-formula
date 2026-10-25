@@ -180,6 +180,21 @@ impl MemoryWorld {
         Ok(())
     }
 
+    /// The computed cells read as inputs so far and evaluated with a value: each cell, the asof
+    /// it was evaluated as of, and its version (the computed receipt's hash, `tx` and `asof`), by cell and asof.
+    pub fn evaluated(&self) -> Vec<(CellKey, String, Version)> {
+        let mut out: Vec<(CellKey, String, Version)> = self
+            .memo
+            .iter()
+            .filter_map(|((cell, at), r)| match r {
+                Ok(Some(v)) => Some((cell.clone(), at.clone(), v.clone())),
+                _ => None,
+            })
+            .collect();
+        out.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
+        out
+    }
+
     /// A computed receipt produced during evaluation, by hash.
     pub fn computed(&self, hash: &str) -> Option<&Computed> {
         self.computed.get(hash)
@@ -201,7 +216,9 @@ impl MemoryWorld {
         }
         // Checked against the bindings as they are now: a callee rebound since define time is
         // checked again, with the same codes (15.8).
-        let c = Arc::new(crate::check_descriptor(name, &f.value, &env).map_err(|e| e.code)?);
+        let c = Arc::new(
+            crate::check_descriptor(name, &f.value, &env).map_err(|e| e.formula_code().unwrap_or(Code::Syntax))?,
+        );
         self.compiled.insert(name.to_string(), c.clone());
         Ok(c)
     }
@@ -396,6 +413,10 @@ impl World for MemoryWorld {
     fn charge(&mut self, n: u64) -> Result<(), Code> {
         self.fuel.charge(n)
     }
+
+    fn asof(&mut self) -> Result<String, Stop<Self::Error>> {
+        Ok(self.asof.clone())
+    }
 }
 
 /// The result of a `formula-eval` or `excel` vector's evaluation.
@@ -405,6 +426,9 @@ pub struct VectorResult {
     pub computed: Computed,
     /// Fuel used.
     pub fuel_used: u64,
+    /// Every computed cell read as an input and evaluated with a value
+    /// ([`MemoryWorld::evaluated`]).
+    pub evaluated: Vec<(CellKey, String, Version)>,
 }
 
 /// Evaluate the cell of a `formula-eval` or `excel` vector (`world`, `cell`, `asof`, `fuel`?).
@@ -442,6 +466,7 @@ pub fn run_vector(v: &Value) -> Result<Result<VectorResult, Code>, EnvError> {
     }
     world.fuel = Fuel::new(limit);
     let key = CellKey { name: name.to_string(), args };
-    let r = world.compute(&key, asof).map(|computed| VectorResult { computed, fuel_used: world.fuel.used });
-    Ok(r)
+    let r = world.compute(&key, asof);
+    let evaluated = world.evaluated();
+    Ok(r.map(|computed| VectorResult { computed, fuel_used: world.fuel.used, evaluated }))
 }

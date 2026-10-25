@@ -18,9 +18,10 @@ mod common;
 #[path = "common/pg.rs"]
 mod pg;
 
-use pg::{cell_ref, date, instant, num, receipt, text, Mesh};
 use datumesh_core::{verify, ErrorCode, Fault, Level, Manifest, Receipt, Resolver};
 use datumesh_engine::Answer;
+use datumesh_store::Store;
+use pg::{cell_ref, date, instant, num, receipt, text, Mesh};
 
 const T0: &str = "2026-01-01T00:00:00.000000Z";
 const A: &str = "2026-06-01T00:00:00.000000Z";
@@ -58,7 +59,7 @@ fn fib_90_is_exact_and_every_fib_is_one_memoised_cell() {
     let (_, r89) = receipt(engine.get(&fib("89"), Some(A)));
     let (_, r88) = receipt(engine.get(&fib("88"), Some(A)));
     assert_eq!(r89.value().lexical(), "1779979416004714189");
-    let mut want = vec![r88.hash().to_string(), r89.hash().to_string()];
+    let mut want = [r88.hash().to_string(), r89.hash().to_string()];
     want.sort();
     assert_eq!(r.inputs(), &want[..]);
     assert_eq!(rt.stats().completed, 91, "answered from the memo");
@@ -77,7 +78,7 @@ fn a_bootstrapped_curve_over_ten_tenors() {
     let m = Mesh::new(&["rates.example.org"]);
     let par_sig = format!(r#"{{"args":{{"tenor":{N1}}},"order":["tenor"],"returns":{{"type":"number","unit":"1"}}}}"#);
     m.stored("rates.example.org/par", &par_sig, T0);
-    let pars = ["0.0300", "0.0320", "0.0335", "0.0347", "0.0358", "0.0366", "0.0373", "0.0379", "0.0384", "0.0388"];
+    let pars = ["0.03", "0.032", "0.0335", "0.0347", "0.0358", "0.0366", "0.0373", "0.0379", "0.0384", "0.0388"];
     for (i, p) in pars.iter().enumerate() {
         let tx = format!("2026-01-02T00:00:{:02}.000000Z", i);
         m.record("rates.example.org/par", &[("tenor", num(&(i + 1).to_string()))], num(p), &tx, &tx);
@@ -91,7 +92,7 @@ fn a_bootstrapped_curve_over_ten_tenors() {
     let check_sig = format!(r#"{{"args":{{"tenor":{N1}}},"order":["tenor"],"returns":"boolean"}}"#);
     m.define(
         "calc.example.net/at_par",
-        "ABS(rates.example.org/par(tenor) * SUM(calc.example.net/df([1..tenor])) + calc.example.net/df(tenor) - 1) < 1e-30",
+        "ABS(rates.example.org/par(tenor) * SUM(calc.example.net/df([1..tenor])) + calc.example.net/df(tenor) - 1) < 0.000000000000000000000000000001",
         &check_sig,
         T0,
     );
@@ -111,8 +112,10 @@ fn a_bootstrapped_curve_over_ten_tenors() {
         let (_, ok) = receipt(engine.get(&cell_ref("calc.example.net/at_par", &[("tenor", tenor)]), Some(A)));
         assert_eq!(ok.value().lexical(), "true", "tenor {t}");
     }
-    // The factors were not evaluated again: ten df cells in all.
-    assert_eq!(rt.stats().completed, 10 + 10 + 10, "{:?}", rt.stats());
+    // The factors were not evaluated again: ten df cells, ten at_par cells, and the eleven
+    // recomputations of the verifications (the engine as resolver evaluates the cell itself,
+    // its inputs from the memo).
+    assert_eq!(rt.stats().completed, 10 + 10 + 11, "{:?}", rt.stats());
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -142,7 +145,13 @@ fn a_weighted_mean_over_1000_stations() {
         sum_tw += t * w;
         sum_w += w;
         let temp = format!("{}.{:02}", t / 100, t % 100);
-        m.record("weather.example.org/temp", &[("station", station(i))], num(temp.trim_end_matches('0').trim_end_matches('.')), &tx(i), &tx(i));
+        m.record(
+            "weather.example.org/temp",
+            &[("station", station(i))],
+            num(temp.trim_end_matches('0').trim_end_matches('.')),
+            &tx(i),
+            &tx(i),
+        );
         m.record("weather.example.org/weight", &[("station", station(i))], num(&w.to_string()), &tx(i), &tx(i));
     }
     let body = "SUM(weather.example.org/temp(*) * weather.example.org/weight(*)) / SUM(weather.example.org/weight(*))";
@@ -244,7 +253,9 @@ fn last_before_with_a_staleness_bound() {
     let sig = r#"{"args":{"station":{"type":"string","valid":false},"t":{"type":"instant","valid":true}},"order":["station","t"],"returns":{"type":"number","unit":"degC"}}"#;
     m.define("calc.example.net/reading", "LAST_BEFORE(weather.example.org/temp(station, *), t, 10 min)", sig, T0);
     let (engine, _) = m.engine();
-    let at = |s: &str, t: &str| engine.get(&cell_ref("calc.example.net/reading", &[("station", text(s)), ("t", instant(t))]), Some(A));
+    let at = |s: &str, t: &str| {
+        engine.get(&cell_ref("calc.example.net/reading", &[("station", text(s)), ("t", instant(t))]), Some(A))
+    };
     let (b, r) = receipt(at("kew", "2026-03-01T10:15:00.000000Z"));
     assert_eq!(r.value().lexical(), "11.6");
     // The lineage is the narrowed slice: kew's readings in [t - 10 min..t], one member.
@@ -293,9 +304,16 @@ fn latest_is_a_pure_function_of_the_slice_and_the_asof() {
         engine.get(&cell_ref("calc.example.net/fresh", &kew), Some(a3)).unwrap(),
         Answer::NotCovered { fault: Some(Fault::Absent) }
     );
-    let (_, r) = receipt(engine.get(&cell_ref("calc.example.net/fresh", &[("station", text("ely"))]), Some(a2)));
+    // ely's last reading (10:14:55) is within 15 minutes of 10:20, not of 10:30.
+    let ely = [("station", text("ely"))];
+    let a4 = "2026-03-01T10:20:00.000000Z";
+    let (_, r) = receipt(engine.get(&cell_ref("calc.example.net/fresh", &ely), Some(a4)));
     assert_eq!(r.value().lexical(), "9.3");
-    assert_eq!(r.asof(), a2);
+    assert_eq!(r.asof(), a4);
+    assert_eq!(
+        engine.get(&cell_ref("calc.example.net/fresh", &ely), Some(a2)).unwrap(),
+        Answer::NotCovered { fault: Some(Fault::Absent) }
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -305,9 +323,10 @@ fn latest_is_a_pure_function_of_the_slice_and_the_asof() {
 fn a_running_total_over_3650_days() {
     let mut m = Mesh::new(&["data.example.org"]);
     m.add_host("data.example.org");
-    let dsig = r#"{"args":{"date":{"type":"date","valid":true}},"order":["date"],"returns":{"type":"number","unit":"EUR"}}"#;
+    let dsig =
+        r#"{"args":{"date":{"type":"date","valid":true}},"order":["date"],"returns":{"type":"number","unit":"EUR"}}"#;
     m.stored("data.example.org/daily", dsig, T0);
-    let days: Vec<String> = (0..3650).map(|i| day(i)).collect();
+    let days: Vec<String> = (0..3650).map(day).collect();
     let mut cents = Vec::new();
     for (i, d) in days.iter().enumerate() {
         let c = 100 + (i as i64 * 37) % 900; // 1.00 .. 9.99 EUR

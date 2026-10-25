@@ -71,7 +71,6 @@ pub const VALUES: &[(&str, Type, &[&str])] = &[
     ("plat", Type::Number, &["51.5", "0"]),
 ];
 
-
 /// The union world as functions (name, descriptor, bound) and stored receipts, one receipt per
 /// cell and `tx` (the first in vector order: a store keeps one version per cell and `tx`), in
 /// `tx` order per cell; and the in-memory world of exactly those.

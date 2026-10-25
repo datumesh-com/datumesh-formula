@@ -5,6 +5,9 @@
 //! same value, lineage, `tx`, receipt `asof` and receipt hash (when no computed input is
 //! involved, whose `issued` differs), the same code otherwise, and the same fuel.
 //!
+//! The engines' work limit is out of the way: a single charge past the fuel (`ln` costs 80) is
+//! past the default work limit too (16 times the fuel), which the engine reports first.
+//!
 //! `FORMULA_ENGINE_CASES` sets the count (default 200).
 #![cfg(feature = "engine")]
 
@@ -15,7 +18,6 @@ mod pg;
 use std::collections::BTreeMap;
 
 use common::generate::{body, Rng, KINDS};
-use pg::{Mesh, KEYS_FROM};
 use common::union::{signature, union_parts, VALUES};
 use datumesh_core::json::Value;
 use datumesh_core::{Arg, CellRef, Receipt, Scalar};
@@ -23,6 +25,7 @@ use datumesh_engine::{Answer, EngineError};
 use datumesh_formula::definition::{define_function, publish};
 use datumesh_formula::eval::{Args, CellKey, Fuel};
 use datumesh_formula::{define, Code, Env, Signature};
+use pg::{Mesh, KEYS_FROM};
 
 const BIND: &str = "2026-01-01T00:00:00.000000Z";
 
@@ -52,9 +55,10 @@ fn code_of(a: &Result<Answer, EngineError>) -> Option<String> {
         Err(EngineError::BudgetExceeded { .. }) => Some("E_FORMULA_BUDGET".to_string()),
         Err(EngineError::Cycle { .. }) => Some("E_FORMULA_CYCLE".to_string()),
         Err(EngineError::DepthExceeded { .. }) => Some("E_FORMULA_DEPTH".to_string()),
-        Err(EngineError::Runtime { message, .. }) => {
-            message.split(|c: char| !(c.is_ascii_uppercase() || c == '_')).find(|w| w.starts_with("E_FORMULA_")).map(str::to_string)
-        }
+        Err(EngineError::Runtime { message, .. }) => message
+            .split(|c: char| !(c.is_ascii_uppercase() || c == '_'))
+            .find(|w| w.starts_with("E_FORMULA_"))
+            .map(str::to_string),
         _ => None,
     }
 }
@@ -141,7 +145,7 @@ fn generated_bodies_through_two_fresh_engines() {
         let key = CellKey { name: name.clone(), args: c.args.clone() };
         let mem = world.compute(&key, c.asof);
         let mem_fuel = world.fuel.used;
-        let inner = world.evaluated().len() > 1;
+        let inner = world.evaluated().iter().any(|(k, _, _)| *k != key);
         let issued = match &mem {
             Ok(x) if x.outcome.receipt_asof.as_str() > KEYS_FROM => x.outcome.receipt_asof.clone(),
             _ => KEYS_FROM.to_string(),
@@ -156,12 +160,19 @@ fn generated_bodies_through_two_fresh_engines() {
             asof: None,
         };
         let (ra, rb) = std::thread::scope(|s| {
-            let ha = s.spawn(|| ma.builder().0.fuel(c.limit).build().unwrap().get(&cell, Some(c.asof)));
-            let hb = s.spawn(|| mb.builder().0.fuel(c.limit).build().unwrap().get(&cell, Some(c.asof)));
+            let ha =
+                s.spawn(|| ma.builder().0.fuel(c.limit).work_limit(u64::MAX).build().unwrap().get(&cell, Some(c.asof)));
+            let hb =
+                s.spawn(|| mb.builder().0.fuel(c.limit).work_limit(u64::MAX).build().unwrap().get(&cell, Some(c.asof)));
             (ha.join().unwrap(), hb.join().unwrap())
         });
         if answer_text(&ra) != answer_text(&rb) {
-            failures.push(format!("{}: the two engines differ:\n  {}\n  {}", c.src, answer_text(&ra), answer_text(&rb)));
+            failures.push(format!(
+                "{}: the two engines differ:\n  {}\n  {}",
+                c.src,
+                answer_text(&ra),
+                answer_text(&rb)
+            ));
             continue;
         }
         match (&mem, &ra) {
@@ -211,11 +222,12 @@ fn generated_bodies_through_two_fresh_engines() {
             let d2 = define_function(&name2, &c.src, &sig, &BTreeMap::new(), &*ma.store, BIND).unwrap();
             publish(&*ma.store, &d2, BIND).unwrap();
             let cell2 = CellRef { fn_name: format!("f{}", c.i), ..cell.clone() };
-            let short = ma.builder().0.fuel(mem_fuel - 1).build().unwrap().get(&cell2, Some(c.asof));
+            let short =
+                ma.builder().0.fuel(mem_fuel - 1).work_limit(u64::MAX).build().unwrap().get(&cell2, Some(c.asof));
             if !matches!(short, Err(EngineError::BudgetExceeded { .. })) {
                 failures.push(format!("{}: fuel {} gives {}", c.src, mem_fuel - 1, answer_text(&short)));
             }
-            let exact = ma.builder().0.fuel(mem_fuel).build().unwrap().get(&cell2, Some(c.asof));
+            let exact = ma.builder().0.fuel(mem_fuel).work_limit(u64::MAX).build().unwrap().get(&cell2, Some(c.asof));
             if !matches!(exact, Ok(Answer::Receipt(_))) {
                 failures.push(format!("{}: fuel {mem_fuel} gives {}", c.src, answer_text(&exact)));
             }

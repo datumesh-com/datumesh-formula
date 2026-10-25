@@ -11,12 +11,12 @@ mod pg;
 
 use std::collections::BTreeMap;
 
-use pg::Mesh;
 use datumesh_core::json;
-use datumesh_core::FunctionDescriptor;
+use datumesh_core::{FunctionDescriptor, Resolver};
 use datumesh_formula::definition::{define_function, publish, Callees};
 use datumesh_formula::{check_descriptor, Env, Signature};
 use datumesh_store::Store;
+use pg::Mesh;
 
 const T0: &str = "2026-01-01T00:00:00.000000Z";
 const T1: &str = "2026-02-01T00:00:00.000000Z";
@@ -58,10 +58,17 @@ fn the_canonical_descriptor() {
     assert_eq!(d.fn_hash, datumesh_core::sha256_hex(&d.bytes));
     assert_eq!(FunctionDescriptor::from_json(&d.bytes).unwrap(), d.descriptor);
     let mut env = Env::new("calc.example.net/convert", Signature::from_value(&sig(CONVERT_SIG)).unwrap());
-    env.add_function("rates.example.org/fx", &sig(&format!(r#"{{"code":{{"body":"","lang":"stored"}},"inputs":[],"signature":{FX_SIG}}}"#))).unwrap();
+    env.add_function(
+        "rates.example.org/fx",
+        &sig(&format!(r#"{{"code":{{"body":"","lang":"stored"}},"inputs":[],"signature":{FX_SIG}}}"#)),
+    )
+    .unwrap();
     check_descriptor("calc.example.net/convert", &json::parse(&d.bytes).unwrap(), &env).unwrap();
     // The callees it was checked against.
-    assert_eq!(d.callees.get("rates.example.org/fx").map(String::as_str), m.store.resolve_name("rates.example.org/fx", T0).unwrap().as_deref());
+    assert_eq!(
+        d.callees.get("rates.example.org/fx").map(String::as_str),
+        m.store.resolve_name("rates.example.org/fx", T0).unwrap().as_deref()
+    );
     // Defining again gives the same bytes.
     let again = define_function("calc.example.net/convert", src, &sig(CONVERT_SIG), &aliases, &*m.store, T0).unwrap();
     assert_eq!(again.bytes, d.bytes);
@@ -71,7 +78,8 @@ fn the_canonical_descriptor() {
 fn publish_stores_and_binds() {
     let m = mesh();
     let src = r#"amount * rates.example.org/fx("EUR", "USD", d)"#;
-    let d = define_function("calc.example.net/convert", src, &sig(CONVERT_SIG), &BTreeMap::new(), &*m.store, T1).unwrap();
+    let d =
+        define_function("calc.example.net/convert", src, &sig(CONVERT_SIG), &BTreeMap::new(), &*m.store, T1).unwrap();
     let h = publish(&*m.store, &d, T1).unwrap();
     assert_eq!(h, d.fn_hash);
     assert_eq!(m.store.resolve_name("calc.example.net/convert", T1).unwrap().as_deref(), Some(h.as_str()));
@@ -103,7 +111,10 @@ fn callees_resolve_as_of_define_time() {
         T0,
     )
     .unwrap();
-    assert_eq!(d.descriptor.body, "if n < 2 then n else calc.example.net/fib(n: n - 1) + calc.example.net/fib(n: n - 2)\n");
+    assert_eq!(
+        d.descriptor.body,
+        "if n < 2 then n else calc.example.net/fib(n: n - 1) + calc.example.net/fib(n: n - 2)\n"
+    );
     assert_eq!(d.descriptor.inputs, ["calc.example.net/fib"]);
 }
 

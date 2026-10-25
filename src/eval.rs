@@ -207,6 +207,22 @@ pub trait World {
 
     /// Charge `n` units of fuel; `E_FORMULA_BUDGET` when the request's budget is exceeded.
     fn charge(&mut self, n: u64) -> Result<(), Code>;
+
+    /// The evaluation asof, for [`evaluate_value`], which asks only when the body needs it:
+    /// `asof()`, a bounded `latest`, and the order of `E_FORMULA_FUTURE` before a failure of the
+    /// cell's arguments in `asof(c, T)` and `versions(c, from, to)` (15.13). [`evaluate`] is
+    /// given the asof and never asks.
+    fn asof(&mut self) -> Result<String, Stop<Self::Error>>;
+
+    /// A read's name resolved to `binding` (as of the evaluation asof, or as of `T` in
+    /// `asof(c, T)`): when the body was compiled against another function for that name, the
+    /// world checks the body again (15.8: "a callee name rebound since define time is checked
+    /// again, with the same codes") and gives the compiled body to continue with, or the code.
+    /// Provided: no check (a world whose bindings are those the body was compiled against).
+    fn rebound(&mut self, name: &str, binding: &Binding) -> Result<Option<Arc<Compiled>>, Stop<Self::Error>> {
+        let _ = (name, binding);
+        Ok(None)
+    }
 }
 
 /// A slice manifest (15.13): the slice object and its members' receipt hashes, ascending.
@@ -257,25 +273,7 @@ pub fn evaluate<W: World + ?Sized>(
     world: &mut W,
 ) -> Result<Outcome, Stop<W::Error>> {
     let a = calendar::parse_instant(asof).ok_or(Stop::Code(Code::Domain))?;
-    let mut scope = Vec::new();
-    for (name, decl) in &function.signature.args {
-        let s = args.get(name).ok_or(Stop::Code(Code::Domain))?;
-        if s.ty() != decl.ty {
-            return Err(Code::Type.into());
-        }
-        scope.push((name.clone(), from_scalar(s)?));
-    }
-    let mut ev = Eval {
-        c: compiled,
-        world,
-        asof: a,
-        scope,
-        lineage: BTreeSet::new(),
-        manifests: BTreeMap::new(),
-        max_tx: None,
-        max_asof: None,
-        bindings: BTreeMap::new(),
-    };
+    let mut ev = Eval::new(compiled, function, args, Some(a), true, world)?;
     let v = ev.node(compiled.ast.root)?;
     let value = to_scalar(&v)?;
     let mut receipt_asof = ev.max_asof.clone();
@@ -296,6 +294,54 @@ pub fn evaluate<W: World + ?Sized>(
         tx: ev.max_tx,
         receipt_asof,
     })
+}
+
+/// Evaluate a defined function at `args` over `world`, giving only the value: the world (the
+/// engine) keeps the lineage, `tx` and `asof` of what it answered, and gives the evaluation
+/// asof only when the body needs it ([`World::asof`]). Faults, fuel and every read are as in
+/// [`evaluate`].
+pub fn evaluate_value<W: World + ?Sized>(
+    compiled: &Compiled,
+    function: &Function,
+    args: &Args,
+    world: &mut W,
+) -> Result<Scalar, Stop<W::Error>> {
+    let mut ev = Eval::new(compiled, function, args, None, false, world)?;
+    let v = ev.node(compiled.ast.root)?;
+    Ok(to_scalar(&v)?)
+}
+
+impl<'a, W: World + ?Sized> Eval<'a, W> {
+    fn new(
+        compiled: &'a Compiled,
+        function: &Function,
+        args: &Args,
+        asof: Option<Micros>,
+        track: bool,
+        world: &'a mut W,
+    ) -> Result<Eval<'a, W>, Stop<W::Error>> {
+        let mut scope = Vec::new();
+        for (name, decl) in &function.signature.args {
+            let s = args.get(name).ok_or(Stop::Code(Code::Domain))?;
+            if s.ty() != decl.ty {
+                return Err(Code::Type.into());
+            }
+            scope.push((name.clone(), from_scalar(s)?));
+        }
+        Ok(Eval {
+            c: compiled,
+            over: None,
+            world,
+            asof,
+            track,
+            scope,
+            lineage: BTreeSet::new(),
+            manifests: BTreeMap::new(),
+            max_tx: None,
+            max_asof: None,
+            bindings: BTreeMap::new(),
+        })
+    }
 }
 
 // -------------------------------------------------------------------------------------------
@@ -444,8 +490,13 @@ fn seconds(a: Micros, b: Micros) -> Decimal {
 
 struct Eval<'a, W: World + ?Sized> {
     c: &'a Compiled,
+    /// The body checked again after a callee was rebound ([`World::rebound`]): its types.
+    over: Option<Arc<Compiled>>,
     world: &'a mut W,
-    asof: Micros,
+    /// The evaluation asof, once known.
+    asof: Option<Micros>,
+    /// Whether lineage and manifests are derived ([`evaluate`]) or left to the world.
+    track: bool,
     scope: Vec<(String, V)>,
     lineage: BTreeSet<String>,
     manifests: BTreeMap<String, Manifest>,
@@ -470,7 +521,39 @@ impl<W: World + ?Sized> Eval<'_, W> {
     }
 
     fn ty(&self, id: NodeId) -> Option<&Ty> {
-        self.c.type_of(id)
+        match &self.over {
+            Some(c) => c.type_of(id),
+            None => self.c.type_of(id),
+        }
+    }
+
+    /// The evaluation asof, asked of the world the first time it is needed.
+    fn now(&mut self) -> R<Micros, W::Error> {
+        if let Some(a) = self.asof {
+            return Ok(a);
+        }
+        let text = self.world.asof()?;
+        let a = calendar::parse_instant(&text).ok_or(Stop::Code(Code::Domain))?;
+        self.asof = Some(a);
+        Ok(a)
+    }
+
+    /// The asof once loaded (`now` was called before).
+    fn known_asof(&self) -> Result<Micros, Code> {
+        self.asof.ok_or(Code::Domain)
+    }
+
+    /// `E_FORMULA_FUTURE` is reported before anything after the times (15.13): when the asof
+    /// is not known yet and a later step failed with a code, `T` after the asof is the failure.
+    fn future_first(&mut self, t: Micros, e: Stop<W::Error>) -> Stop<W::Error> {
+        if !matches!(e, Stop::Code(_)) {
+            return e;
+        }
+        match self.now() {
+            Ok(a) if t > a => Stop::Code(Code::Future),
+            Ok(_) => e,
+            Err(x) => x,
+        }
     }
 
     fn node(&mut self, id: NodeId) -> R<V, W::Error> {
@@ -642,6 +725,9 @@ impl<W: World + ?Sized> Eval<'_, W> {
     fn binding(&mut self, name: &str, at: Option<&str>) -> R<Binding, W::Error> {
         let b = self.world.function(name, at).map_err(Stop::World)?.ok_or(Stop::Code(Code::Unresolved))?;
         self.bindings.insert(name.to_string(), b.start.clone());
+        if let Some(c) = self.world.rebound(name, &b)? {
+            self.over = Some(c);
+        }
         Ok(b)
     }
 
@@ -722,13 +808,15 @@ impl<W: World + ?Sized> Eval<'_, W> {
         let f = b.function.clone();
         let members = self.world.members(&slice)?;
         // Lineage: one entry for the slice.
-        let obj = slice_object(&f, &slice);
-        let mut hashes: Vec<String> = members.iter().map(|(_, v)| v.receipt_hash.clone()).collect();
-        hashes.sort();
-        hashes.dedup();
-        let entry = slice_entry(&obj, &hashes);
-        self.manifests.insert(entry.clone(), Manifest { entry: entry.clone(), slice: obj, members: hashes });
-        self.lineage.insert(entry);
+        if self.track {
+            let obj = slice_object(&f, &slice);
+            let mut hashes: Vec<String> = members.iter().map(|(_, v)| v.receipt_hash.clone()).collect();
+            hashes.sort();
+            hashes.dedup();
+            let entry = slice_entry(&obj, &hashes);
+            self.manifests.insert(entry.clone(), Manifest { entry: entry.clone(), slice: obj, members: hashes });
+            self.lineage.insert(entry);
+        }
         for (_, v) in &members {
             self.note_version(v);
         }
@@ -812,7 +900,7 @@ impl<W: World + ?Sized> Eval<'_, W> {
     #[allow(unused_variables)]
     fn b_asof(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
         if args.is_empty() {
-            return Ok(V::Instant(self.asof));
+            return Ok(V::Instant(self.now()?));
         }
         self.asof_read(args[0], args[1])
     }
@@ -1108,6 +1196,9 @@ impl<W: World + ?Sized> Eval<'_, W> {
         let dim = keys[d].clone();
         let bound_id =
             if f == "within" { Some(args[2]) } else { named.iter().find(|(k, _)| k == "bound").map(|(_, v)| *v) };
+        if f == "latest" && bound_id.is_some() {
+            self.now()?;
+        }
         let method = named.iter().find(|(k, _)| k == "method").and_then(|(_, v)| match self.c.ast.node(*v) {
             Node::Str(s) => Some(s.clone()),
             _ => None,
@@ -1202,7 +1293,9 @@ impl<W: World + ?Sized> Eval<'_, W> {
                 let reach = duration_micros(b, bu);
                 let down = reach.floor().to_i64().unwrap_or(i64::MAX);
                 let (lo, hi): (i128, i128) = match (f, x) {
-                    ("latest", _) => (i128::from(self.asof) - i128::from(down), i128::from(calendar::max_instant())),
+                    ("latest", _) => {
+                        (i128::from(self.known_asof()?) - i128::from(down), i128::from(calendar::max_instant()))
+                    }
                     (_, Some(V::Instant(x))) => {
                         let x = i128::from(*x);
                         match f {
@@ -1274,7 +1367,7 @@ impl<W: World + ?Sized> Eval<'_, W> {
                 if let Some(r) = reach {
                     // Older than asof() - bound: none.
                     let V::Instant(k) = k else { return Err(Code::Metric) };
-                    let age = Decimal::from_i128(i128::from(self.asof) - i128::from(*k));
+                    let age = Decimal::from_i128(i128::from(self.known_asof()?) - i128::from(*k));
                     if age > *r {
                         return Ok(None);
                     }
@@ -1437,10 +1530,18 @@ impl<W: World + ?Sized> Eval<'_, W> {
         let fn_name = fn_name.clone();
         // T first: a read in the future is refused before the cell is read.
         let V::Instant(t) = self.node(t_id)? else { return Err(Code::Type.into()) };
-        if t > self.asof {
-            return Err(Code::Future.into());
+        match self.asof {
+            Some(a) if t > a => Err(Code::Future.into()),
+            Some(_) => self.asof_read_at(cell_id, fn_name, t),
+            // The asof is not known (the engine's: asking makes the evaluation asof-dependent): the
+            // world refuses a read after it, and a failure before the read is checked against it.
+            None => self.asof_read_at(cell_id, fn_name, t).map_err(|e| self.future_first(t, e)),
         }
-        // The cell's arguments, then its name resolved as of T (as the reference orders them).
+    }
+
+    /// `asof(c, T)` after `T`: the cell's arguments, then its name resolved as of `T` (as the
+    /// reference orders them), then the read.
+    fn asof_read_at(&mut self, cell_id: NodeId, fn_name: String, t: Micros) -> R<V, W::Error> {
         let Node::Read { args: rargs, .. } = self.c.ast.node(cell_id) else { return Err(Code::TxArg.into()) };
         let rargs = rargs.clone();
         let mut args = Args::new();
@@ -1471,11 +1572,17 @@ impl<W: World + ?Sized> Eval<'_, W> {
         let fn_name = fn_name.clone();
         let V::Instant(from) = self.node(args[1])? else { return Err(Code::Type.into()) };
         let V::Instant(to) = self.node(args[2])? else { return Err(Code::Type.into()) };
-        if to > self.asof {
-            return Err(Code::Future.into());
+        match self.asof {
+            Some(a) if to > a => Err(Code::Future.into()),
+            Some(_) => self.versions_read(args[0], fn_name, from, to),
+            None => self.versions_read(args[0], fn_name, from, to).map_err(|e| self.future_first(to, e)),
         }
+    }
+
+    /// `versions(c, from, to)` after the times.
+    fn versions_read(&mut self, cell_id: NodeId, fn_name: String, from: Micros, to: Micros) -> R<V, W::Error> {
         let b = self.binding(&fn_name, None)?;
-        let pattern = self.read_args(args[0], &b.function)?;
+        let pattern = self.read_args(cell_id, &b.function)?;
         let cargs: Args = pattern
             .into_iter()
             .filter_map(|(k, p)| match p {
@@ -1489,18 +1596,20 @@ impl<W: World + ?Sized> Eval<'_, W> {
         );
         let cell = CellKey { name: fn_name, args: cargs };
         let vs = self.world.versions(&cell, &ft, &tt)?;
-        let cell_obj = cell_object(&b.function, &cell);
-        let obj = Value::Object(vec![
-            ("cell".to_string(), cell_obj),
-            ("from".to_string(), Value::String(ft)),
-            ("to".to_string(), Value::String(tt.clone())),
-        ]);
-        let mut hashes: Vec<String> = vs.iter().map(|v| v.receipt_hash.clone()).collect();
-        hashes.sort();
-        hashes.dedup();
-        let entry = slice_entry(&obj, &hashes);
-        self.manifests.insert(entry.clone(), Manifest { entry: entry.clone(), slice: obj, members: hashes });
-        self.lineage.insert(entry);
+        if self.track {
+            let cell_obj = cell_object(&b.function, &cell);
+            let obj = Value::Object(vec![
+                ("cell".to_string(), cell_obj),
+                ("from".to_string(), Value::String(ft)),
+                ("to".to_string(), Value::String(tt.clone())),
+            ]);
+            let mut hashes: Vec<String> = vs.iter().map(|v| v.receipt_hash.clone()).collect();
+            hashes.sort();
+            hashes.dedup();
+            let entry = slice_entry(&obj, &hashes);
+            self.manifests.insert(entry.clone(), Manifest { entry: entry.clone(), slice: obj, members: hashes });
+            self.lineage.insert(entry);
+        }
         for v in &vs {
             self.note_version(v);
         }
