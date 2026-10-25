@@ -583,6 +583,16 @@ fn exact_sum(values: &[Decimal]) -> Decimal {
     acc
 }
 
+/// A running exact sum (scans): its value rounded once, as [`sum`] gives it.
+pub(crate) fn sum_of_exact(acc: &Decimal) -> Result<Decimal, Code> {
+    result(acc.clone())
+}
+
+/// A running exact sum over `n` values: the mean, as [`mean`] gives it.
+pub(crate) fn mean_of_exact(acc: &Decimal, n: usize) -> Result<Decimal, Code> {
+    div_round(acc, &int(n as i64), PRECISION, Mode::HalfEven).check_range()
+}
+
 /// The exact sum divided by the count, rounded once.
 pub fn mean(values: &[Decimal]) -> Result<Decimal, Code> {
     if values.is_empty() {

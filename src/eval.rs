@@ -261,6 +261,12 @@ pub struct Outcome {
     pub receipt_asof: String,
 }
 
+/// The evaluator's memory per member of a slice value with `keys` key arguments: the key tuple
+/// and the value, inline (the text of strings and blobs, and slices' own vectors, besides).
+pub fn member_bytes(keys: usize) -> usize {
+    std::mem::size_of::<(Vec<V>, V)>() + keys * std::mem::size_of::<V>()
+}
+
 /// The smallest instant, the `tx` and `asof` of a receipt that read nothing.
 pub const ZERO_INSTANT: &str = "0001-01-01T00:00:00.000000Z";
 
@@ -1507,6 +1513,47 @@ impl<W: World + ?Sized> Eval<'_, W> {
         for (_, mut ms) in groups {
             ms.sort_by(|a, b| cmp_v(&a.0[d], &b.0[d]));
             let vals: Vec<V> = ms.iter().map(|(_, v)| v.clone()).collect();
+            // A running aggregate in one pass where it has one: the same values as the
+            // aggregate of every prefix (exact sums, rounded once each).
+            if width.is_none() && matches!(agg.as_str(), "sum" | "mean" | "count" | "min" | "max" | "first" | "last") {
+                let mut acc = Decimal::zero();
+                let mut best: Option<V> = None;
+                for i in 0..ms.len() {
+                    let r = match agg.as_str() {
+                        "sum" | "mean" => {
+                            acc = decimal::add_exact(&acc, num(&vals[i])?);
+                            if agg == "sum" {
+                                V::Num(decimal::sum_of_exact(&acc)?)
+                            } else {
+                                V::Num(decimal::mean_of_exact(&acc, i + 1)?)
+                            }
+                        }
+                        "count" => V::Num(int(i as i64 + 1)),
+                        "first" => vals[0].clone(),
+                        "last" => vals[i].clone(),
+                        _ => {
+                            let v = &vals[i];
+                            let better = match &best {
+                                None => true,
+                                Some(b) => {
+                                    let o = cmp_v(v, b);
+                                    if agg == "min" {
+                                        o == std::cmp::Ordering::Less
+                                    } else {
+                                        o == std::cmp::Ordering::Greater
+                                    }
+                                }
+                            };
+                            if better {
+                                best = Some(v.clone());
+                            }
+                            best.clone().ok_or(Code::Empty)?
+                        }
+                    };
+                    members.push((ms[i].0.clone(), r));
+                }
+                continue;
+            }
             for i in 0..ms.len() {
                 let from = match width {
                     Some(w) => {
