@@ -28,3 +28,10 @@ bench = false
 
 [workspace]
 members = ["."]
+
+[[bin]]
+name = "call"
+path = "fuzz_targets/call.rs"
+test = false
+doc = false
+bench = false

@@ -1,0 +1,1 @@
+rates.example.org/fx_rate("EUR", base: "EUR", quote: "USD", date: 2024-03-15)

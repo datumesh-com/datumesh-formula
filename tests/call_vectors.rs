@@ -28,7 +28,7 @@ fn every_call_vector() {
             invalid += 1;
             let want = common::string(&v, "error").unwrap();
             match got {
-                Err(e) if e.code == want => {}
+                Err(e) if e.code() == want => {}
                 Err(e) => failures.push(format!("{path}: {e}, expected {want}")),
                 Ok(c) => failures.push(format!("{path}: parsed to {}, expected {want}", c.uri())),
             }
@@ -50,7 +50,7 @@ fn an_unpinned_call_is_its_uri() {
         let c = parse_call(common::string(&v, "input").unwrap(), &env).unwrap();
         assert!(c.fn_hash.is_none());
         let name = format!("{}/{}", c.cell.ns, c.cell.fn_name);
-        let d = env.bound(&name, c.cell.asof.as_deref()).unwrap();
+        let d = env.bound(&name, c.cell.asof.as_deref()).unwrap().unwrap();
         let sig: Value = d.to_value().get("signature").unwrap().clone();
         let back = datumesh_core::parse_uri(&c.uri(), &sig).unwrap();
         assert_eq!(back, c.cell, "{path}");
@@ -65,8 +65,10 @@ fn a_pinned_call_needs_the_descriptor_not_the_binding() {
     let c = parse_call(common::string(&v, "input").unwrap(), &env).unwrap();
     assert_eq!(c.cell.fn_name, "convert");
     assert_eq!(c.fn_hash.as_deref(), Some("014fc97eb3a442ab28a96d89131ccfd11c9eec8187595578c212b392d0702c71"));
-    assert!(env.bound("calc.example.net/convert", None).is_none());
+    assert!(env.bound("calc.example.net/convert", None).unwrap().is_none());
     // Unpinned, the same call is unbound.
-    let unpinned = common::string(&v, "input").unwrap().replace("@014fc97eb3a442ab28a96d89131ccfd11c9eec8187595578c212b392d0702c71", "");
-    assert_eq!(parse_call(&unpinned, &env).unwrap_err().code, "E_NAME_UNBOUND");
+    let unpinned = common::string(&v, "input")
+        .unwrap()
+        .replace("@014fc97eb3a442ab28a96d89131ccfd11c9eec8187595578c212b392d0702c71", "");
+    assert_eq!(parse_call(&unpinned, &env).unwrap_err().code(), "E_NAME_UNBOUND");
 }

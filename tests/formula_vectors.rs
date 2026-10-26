@@ -73,7 +73,7 @@ fn formula_vectors() {
     for f in &failures {
         eprintln!("  {f}");
     }
-    assert_eq!((valid, invalid), (172, 121));
+    assert_eq!((valid, invalid), (172, 122));
     assert!(failures.is_empty());
 }
 

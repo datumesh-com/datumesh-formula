@@ -167,8 +167,15 @@ fn fn_hash_is_a_reserved_argument_name() {
     // spec-0.4.2: `fn_hash` is the URI's pin (5.1), reserved as an argument name (2.4).
     let m = mesh();
     let sig = r#"{"args":{"fn_hash":{"type":"string","valid":false}},"order":["fn_hash"],"returns":"string"}"#;
-    let e = define_function("calc.example.net/h", "fn_hash", &json::parse(sig.as_bytes()).unwrap(), &BTreeMap::new(), &*m.store, T0)
-        .unwrap_err();
+    let e = define_function(
+        "calc.example.net/h",
+        "fn_hash",
+        &json::parse(sig.as_bytes()).unwrap(),
+        &BTreeMap::new(),
+        &*m.store,
+        T0,
+    )
+    .unwrap_err();
     assert_eq!(e.code(), "E_CANON_ARG_NAME");
     let env = Env::new("calc.example.net/h", Signature::from_value(&json::parse(sig.as_bytes()).unwrap()).unwrap());
     let d = json::parse(

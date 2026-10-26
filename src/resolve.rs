@@ -116,7 +116,11 @@ impl Resolver<'_> {
                 let b = self.node(*body)?;
                 Ok(self.push(Node::Lambda { params: params.clone(), body: b }))
             }
-            PNode::Read { name, alias, args } => self.read(name, *alias, args),
+            PNode::Read { pin: Some(_), name, .. } => Err(Error::new(
+                Code::Placement,
+                format!("a pinned read of {name} is a request form (5.8), not part of a body"),
+            )),
+            PNode::Read { name, alias, args, .. } => self.read(name, *alias, args),
             PNode::Call { name, args } => self.call(name, args),
         }
     }

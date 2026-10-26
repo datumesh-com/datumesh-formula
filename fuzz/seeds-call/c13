@@ -1,0 +1,1 @@
+rates.example.org/fx_rate("EUR", "USD", 2024-03-15)?asof=2024-03-16

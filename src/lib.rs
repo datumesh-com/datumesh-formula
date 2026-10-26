@@ -29,6 +29,7 @@ pub mod ast;
 mod bigint;
 mod builtins;
 pub mod calendar;
+pub mod call;
 mod casing_table;
 mod check;
 pub mod decimal;
@@ -117,6 +118,20 @@ pub fn canonical_ast(source: &str, env: Option<&Env>) -> Result<Ast, Error> {
     })
 }
 
+/// `fn_hash` is reserved as an argument name since spec-0.4.2 (2.4: the URI's pin):
+/// `E_CANON_ARG_NAME`, part of the section-7 form.
+pub(crate) fn reserved_arguments(signature: Option<&Value>) -> Result<(), DefineError> {
+    let args = signature.and_then(|s| s.get("args")).and_then(Value::as_object);
+    if args.is_some_and(|a| a.iter().any(|(k, _)| k == "fn_hash")) {
+        return Err(DefineError::Descriptor(datumesh_core::Error::new(
+            datumesh_core::ErrorCode::CanonArgName,
+            "$.signature.args.fn_hash",
+            "fn_hash is reserved: the cell URI's pin (spec-0.4.2)",
+        )));
+    }
+    Ok(())
+}
+
 /// The fully qualified names `source` reads (aliases resolved through `aliases`; an unknown
 /// alias is left for resolution to report), after lexing and parsing it.
 pub(crate) fn read_names(
@@ -175,6 +190,7 @@ fn deep<T: Send>(tokens: usize, f: impl FnOnce() -> T + Send) -> T {
 /// descriptor of another language is `E_FORMULA_SYNTAX`.
 pub fn check_descriptor(name: &str, descriptor: &Value, env: &Env) -> Result<Compiled, DefineError> {
     datumesh_core::FunctionDescriptor::from_value(descriptor).map_err(DefineError::Descriptor)?;
+    reserved_arguments(descriptor.get("signature"))?;
     let f = Function::from_value(descriptor).map_err(|e| Error::new(Code::Syntax, e.0))?;
     if f.lang != "formula" {
         return Err(Error::new(Code::Syntax, format!("code.lang is {}, not formula", f.lang)).into());

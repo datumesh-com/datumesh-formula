@@ -104,10 +104,12 @@ pub(crate) enum PNode {
     Not(Id),
     If(Id, Id, Id),
     Let(String, Id, Id),
-    /// A read: the qualified name or alias (without `@`) and its arguments.
+    /// A read: the qualified name or alias (without `@`), its pin (a request form, 5.8) and
+    /// its arguments.
     Read {
         name: String,
         alias: bool,
+        pin: Option<String>,
         args: Vec<PArg>,
     },
     /// A built-in call (name lowercased).
@@ -618,6 +620,13 @@ impl<'a> Parser<'a> {
             }
             Kind::Qualified | Kind::Alias => {
                 self.bump();
+                let pin = if self.peek().kind == Kind::Pin {
+                    let p = self.peek().text.clone();
+                    self.bump();
+                    Some(p)
+                } else {
+                    None
+                };
                 if !self.peek().is("(") {
                     return Err(err(
                         Code::Syntax,
@@ -625,7 +634,7 @@ impl<'a> Parser<'a> {
                     ));
                 }
                 let args = self.args(true, "")?;
-                Ok(self.push(PNode::Read { name: t.text.clone(), alias: t.kind == Kind::Alias, args }))
+                Ok(self.push(PNode::Read { name: t.text.clone(), alias: t.kind == Kind::Alias, pin, args }))
             }
             Kind::Word => self.word(),
             Kind::Punct => match t.text.as_str() {
@@ -647,7 +656,8 @@ impl<'a> Parser<'a> {
                 "=" | "<>" | "<" | "<=" | ">" | ">=" => Err(err(Code::Chain, "comparisons do not chain: write and")),
                 _ => Err(self.unexpected("an expression")),
             },
-            Kind::End => Err(self.unexpected("an expression")),
+            // A pin is lexed only after a name or alias, and consumed with it.
+            Kind::End | Kind::Pin => Err(self.unexpected("an expression")),
         }
     }
 

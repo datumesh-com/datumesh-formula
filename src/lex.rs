@@ -14,6 +14,8 @@ pub(crate) enum Kind {
     Date,
     Qualified,
     Alias,
+    /// `@` and 64 lowercase hex digits directly after a qualified name or alias (L4a, a pin).
+    Pin,
     Number,
     Str,
     Word,
@@ -74,6 +76,26 @@ pub(crate) fn is_keyword(w: &str) -> bool {
     KEYWORDS.iter().any(|k| k.eq_ignore_ascii_case(w))
 }
 
+/// L4a (spec-0.4.2): after a qualified name or alias ending at `i`, an `@` directly following
+/// is a pin, `@` and 64 lowercase hex digits not followed by a word character; anything else
+/// after such an `@` is `E_FORMULA_NAME`. Returns where lexing continues.
+fn pin_after(src: &str, i: usize, out: &mut Vec<Token>) -> Result<usize, Error> {
+    let b = src.as_bytes();
+    if b.get(i) != Some(&b'@') {
+        return Ok(i);
+    }
+    let mut j = i + 1;
+    while j < b.len() && (is_word_char(b[j]) || b[j] == b'/') {
+        j += 1;
+    }
+    let hex = &src[i + 1..j];
+    if hex.len() != 64 || !hex.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
+        return Err(err(Code::Name, i, format!("not a pin (@ and 64 lowercase hex digits): @{hex}")));
+    }
+    out.push(Token { kind: Kind::Pin, text: hex.to_string(), unit: None, pos: i });
+    Ok(j)
+}
+
 /// Lex the whole body.
 pub(crate) fn lex(src: &str) -> Result<Vec<Token>, Error> {
     if src.len() > MAX_BODY {
@@ -122,7 +144,7 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, Error> {
                     return Err(err(Code::Name, i, format!("not a function name: {text}")));
                 }
                 out.push(Token { kind: Kind::Qualified, text: text.to_string(), unit: None, pos: start });
-                i = end;
+                i = pin_after(src, end, &mut out)?;
                 continue;
             }
         }
@@ -144,7 +166,7 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, Error> {
                 return Err(err(Code::Name, i, format!("not an alias: @{text}")));
             }
             out.push(Token { kind: Kind::Alias, text: text.to_string(), unit: None, pos: start });
-            i = j;
+            i = pin_after(src, j, &mut out)?;
             continue;
         }
         // L5, L6: a number and its unit suffix.
