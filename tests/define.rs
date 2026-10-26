@@ -161,3 +161,19 @@ fn check_descriptor_puts_the_canonical_form_first() {
     .unwrap();
     assert_eq!(check_descriptor("calc.example.net/f", &d, &env).unwrap_err().code(), "E_FORMULA_ORDER");
 }
+
+#[test]
+fn fn_hash_is_a_reserved_argument_name() {
+    // spec-0.4.2: `fn_hash` is the URI's pin (5.1), reserved as an argument name (2.4).
+    let m = mesh();
+    let sig = r#"{"args":{"fn_hash":{"type":"string","valid":false}},"order":["fn_hash"],"returns":"string"}"#;
+    let e = define_function("calc.example.net/h", "fn_hash", &json::parse(sig.as_bytes()).unwrap(), &BTreeMap::new(), &*m.store, T0)
+        .unwrap_err();
+    assert_eq!(e.code(), "E_CANON_ARG_NAME");
+    let env = Env::new("calc.example.net/h", Signature::from_value(&json::parse(sig.as_bytes()).unwrap()).unwrap());
+    let d = json::parse(
+        br#"{"code":{"body":"fn_hash\n","lang":"formula"},"inputs":[],"signature":{"args":{"fn_hash":{"type":"string","valid":false}},"order":["fn_hash"],"returns":"string"}}"#,
+    )
+    .unwrap();
+    assert_eq!(check_descriptor("calc.example.net/h", &d, &env).unwrap_err().code(), "E_CANON_ARG_NAME");
+}

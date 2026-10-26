@@ -111,15 +111,6 @@ fn issued_for(asof: &str) -> &str {
     }
 }
 
-/// Vectors whose fuel the engine measures otherwise, with the engine's fuel and why. They fail
-/// here as soon as the engine measures the vector's fuel.
-const KNOWN_FUEL: &[(&str, u64, &str)] = &[(
-    "formula-eval/member-fault-caught.json",
-    16,
-    "engine 0.3.0 evaluates every member of a slice over a computed function before the reader runs \
-     again, past the first member that faults; the reference stops there (15.12: strict, left to right)",
-)];
-
 fn check_vector(path: &str, v: &Value) -> Result<(), String> {
     let asof = common::string(v, "asof").unwrap();
     let cell = vector_cell(v);
@@ -162,22 +153,19 @@ fn check_vector(path: &str, v: &Value) -> Result<(), String> {
     {
         let m = fuel_mesh.as_ref().unwrap_or(&mesh);
         m.clock.set(asof);
-        let engine_fuel = KNOWN_FUEL.iter().find(|(p, _, _)| *p == path).map(|(_, f, _)| *f).unwrap_or(fuel_used);
-        match engine_with(m, engine_fuel - 1).get(&cell, Some(asof)) {
+        match engine_with(m, fuel_used - 1).get(&cell, Some(asof)) {
             Err(EngineError::BudgetExceeded { .. }) => {}
-            other => problems.push(format!("fuel {} gives {other:?}", engine_fuel - 1)),
+            other => problems.push(format!("fuel {} gives {other:?}", fuel_used - 1)),
         }
-        if fuel_mesh.is_some() || engine_fuel != fuel_used {
-            match engine_with(m, engine_fuel).get(&cell, Some(asof)) {
+        if fuel_mesh.is_some() {
+            match engine_with(m, fuel_used).get(&cell, Some(asof)) {
                 Ok(Answer::Receipt(_)) => {}
-                other => problems.push(format!("fuel {engine_fuel} gives {other:?}")),
+                other => problems.push(format!("fuel {fuel_used} gives {other:?}")),
             }
         }
     }
     // The receipt: inner computed cells first, each with its own issued.
-    let fresh = if KNOWN_FUEL.iter().any(|(p, _, _)| *p == path) { Some(world_mesh(v)) } else { None };
-    let mesh = fresh.as_ref().unwrap_or(&mesh);
-    let engine = engine_with(mesh, DEFAULT_FUEL);
+    let engine = engine_with(&mesh, DEFAULT_FUEL);
     let mut inner = inner;
     inner.sort_by(|a, b| (&a.2.asof, &a.1).cmp(&(&b.2.asof, &b.1)));
     for (key, at, ver) in &inner {
