@@ -1,4 +1,4 @@
-//! Loading the vendored spec vectors (`spec-vectors/`: every vector of datumesh-spec at a468606, spec-0.4.2).
+//! Loading the vendored spec vectors (`spec-vectors/`: every vector of datumesh-spec at the spec-0.4.2 tag, fc870ab).
 #![allow(dead_code)]
 
 pub mod generate;

@@ -2,28 +2,30 @@
 
 All notable changes to `datumesh-formula`.
 
-## 0.1.1 (unreleased)
+## 0.1.1 (2026-11-02)
 
-For spec-0.4.2 (`a468606`), on `datumesh-core` 0.3.5, `datumesh-engine` 0.3.1 and
+For spec-0.4.2 (the tag, `fc870ab`), on `datumesh-core` 0.3.6, `datumesh-engine` 0.3.2 and
 `datumesh-store` 0.3.2. Additive (`API-CHANGES-0.1.1.md`).
 
 - `call::parse_call`: calls (SPEC 5.8), `name@<fn_hash>(args)?asof=…`, against a `CallEnv`
   (aliases, bindings as of the asof, descriptors by hash; `MapCallEnv` in memory, a store with
   feature `engine`), with 5.8's check order and codes; `Call::uri` is the cell URI with
-  `fn_hash=` before `asof`. It needs no engine. Every `call` vector passes (10 valid, 17 invalid).
+  `fn_hash=` before `asof` (the core's `format_reference`; `Call::reference` is the core's
+  `Reference`). It needs no engine. Every `call` vector passes (10 valid, 17 invalid).
 - The pin token (15.2 L4a); a pinned read in a body is `E_FORMULA_PLACEMENT`
   (`invalid/formula-pinned-read`).
 - `fn_hash` is a reserved argument name: `E_CANON_ARG_NAME` in `check_descriptor` and
-  `define_function`.
+  `define_function` (datumesh-core 0.3.6's descriptor check).
 - Built-ins `text_of(blob)` (a `text/plain` blob's content as an NFC string, from
   `World::blob` by SHA-256, checked for length and hash) and `remove_chars(text, chars)`, their
   fuel, and the evaluation code `E_FORMULA_BLOB_UNAVAILABLE` (the evaluator's failure). A
-  `formula-eval` world's `blobs`. Through engine 0.3.1, which gives a runtime no blob content,
-  `text_of` is `E_FORMULA_BLOB_UNAVAILABLE` (after the media type check).
-- Vectors: every vector of the spec at `a468606` (1,145) is vendored; `formula-eval` 125 valid
+  `formula-eval` world's `blobs`. The runtime reads blob content with engine 0.3.2's
+  `Inputs::read_blob`; content the store lacks is the engine's `BlobUnavailable`.
+- Vectors: every vector of the spec at the `spec-0.4.2` tag (1,146) is vendored; `formula-eval` 125 valid
   and 39 invalid, `excel` 79, `formula` 172 and 123, `call` 10 and 17 pass.
-- Engine 0.3.1 measures `member-fault-caught`'s fuel as 7: every `formula-eval` and `excel`
-  vector's fuel now equals the engine's.
+- Through the engine every `formula-eval` and `excel` vector now gives the vector's value,
+  lineage, receipt hash and fuel exactly (engine 0.3.1 fixed `member-fault-caught`'s fuel to 7
+  and the order of `E_FORMULA_FUTURE`; 0.3.2 gives blob content).
 - A `call` cargo-fuzz target.
 
 ## 0.1.0 (2026-10-25)
