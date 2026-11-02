@@ -4,7 +4,7 @@ All notable changes to `datumesh-formula`.
 
 ## 0.1.1 (unreleased)
 
-For spec-0.4.2 (`810761d`), on `datumesh-core` 0.3.5, `datumesh-engine` 0.3.1 and
+For spec-0.4.2 (`a468606`), on `datumesh-core` 0.3.5, `datumesh-engine` 0.3.1 and
 `datumesh-store` 0.3.2. Additive (`API-CHANGES-0.1.1.md`).
 
 - `call::parse_call`: calls (SPEC 5.8), `name@<fn_hash>(args)?asof=…`, against a `CallEnv`
@@ -15,6 +15,13 @@ For spec-0.4.2 (`810761d`), on `datumesh-core` 0.3.5, `datumesh-engine` 0.3.1 an
   (`invalid/formula-pinned-read`).
 - `fn_hash` is a reserved argument name: `E_CANON_ARG_NAME` in `check_descriptor` and
   `define_function`.
+- Built-ins `text_of(blob)` (a `text/plain` blob's content as an NFC string, from
+  `World::blob` by SHA-256, checked for length and hash) and `remove_chars(text, chars)`, their
+  fuel, and the evaluation code `E_FORMULA_BLOB_UNAVAILABLE` (the evaluator's failure). A
+  `formula-eval` world's `blobs`. Through engine 0.3.1, which gives a runtime no blob content,
+  `text_of` is `E_FORMULA_BLOB_UNAVAILABLE` (after the media type check).
+- Vectors: every vector of the spec at `a468606` (1,145) is vendored; `formula-eval` 125 valid
+  and 39 invalid, `excel` 79, `formula` 172 and 123, `call` 10 and 17 pass.
 - Engine 0.3.1 measures `member-fault-caught`'s fuel as 7: every `formula-eval` and `excel`
   vector's fuel now equals the engine's.
 - A `call` cargo-fuzz target.

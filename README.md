@@ -208,7 +208,7 @@ check against the latest bindings is checked against those of the evaluation aso
 
 ## Conformance
 
-- Every vector of kinds `formula` (293), `formula-eval` (155), `excel` (78) and `decimal` (20
+- Every vector of kinds `formula` (295), `formula-eval` (164), `excel` (79), `call` (27) and `decimal` (20
   files, 6,054 cases) passes, and the evaluation of 11 of the 12 slice-lineage receipt vectors whose
   inputs have descriptors among the vectors.
 - Through the engine on PostgreSQL (`tests/engine_vectors.rs`): every `formula-eval` and `excel`
@@ -250,7 +250,7 @@ cargo in a container on the `datumesh` network next to a `datumesh-pg` container
 `tools/package_test.sh` is the packaging test, `tools/public_api.sh` checks `public-api.txt`,
 `tools/crosscheck.sh` the cross-language check, `tools/decimal_crosscheck.sh` the decimals. `tools/gen_cases.py`, `tools/reference_runner.py` and
 `tools/compare.py` run generated cases through this crate (`examples/formula_runner.rs`) and through
-another implementation and compare them. `spec-vectors/` is a copy of the spec's vectors of these kinds at `810761d`.
+another implementation and compare them. `spec-vectors/` is a copy of the spec's vectors at `a468606` (1,145).
 
 Dependencies: `datumesh-core` 0.3.5 for strict JSON, JCS, SHA-256, the string rules of SPEC 3.5
 (Unicode 15.1 assigned code points, NFC), `FunctionDescriptor` and `Fault`; `unicode-normalization`

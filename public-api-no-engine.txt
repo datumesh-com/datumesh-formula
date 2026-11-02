@@ -462,6 +462,7 @@ pub const datumesh_formula::eval::ZERO_INSTANT: &str
 pub trait datumesh_formula::eval::World
 pub type datumesh_formula::eval::World::Error
 pub fn datumesh_formula::eval::World::asof(&mut self) -> core::result::Result<alloc::string::String, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::eval::World::blob(&mut self, &str) -> core::result::Result<core::option::Option<alloc::vec::Vec<u8>>, datumesh_formula::eval::Stop<Self::Error>>
 pub fn datumesh_formula::eval::World::charge(&mut self, u64) -> core::result::Result<(), datumesh_formula::Code>
 pub fn datumesh_formula::eval::World::function(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::Binding>, Self::Error>
 pub fn datumesh_formula::eval::World::members(&mut self, &datumesh_formula::eval::SliceKey) -> core::result::Result<alloc::vec::Vec<(datumesh_formula::eval::Args, datumesh_formula::eval::Version)>, datumesh_formula::eval::Stop<Self::Error>>
@@ -472,6 +473,7 @@ pub fn datumesh_formula::eval::World::versions(&mut self, &datumesh_formula::eva
 impl datumesh_formula::eval::World for datumesh_formula::memory::MemoryWorld
 pub type datumesh_formula::memory::MemoryWorld::Error = never
 pub fn datumesh_formula::memory::MemoryWorld::asof(&mut self) -> core::result::Result<alloc::string::String, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::memory::MemoryWorld::blob(&mut self, &str) -> core::result::Result<core::option::Option<alloc::vec::Vec<u8>>, datumesh_formula::eval::Stop<Self::Error>>
 pub fn datumesh_formula::memory::MemoryWorld::charge(&mut self, u64) -> core::result::Result<(), datumesh_formula::Code>
 pub fn datumesh_formula::memory::MemoryWorld::function(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::Binding>, Self::Error>
 pub fn datumesh_formula::memory::MemoryWorld::members(&mut self, &datumesh_formula::eval::SliceKey) -> core::result::Result<alloc::vec::Vec<(datumesh_formula::eval::Args, datumesh_formula::eval::Version)>, datumesh_formula::eval::Stop<Self::Error>>
@@ -513,6 +515,7 @@ pub datumesh_formula::memory::MemoryWorld::conventions: datumesh_formula::memory
 pub datumesh_formula::memory::MemoryWorld::fuel: datumesh_formula::eval::Fuel
 pub datumesh_formula::memory::MemoryWorld::max_depth: usize
 impl datumesh_formula::memory::MemoryWorld
+pub fn datumesh_formula::memory::MemoryWorld::add_blob(&mut self, &str, alloc::vec::Vec<u8>)
 pub fn datumesh_formula::memory::MemoryWorld::add_receipt(&mut self, &datumesh_core::json::Value) -> core::result::Result<(), datumesh_formula::EnvError>
 pub fn datumesh_formula::memory::MemoryWorld::bind(&mut self, &str, &datumesh_core::json::Value, &str) -> core::result::Result<(), datumesh_formula::EnvError>
 pub fn datumesh_formula::memory::MemoryWorld::compute(&mut self, &datumesh_formula::eval::CellKey, &str) -> core::result::Result<datumesh_formula::memory::Computed, datumesh_formula::Code>
@@ -525,6 +528,7 @@ pub fn datumesh_formula::memory::MemoryWorld::clone(&self) -> Self
 impl datumesh_formula::eval::World for datumesh_formula::memory::MemoryWorld
 pub type datumesh_formula::memory::MemoryWorld::Error = never
 pub fn datumesh_formula::memory::MemoryWorld::asof(&mut self) -> core::result::Result<alloc::string::String, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::memory::MemoryWorld::blob(&mut self, &str) -> core::result::Result<core::option::Option<alloc::vec::Vec<u8>>, datumesh_formula::eval::Stop<Self::Error>>
 pub fn datumesh_formula::memory::MemoryWorld::charge(&mut self, u64) -> core::result::Result<(), datumesh_formula::Code>
 pub fn datumesh_formula::memory::MemoryWorld::function(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::Binding>, Self::Error>
 pub fn datumesh_formula::memory::MemoryWorld::members(&mut self, &datumesh_formula::eval::SliceKey) -> core::result::Result<alloc::vec::Vec<(datumesh_formula::eval::Args, datumesh_formula::eval::Version)>, datumesh_formula::eval::Stop<Self::Error>>
@@ -600,6 +604,7 @@ pub datumesh_formula::Code::ArgMissing
 pub datumesh_formula::Code::ArgOrder
 pub datumesh_formula::Code::ArgUnknown
 pub datumesh_formula::Code::Arity
+pub datumesh_formula::Code::BlobUnavailable
 pub datumesh_formula::Code::Budget
 pub datumesh_formula::Code::Chain
 pub datumesh_formula::Code::Cycle
