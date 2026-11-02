@@ -25,10 +25,10 @@ use std::sync::Mutex;
 use datumesh_core::json::Value;
 use datumesh_core::{Arg, CellRef, Receipt};
 use datumesh_engine::{Answer, EngineError};
-use datumesh_store::Store;
 use datumesh_formula::definition::{define_function, publish};
 use datumesh_formula::eval::CellKey;
 use datumesh_formula::memory::{run_vector, DEFAULT_FUEL};
+use datumesh_store::Store;
 use pg::{Mesh, KEYS_FROM, MIN_INSTANT};
 
 fn host_of(computed_by: &str) -> &str {
