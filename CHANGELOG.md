@@ -2,6 +2,23 @@
 
 All notable changes to `datumesh-formula`.
 
+## 0.1.1 (unreleased)
+
+For spec-0.4.2 (`810761d`), on `datumesh-core` 0.3.5, `datumesh-engine` 0.3.1 and
+`datumesh-store` 0.3.2. Additive (`API-CHANGES-0.1.1.md`).
+
+- `call::parse_call`: calls (SPEC 5.8), `name@<fn_hash>(args)?asof=…`, against a `CallEnv`
+  (aliases, bindings as of the asof, descriptors by hash; `MapCallEnv` in memory, a store with
+  feature `engine`), with 5.8's check order and codes; `Call::uri` is the cell URI with
+  `fn_hash=` before `asof`. It needs no engine. Every `call` vector passes (10 valid, 17 invalid).
+- The pin token (15.2 L4a); a pinned read in a body is `E_FORMULA_PLACEMENT`
+  (`invalid/formula-pinned-read`).
+- `fn_hash` is a reserved argument name: `E_CANON_ARG_NAME` in `check_descriptor` and
+  `define_function`.
+- Engine 0.3.1 measures `member-fault-caught`'s fuel as 7: every `formula-eval` and `excel`
+  vector's fuel now equals the engine's.
+- A `call` cargo-fuzz target.
+
 ## 0.1.0 (2026-10-25)
 
 The formula dialect of spec-0.4.0 (section 15), on `datumesh-core` 0.3.4 and, with the default

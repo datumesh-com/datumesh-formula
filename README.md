@@ -2,7 +2,7 @@
 
 The formula dialect of [Datumesh](https://datumesh.com): `code.lang = "formula"`, the default
 language of computed functions, an Excel-compatible expression language over cells. It implements
-section 15 of [spec-0.4.0](https://github.com/datumesh-com/datumesh-spec): the lexer and PEG
+section 15 and the calls of 5.8 of [spec-0.4.2](https://github.com/datumesh-com/datumesh-spec): the lexer and PEG
 grammar, resolution to the canonical AST and its hash, the printer that gives `code.body`, the type
 and unit checker that derives `inputs`, exact decimal arithmetic with the 40-digit transcendental
 algorithms, units, angles and haversine, an evaluator with normative fuel, faults and lineage, the
@@ -13,10 +13,10 @@ definition of formula functions (the canonical descriptor), and the
 
 ```toml
 [dependencies]
-datumesh-formula = "0.1.0"
-datumesh-engine = "0.3.0"
-datumesh-store = "0.3.1"
-datumesh-core = { version = "0.3.4", features = ["sign"] }
+datumesh-formula = "0.1.1"
+datumesh-engine = "0.3.1"
+datumesh-store = "0.3.2"
+datumesh-core = { version = "0.3.5", features = ["sign"] }
 ```
 
 A publisher's stored daily price, a formula function over a week of it defined against the store
@@ -160,6 +160,7 @@ Without the engine (`default-features = false`), `define` checks a body against 
 | `eval` | The evaluator over a `World`, with `Fuel`, `Outcome` (value, lineage, manifests, tx, receipt asof) |
 | `memory` | `MemoryWorld`: bindings, stored receipts, computed cells memoised with cycle and depth limits, and the vectors' receipt conventions |
 | `definition` | `define_function`: the canonical descriptor (printed body, derived `inputs`, `order` and extents as given, every check of 15.6) from a body, a signature, an alias map and the callees as bound at define time (`Callees`: a store or an `Env`); `publish` (`put_descriptor` + `bind_name`) |
+| `call` | `parse_call`: a call (5.8, `name@<fn_hash>(args)?asof=…`) against a `CallEnv` (aliases, bindings, descriptors by hash), giving the cell reference, its pin and its URI; no engine needed |
 | `runtime` (feature `engine`) | `FormulaRuntime`, the engine's `Runtime` for `lang = "formula"`: the evaluator over the engine's `Inputs` |
 
 ### The world
@@ -214,8 +215,8 @@ check against the latest bindings is checked against those of the evaluation aso
   vector, in a database of its own, gives the vector's value, lineage, `tx`, receipt `asof` and
   receipt hash (signed as `mesh.example.net` with the vectors' conventions), verifies at
   `recomputed`, and answers invalid vectors as 15.12 says; the engine-measured fuel equals the
-  vector's on all but one (`member-fault-caught`: datumesh-engine 0.3.0 evaluates every member of
-  a computed slice past the first fault, 16 where the vector says 7).
+  vector's (datumesh-engine 0.3.1).
+- Every `call` vector (27) passes `call::parse_call`.
 - The brief's tests through the engine (`tests/brief.rs`): `fib(90)` exact with 91 memoised cells;
   a curve bootstrapped over ten tenors; a weighted mean over 1,000 stations with two slice entries,
   a backdated correction, the old receipt signed with `E_INPUT_SUPERSEDED`; `last_before` with a
@@ -249,12 +250,12 @@ cargo in a container on the `datumesh` network next to a `datumesh-pg` container
 `tools/package_test.sh` is the packaging test, `tools/public_api.sh` checks `public-api.txt`,
 `tools/crosscheck.sh` the cross-language check, `tools/decimal_crosscheck.sh` the decimals. `tools/gen_cases.py`, `tools/reference_runner.py` and
 `tools/compare.py` run generated cases through this crate (`examples/formula_runner.rs`) and through
-another implementation and compare them. `spec-vectors/` is a copy of the spec's vectors at `dedd132`, unchanged at `f3d3e2c`.
+another implementation and compare them. `spec-vectors/` is a copy of the spec's vectors of these kinds at `810761d`.
 
-Dependencies: `datumesh-core` 0.3.4 for strict JSON, JCS, SHA-256, the string rules of SPEC 3.5
+Dependencies: `datumesh-core` 0.3.5 for strict JSON, JCS, SHA-256, the string rules of SPEC 3.5
 (Unicode 15.1 assigned code points, NFC), `FunctionDescriptor` and `Fault`; `unicode-normalization`
 (already a dependency of `datumesh-core`) to normalise computed strings to NFC; with feature
-`engine` (default), `datumesh-engine` 0.3.0 for `Runtime` and `datumesh-store` 0.3.1 (already a
+`engine` (default), `datumesh-engine` 0.3.1 for `Runtime` and `datumesh-store` 0.3.2 (already a
 dependency of the engine) for the callees and `publish`. Without the feature, the language alone.
 
 

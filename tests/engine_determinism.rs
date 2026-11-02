@@ -109,7 +109,6 @@ fn generated_bodies_through_two_fresh_engines() {
         cases.push(Case { i, src, kind, args, asof, limit });
     }
     let (mut defined, mut receipts_n, mut answers_n, mut fuel_checked, mut hashes) = (0u64, 0u64, 0u64, 0u64, 0u64);
-    let mut future_masked = 0u64;
     let mut failures = Vec::new();
     for c in &cases {
         let name = format!("calc.example.net/e{}", c.i);
@@ -217,11 +216,7 @@ fn generated_bodies_through_two_fresh_engines() {
                 // Fuel and depth are the request's: with a computed input already stored, the
                 // engine validates it instead of evaluating it.
                 let comparable = !inner || !matches!(code, Code::Budget);
-                // Engine 0.3.0 answers plain not_covered once an input has no value, where the
-                // dialect reports E_FORMULA_FUTURE first (asof(c, T), T after the asof).
-                if *code == Code::Future && matches!(a, Ok(Answer::NotCovered { fault: None })) {
-                    future_masked += 1;
-                } else if comparable && code_of(a).as_deref() != Some(code.as_str()) {
+                if comparable && code_of(a).as_deref() != Some(code.as_str()) {
                     failures.push(format!("{}: {} / {}", c.src, code, answer_text(a)));
                 }
             }
@@ -249,6 +244,6 @@ fn generated_bodies_through_two_fresh_engines() {
     eprintln!(
         "engine determinism: {n} bodies, {defined} defined, {receipts_n} receipts and {answers_n} other answers, \
          each from two fresh engines, identical; {hashes} receipt hashes equal to the in-memory world's; \
-         fuel exact on {fuel_checked}; E_FORMULA_FUTURE answered as plain not_covered by the engine: {future_masked}"
+         fuel exact on {fuel_checked}"
     );
 }

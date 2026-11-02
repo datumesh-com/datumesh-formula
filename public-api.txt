@@ -182,6 +182,69 @@ pub fn datumesh_formula::calendar::min_instant() -> datumesh_formula::calendar::
 pub fn datumesh_formula::calendar::parse_instant(&str) -> core::option::Option<datumesh_formula::calendar::Micros>
 pub fn datumesh_formula::calendar::year_fraction(datumesh_formula::calendar::Date, datumesh_formula::calendar::Date, &str) -> core::result::Result<datumesh_formula::decimal::Decimal, datumesh_formula::Code>
 pub type datumesh_formula::calendar::Micros = i64
+pub mod datumesh_formula::call
+#[non_exhaustive] pub enum datumesh_formula::call::CallError
+pub datumesh_formula::call::CallError::Code(&'static str, alloc::string::String)
+pub datumesh_formula::call::CallError::Env(alloc::string::String)
+impl datumesh_formula::call::CallError
+pub fn datumesh_formula::call::CallError::code(&self) -> &str
+impl core::clone::Clone for datumesh_formula::call::CallError
+pub fn datumesh_formula::call::CallError::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::call::CallError
+impl core::cmp::PartialEq for datumesh_formula::call::CallError
+pub fn datumesh_formula::call::CallError::eq(&self, &Self) -> bool
+impl core::error::Error for datumesh_formula::call::CallError
+impl core::fmt::Debug for datumesh_formula::call::CallError
+pub fn datumesh_formula::call::CallError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for datumesh_formula::call::CallError
+pub fn datumesh_formula::call::CallError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::call::CallError
+pub struct datumesh_formula::call::Call
+pub datumesh_formula::call::Call::cell: datumesh_core::model::CellRef
+pub datumesh_formula::call::Call::fn_hash: core::option::Option<alloc::string::String>
+impl datumesh_formula::call::Call
+pub fn datumesh_formula::call::Call::uri(&self) -> alloc::string::String
+impl core::clone::Clone for datumesh_formula::call::Call
+pub fn datumesh_formula::call::Call::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::call::Call
+impl core::cmp::PartialEq for datumesh_formula::call::Call
+pub fn datumesh_formula::call::Call::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::call::Call
+pub fn datumesh_formula::call::Call::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::call::Call
+pub struct datumesh_formula::call::MapCallEnv
+pub datumesh_formula::call::MapCallEnv::aliases: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub datumesh_formula::call::MapCallEnv::descriptors: alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_core::descriptor::FunctionDescriptor>
+pub datumesh_formula::call::MapCallEnv::functions: alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_core::descriptor::FunctionDescriptor>
+impl datumesh_formula::call::MapCallEnv
+pub fn datumesh_formula::call::MapCallEnv::from_value(&datumesh_core::json::Value) -> core::result::Result<datumesh_formula::call::MapCallEnv, datumesh_core::error::Error>
+impl core::clone::Clone for datumesh_formula::call::MapCallEnv
+pub fn datumesh_formula::call::MapCallEnv::clone(&self) -> Self
+impl core::default::Default for datumesh_formula::call::MapCallEnv
+pub fn datumesh_formula::call::MapCallEnv::default() -> Self
+impl core::fmt::Debug for datumesh_formula::call::MapCallEnv
+pub fn datumesh_formula::call::MapCallEnv::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl datumesh_formula::call::CallEnv for datumesh_formula::call::MapCallEnv
+pub fn datumesh_formula::call::MapCallEnv::alias(&self, &str) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
+pub fn datumesh_formula::call::MapCallEnv::bound(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::descriptor::FunctionDescriptor>, alloc::string::String>
+pub fn datumesh_formula::call::MapCallEnv::pinned(&self, &str) -> core::result::Result<core::option::Option<datumesh_core::descriptor::FunctionDescriptor>, alloc::string::String>
+pub trait datumesh_formula::call::CallEnv
+pub fn datumesh_formula::call::CallEnv::alias(&self, &str) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
+pub fn datumesh_formula::call::CallEnv::bound(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::descriptor::FunctionDescriptor>, alloc::string::String>
+pub fn datumesh_formula::call::CallEnv::pinned(&self, &str) -> core::result::Result<core::option::Option<datumesh_core::descriptor::FunctionDescriptor>, alloc::string::String>
+impl datumesh_formula::call::CallEnv for (dyn datumesh_store::Store + core::marker::Send + core::marker::Sync)
+pub fn (dyn datumesh_store::Store + core::marker::Send + core::marker::Sync)::alias(&self, &str) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
+pub fn (dyn datumesh_store::Store + core::marker::Send + core::marker::Sync)::bound(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::descriptor::FunctionDescriptor>, alloc::string::String>
+pub fn (dyn datumesh_store::Store + core::marker::Send + core::marker::Sync)::pinned(&self, &str) -> core::result::Result<core::option::Option<datumesh_core::descriptor::FunctionDescriptor>, alloc::string::String>
+impl datumesh_formula::call::CallEnv for datumesh_formula::call::MapCallEnv
+pub fn datumesh_formula::call::MapCallEnv::alias(&self, &str) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
+pub fn datumesh_formula::call::MapCallEnv::bound(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::descriptor::FunctionDescriptor>, alloc::string::String>
+pub fn datumesh_formula::call::MapCallEnv::pinned(&self, &str) -> core::result::Result<core::option::Option<datumesh_core::descriptor::FunctionDescriptor>, alloc::string::String>
+impl datumesh_formula::call::CallEnv for datumesh_store::pg::PgStore
+pub fn datumesh_store::pg::PgStore::alias(&self, &str) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
+pub fn datumesh_store::pg::PgStore::bound(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::descriptor::FunctionDescriptor>, alloc::string::String>
+pub fn datumesh_store::pg::PgStore::pinned(&self, &str) -> core::result::Result<core::option::Option<datumesh_core::descriptor::FunctionDescriptor>, alloc::string::String>
+pub fn datumesh_formula::call::parse_call(&str, &dyn datumesh_formula::call::CallEnv) -> core::result::Result<datumesh_formula::call::Call, datumesh_formula::call::CallError>
 pub mod datumesh_formula::decimal
 pub enum datumesh_formula::decimal::RoundMode
 pub datumesh_formula::decimal::RoundMode::Down

@@ -95,9 +95,8 @@ fn future_before_the_arguments_without_asof_dependence() {
     // T after the asof: E_FORMULA_FUTURE, though the argument divides by zero.
     assert_eq!(get("0", A2).unwrap(), Answer::NotCovered { fault: Some(Fault::Future) });
     assert_eq!(get("1", A2).unwrap(), Answer::NotCovered { fault: Some(Fault::Future) });
-    // An argument that reads a cell without a value, T after the asof: the dialect reports
-    // E_FORMULA_FUTURE first (15.13), but engine 0.3.0 answers plain not_covered once an input
-    // has no value, whatever the runtime returns (the runtime does return the fault).
+    // An argument that reads a cell without a value, T after the asof: E_FORMULA_FUTURE first
+    // (15.13); engine 0.3.1 answers with the runtime's fault (0.3.0 answered plain not_covered).
     m.define(
         "calc.example.net/then_name",
         r#"asof(rates.example.org/rate(rates.example.org/rate_name(n)), t)"#,
@@ -107,7 +106,7 @@ fn future_before_the_arguments_without_asof_dependence() {
     let get2 = |n: &str, t: &str| {
         engine.get(&cell_ref("calc.example.net/then_name", &[("n", num(n)), ("t", instant(t))]), Some(A))
     };
-    assert_eq!(get2("1", A2).unwrap(), Answer::NotCovered { fault: None }, "engine 0.3.0; the dialect: Future");
+    assert_eq!(get2("1", A2).unwrap(), Answer::NotCovered { fault: Some(Fault::Future) });
     assert_eq!(get2("1", "2026-01-20T00:00:00.000000Z").unwrap(), Answer::NotCovered { fault: None });
     // T at or before it: the argument's fault.
     assert_eq!(get("0", "2026-01-20T00:00:00.000000Z").unwrap(), Answer::NotCovered { fault: Some(Fault::DivZero) });
