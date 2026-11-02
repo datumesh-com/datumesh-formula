@@ -222,6 +222,16 @@ pub trait World {
         false
     }
 
+    /// The content of the blob whose SHA-256 is `sha256`, from the world's resolver (a mesh's
+    /// store, a verifier's offered content), for `text_of` (15.7, spec-0.4.2); `None` when it
+    /// has none. The evaluator accepts it only when its length and hash are the blob's, and
+    /// otherwise reports `E_FORMULA_BLOB_UNAVAILABLE`, as for `None`. Free (`text_of` charges
+    /// for the content). Provided: `None`.
+    fn blob(&mut self, sha256: &str) -> Result<Option<Vec<u8>>, Stop<Self::Error>> {
+        let _ = sha256;
+        Ok(None)
+    }
+
     /// A read's name resolved to `binding` (as of the evaluation asof, or as of `T` in
     /// `asof(c, T)`): when the body was compiled against another function for that name, the
     /// world checks the body again (15.8: "a callee name rebound since define time is checked
@@ -897,6 +907,8 @@ impl<W: World + ?Sized> Eval<'_, W> {
             "len" => self.b_len(id, f, args, named),
             "upper" | "lower" | "trim" => self.b_upper(id, f, args, named),
             "concat" => self.b_concat(id, f, args, named),
+            "text_of" => self.b_text_of(args),
+            "remove_chars" => self.b_remove_chars(args),
             "substr" => self.b_substr(id, f, args, named),
             "find" => self.b_find(id, f, args, named),
             "text" => self.b_text(id, f, args, named),
@@ -1108,6 +1120,52 @@ impl<W: World + ?Sized> Eval<'_, W> {
             _ => text::trim(&s),
         };
         let r = text::finish(r)?;
+        self.charge(1 + r.len() as u64 / 64)?;
+        Ok(V::Str(r))
+    }
+
+    /// `text_of(blob)` (spec-0.4.2): the media type first (`text/plain`, else
+    /// `E_FORMULA_DOMAIN`), then the content from the world by SHA-256, accepted only with the
+    /// blob's length and hash (`E_FORMULA_BLOB_UNAVAILABLE`), charged 1 + bytes / 64, then
+    /// decoded as UTF-8 and normalised to NFC, a string of 3.5 (`E_FORMULA_DOMAIN`) of at most
+    /// 1024 bytes (`E_FORMULA_RANGE`).
+    #[inline(never)]
+    fn b_text_of(&mut self, args: &[NodeId]) -> R<V, W::Error> {
+        let V::Blob(b) = self.node(args[0])? else { return Err(Code::Type.into()) };
+        let mut parts = b.splitn(3, ':');
+        let (Some(sha), Some(len), Some(media)) = (parts.next(), parts.next(), parts.next()) else {
+            return Err(Code::Domain.into());
+        };
+        if media != "text/plain" {
+            return Err(Code::Domain.into());
+        }
+        let len: u64 = len.parse().map_err(|_| Stop::Code(Code::Domain))?;
+        let content = self.world.blob(sha)?.ok_or(Stop::Code(Code::BlobUnavailable))?;
+        if content.len() as u64 != len || datumesh_core::sha256_hex(&content) != sha {
+            return Err(Code::BlobUnavailable.into());
+        }
+        self.charge(1 + len / 64)?;
+        let s = String::from_utf8(content).map_err(|_| Stop::Code(Code::Domain))?;
+        let n: String = if unicode_normalization::is_nfc(&s) {
+            s
+        } else {
+            unicode_normalization::UnicodeNormalization::nfc(s.as_str()).collect()
+        };
+        match datumesh_core::lexical::check_string(&n, "text_of") {
+            Ok(()) => Ok(V::Str(n)),
+            Err(e) if e.code() == datumesh_core::ErrorCode::CanonLimit => Err(Code::Range.into()),
+            Err(_) => Err(Code::Domain.into()),
+        }
+    }
+
+    /// `remove_chars(text, chars)` (spec-0.4.2): `text` without every code point of `chars`,
+    /// then NFC; charged 1 + bytes of the result / 64.
+    #[inline(never)]
+    fn b_remove_chars(&mut self, args: &[NodeId]) -> R<V, W::Error> {
+        let V::Str(s) = self.node(args[0])? else { return Err(Code::Type.into()) };
+        let V::Str(chars) = self.node(args[1])? else { return Err(Code::Type.into()) };
+        let set: BTreeSet<char> = chars.chars().collect();
+        let r = text::finish(s.chars().filter(|c| !set.contains(c)).collect())?;
         self.charge(1 + r.len() as u64 / 64)?;
         Ok(V::Str(r))
     }

@@ -85,6 +85,8 @@ codes! {
     Budget => "E_FORMULA_BUDGET",
     Cycle => "E_FORMULA_CYCLE",
     Depth => "E_FORMULA_DEPTH",
+    /// `text_of` cannot obtain the blob's content (spec-0.4.2): the evaluator's failure.
+    BlobUnavailable => "E_FORMULA_BLOB_UNAVAILABLE",
 }
 
 impl Code {
@@ -102,7 +104,7 @@ impl Code {
     /// Whether it is the mesh's failure rather than the cell's (SPEC 15.12): budget, cycle,
     /// depth. A mesh answers these with an `error` envelope and `E_EVAL_UNAVAILABLE`.
     pub const fn is_mesh_failure(self) -> bool {
-        matches!(self, Code::Budget | Code::Cycle | Code::Depth)
+        matches!(self, Code::Budget | Code::Cycle | Code::Depth | Code::BlobUnavailable)
     }
 }
 

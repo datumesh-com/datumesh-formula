@@ -797,6 +797,15 @@ impl Checker<'_> {
                 Ok(Ty::Str)
             }
             "concat" => self.t_concat(id, f, args, named),
+            "text_of" => {
+                self.expect(args[0], &Ty::Blob, f)?;
+                Ok(Ty::Str)
+            }
+            "remove_chars" => {
+                self.expect(args[0], &Ty::Str, f)?;
+                self.expect(args[1], &Ty::Str, f)?;
+                Ok(Ty::Str)
+            }
             "substr" => self.t_substr(id, f, args, named),
             "find" => self.t_find(id, f, args, named),
             "text" => {

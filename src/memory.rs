@@ -72,6 +72,8 @@ pub struct MemoryWorld {
     stored: Vec<Stored>,
     compiled: HashMap<String, Arc<Compiled>>,
     memo: HashMap<(CellKey, String), Result<Option<Version>, Code>>,
+    /// Blob content by SHA-256 (a vector world's `blobs`, spec-0.4.2).
+    blobs: HashMap<String, Vec<u8>>,
     computed: HashMap<String, Computed>,
     stack: Vec<CellKey>,
     /// The evaluation depth limit, in cells.
@@ -124,6 +126,7 @@ impl MemoryWorld {
             stored: Vec::new(),
             compiled: HashMap::new(),
             memo: HashMap::new(),
+            blobs: HashMap::new(),
             computed: HashMap::new(),
             stack: Vec::new(),
             max_depth: DEFAULT_MAX_DEPTH,
@@ -148,6 +151,12 @@ impl MemoryWorld {
                 w.add_receipt(r)?;
             }
         }
+        if let Some(bs) = world.get("blobs").and_then(Value::as_object) {
+            for (sha, hex) in bs {
+                let hex = hex.as_str().ok_or_else(|| bad("blob content"))?;
+                w.add_blob(sha, hex_bytes(hex).ok_or_else(|| bad("blob content hex"))?);
+            }
+        }
         if let Some(d) = world.get("max_depth").and_then(Value::as_number_text) {
             w.max_depth = d.parse().map_err(|_| bad("max_depth"))?;
         }
@@ -160,6 +169,11 @@ impl MemoryWorld {
         self.functions.insert(name.to_string(), Binding { function: Arc::new(f), start: start.to_string() });
         self.compiled.remove(name);
         Ok(())
+    }
+
+    /// Give the world a blob's content under `sha256` (as a resolver would; not checked here).
+    pub fn add_blob(&mut self, sha256: &str, content: Vec<u8>) {
+        self.blobs.insert(sha256.to_string(), content);
     }
 
     /// Add a stored receipt.
@@ -417,6 +431,10 @@ impl World for MemoryWorld {
     fn asof(&mut self) -> Result<String, Stop<Self::Error>> {
         Ok(self.asof.clone())
     }
+
+    fn blob(&mut self, sha256: &str) -> Result<Option<Vec<u8>>, Stop<Self::Error>> {
+        Ok(self.blobs.get(sha256).cloned())
+    }
 }
 
 /// The result of a `formula-eval` or `excel` vector's evaluation.
@@ -469,4 +487,11 @@ pub fn run_vector(v: &Value) -> Result<Result<VectorResult, Code>, EnvError> {
     let r = world.compute(&key, asof);
     let evaluated = world.evaluated();
     Ok(r.map(|computed| VectorResult { computed, fuel_used: world.fuel.used, evaluated }))
+}
+
+fn hex_bytes(s: &str) -> Option<Vec<u8>> {
+    if !s.len().is_multiple_of(2) {
+        return None;
+    }
+    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok()).collect()
 }

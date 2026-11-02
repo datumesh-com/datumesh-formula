@@ -202,6 +202,8 @@ pub const BUILTINS: &[&str] = &[
     "find",
     "text",
     "fixed",
+    "text_of",
+    "remove_chars",
 ];
 
 /// Function names that do not exist, when called (15.2.1 rule 3).

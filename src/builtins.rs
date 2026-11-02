@@ -65,6 +65,8 @@ pub(crate) fn params(name: &str) -> Option<Params> {
         "substr" => Fixed(&["text", "start", "length"], &[]),
         "find" => Fixed(&["needle", "text"], &["start"]),
         "fixed" => Fixed(&["x", "digits"], &[]),
+        "text_of" => Fixed(&["blob"], &[]),
+        "remove_chars" => Fixed(&["text", "chars"], &[]),
         _ => return None,
     })
 }
