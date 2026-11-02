@@ -1,0 +1,35 @@
+{
+  "id": "invalid/uri-unsorted",
+  "kind": "uri",
+  "description": "Arguments must be sorted; the URI is canonical. Changed in spec-0.2.0: the signature input now declares units; the outputs are unchanged.",
+  "valid": false,
+  "input": "cell://rates.example.org/fx_rate?quote=USD&base=EUR&date=2024-03-15",
+  "signature": {
+    "args": {
+      "base": {
+        "type": "string",
+        "valid": false
+      },
+      "date": {
+        "type": "date",
+        "valid": true
+      },
+      "quote": {
+        "type": "string",
+        "valid": false
+      }
+    },
+    "returns": {
+      "type": "number",
+      "unit": {
+        "of": {
+          "arg": "quote"
+        },
+        "per": {
+          "arg": "base"
+        }
+      }
+    }
+  },
+  "error": "E_CANON_ARG_ORDER"
+}

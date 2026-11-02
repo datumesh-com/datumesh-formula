@@ -1,0 +1,22 @@
+{
+  "id": "uri/no-arguments",
+  "kind": "uri",
+  "description": "A function of no arguments has no query. Changed in spec-0.2.0: the signature input now declares units; the outputs are unchanged.",
+  "valid": true,
+  "input": "cell://math.example/pi",
+  "signature": {
+    "args": {},
+    "returns": {
+      "type": "number",
+      "unit": "1"
+    }
+  },
+  "object": {
+    "args": {},
+    "fn": "pi",
+    "ns": "math.example"
+  },
+  "canonical": "{\"args\":{},\"fn\":\"pi\",\"ns\":\"math.example\"}",
+  "sha256": "4a36cd070074d5188c34a6c4a88ed613ca7f4d8461e22f87b42e6bcb3ed73bed",
+  "https": "https://mesh.example/cell/math.example/pi"
+}

@@ -89,7 +89,7 @@ fn formula_eval_vectors() {
     for f in &failures {
         eprintln!("  {f}");
     }
-    assert_eq!((valid, invalid), (121, 34));
+    assert_eq!((valid, invalid), (125, 39));
     assert!(failures.is_empty());
 }
 
@@ -100,7 +100,7 @@ fn excel_vectors() {
     for f in &failures {
         eprintln!("  {f}");
     }
-    assert_eq!(valid + invalid, 78);
+    assert_eq!(valid + invalid, 79);
     assert!(failures.is_empty());
 }
 
