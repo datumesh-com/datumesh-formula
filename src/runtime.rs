@@ -389,6 +389,12 @@ impl World for EngineWorld<'_> {
         Ok(self.inputs.asof())
     }
 
+    /// The engine's blob content (`Inputs::read_blob`, which checks the length and the hash);
+    /// its `BlobUnavailable` passes through, so the request fails with the engine's error.
+    fn blob(&mut self, sha256: &str, length: u64) -> Result<Option<Vec<u8>>, Stop<EvalError>> {
+        self.inputs.read_blob(sha256, length).map(Some).map_err(Stop::World)
+    }
+
     fn no_value(error: &EvalError) -> bool {
         matches!(error, EvalError::InputNotCovered { .. })
     }

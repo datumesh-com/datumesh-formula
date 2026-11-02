@@ -137,7 +137,6 @@ pub fn define_function(
 ) -> Result<Definition, DefineError> {
     // Section 7 first: the signature's shape and canonical form, in a descriptor.
     FunctionDescriptor::from_value(&descriptor_value("", &[], signature)).map_err(DefineError::Descriptor)?;
-    crate::reserved_arguments(Some(signature))?;
     let sig = Signature::from_value(signature).map_err(|e| Error::new(Code::Syntax, e.0))?;
     if sig.order.is_none() {
         return Err(Error::new(Code::Order, "a formula signature declares order").into());

@@ -432,7 +432,7 @@ impl World for MemoryWorld {
         Ok(self.asof.clone())
     }
 
-    fn blob(&mut self, sha256: &str) -> Result<Option<Vec<u8>>, Stop<Self::Error>> {
+    fn blob(&mut self, sha256: &str, _length: u64) -> Result<Option<Vec<u8>>, Stop<Self::Error>> {
         Ok(self.blobs.get(sha256).cloned())
     }
 }

@@ -25,6 +25,7 @@ use std::sync::Mutex;
 use datumesh_core::json::Value;
 use datumesh_core::{Arg, CellRef, Receipt};
 use datumesh_engine::{Answer, EngineError};
+use datumesh_store::Store;
 use datumesh_formula::definition::{define_function, publish};
 use datumesh_formula::eval::CellKey;
 use datumesh_formula::memory::{run_vector, DEFAULT_FUEL};
@@ -47,6 +48,15 @@ fn world_mesh(v: &Value) -> Mesh {
     for (name, f) in fs {
         let d = f.get("descriptor").unwrap().to_jcs();
         mesh.bind(name, &d, common::string(f, "bound").unwrap());
+    }
+    // The world's blob content, in the store (the engine reads it by SHA-256).
+    if let Some(bs) = world.get("blobs").and_then(Value::as_object) {
+        for (sha, hex) in bs {
+            let hex = hex.as_str().unwrap();
+            let bytes: Vec<u8> =
+                (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap()).collect();
+            assert_eq!(&mesh.store.put_blob(&bytes).unwrap(), sha);
+        }
     }
     // Versions in tx order per cell.
     let mut rs: Vec<(String, String, Value)> = receipts
@@ -136,6 +146,7 @@ fn check_vector(path: &str, v: &Value) -> Result<(), String> {
             (Ok(Answer::NotCovered { fault: Some(f) }), w) => f.as_str() == w,
             (Err(EngineError::BudgetExceeded { .. }), "E_FORMULA_BUDGET") => true,
             (Err(EngineError::Cycle { .. }), "E_FORMULA_CYCLE") => true,
+            (Err(EngineError::BlobUnavailable { .. }), "E_FORMULA_BLOB_UNAVAILABLE") => true,
             (Err(EngineError::DepthExceeded { .. }), "E_FORMULA_DEPTH") => true,
             (Err(EngineError::Runtime { message, .. }), w) => message.contains(w),
             _ => false,

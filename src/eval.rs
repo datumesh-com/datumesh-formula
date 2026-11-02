@@ -222,13 +222,13 @@ pub trait World {
         false
     }
 
-    /// The content of the blob whose SHA-256 is `sha256`, from the world's resolver (a mesh's
-    /// store, a verifier's offered content), for `text_of` (15.7, spec-0.4.2); `None` when it
-    /// has none. The evaluator accepts it only when its length and hash are the blob's, and
+    /// The content of the blob whose SHA-256 is `sha256` and length `length`, from the world's
+    /// resolver (a mesh's store, a verifier's offered content), for `text_of` (15.7,
+    /// spec-0.4.2); `None` when it has none. The evaluator accepts it only when its length and hash are the blob's, and
     /// otherwise reports `E_FORMULA_BLOB_UNAVAILABLE`, as for `None`. Free (`text_of` charges
     /// for the content). Provided: `None`.
-    fn blob(&mut self, sha256: &str) -> Result<Option<Vec<u8>>, Stop<Self::Error>> {
-        let _ = sha256;
+    fn blob(&mut self, sha256: &str, length: u64) -> Result<Option<Vec<u8>>, Stop<Self::Error>> {
+        let _ = (sha256, length);
         Ok(None)
     }
 
@@ -1140,7 +1140,7 @@ impl<W: World + ?Sized> Eval<'_, W> {
             return Err(Code::Domain.into());
         }
         let len: u64 = len.parse().map_err(|_| Stop::Code(Code::Domain))?;
-        let content = self.world.blob(sha)?.ok_or(Stop::Code(Code::BlobUnavailable))?;
+        let content = self.world.blob(sha, len)?.ok_or(Stop::Code(Code::BlobUnavailable))?;
         if content.len() as u64 != len || datumesh_core::sha256_hex(&content) != sha {
             return Err(Code::BlobUnavailable.into());
         }

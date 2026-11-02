@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use datumesh_core::json::Value;
-use datumesh_core::{format_uri, lexical, Arg, Args, CellRef, FunctionDescriptor, Scalar, Type};
+use datumesh_core::{format_reference, lexical, Arg, Args, CellRef, FunctionDescriptor, Reference, Scalar, Type};
 
 use crate::lex::{self, Kind, Token};
 use crate::Code;
@@ -192,22 +192,17 @@ pub struct Call {
 }
 
 impl Call {
-    /// The cell URI the call is written as (5.1, 5.2): the arguments in order, then
-    /// `fn_hash=` when pinned, then `asof=`.
+    /// The core's reference (spec-0.4.2): the cell reference with its pin.
+    pub fn reference(&self) -> Reference {
+        let mut r = Reference::from(self.cell.clone());
+        r.fn_hash = self.fn_hash.clone();
+        r
+    }
+
+    /// The cell URI the call is written as (5.1, 5.2; the core's `format_reference`): the
+    /// arguments in order, then `fn_hash=` when pinned, then `asof=`.
     pub fn uri(&self) -> String {
-        let Some(h) = &self.fn_hash else { return format_uri(&self.cell) };
-        let base = CellRef { asof: None, ..self.cell.clone() };
-        let mut out = format_uri(&base);
-        out.push(if out.contains('?') { '&' } else { '?' });
-        out.push_str("fn_hash=");
-        out.push_str(h);
-        if self.cell.asof.is_some() {
-            let full = format_uri(&self.cell);
-            let base_len = format_uri(&base).len();
-            out.push('&');
-            out.push_str(&full[base_len + 1..]);
-        }
-        out
+        format_reference(&self.reference())
     }
 }
 
