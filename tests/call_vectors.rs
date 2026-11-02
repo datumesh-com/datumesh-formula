@@ -72,3 +72,24 @@ fn a_pinned_call_needs_the_descriptor_not_the_binding() {
         .replace("@014fc97eb3a442ab28a96d89131ccfd11c9eec8187595578c212b392d0702c71", "");
     assert_eq!(parse_call(&unpinned, &env).unwrap_err().code(), "E_NAME_UNBOUND");
 }
+
+/// Every valid call's URI, pinned or not, round-trips through the core's `parse_reference`
+/// (against the signature of the descriptor it names) to the call's reference.
+#[test]
+fn every_call_uri_is_a_reference() {
+    for (path, v) in common::vectors_of_kind("call") {
+        if common::boolean(&v, "valid") != Some(true) {
+            continue;
+        }
+        let env = MapCallEnv::from_value(v.get("env").unwrap()).unwrap();
+        let c = parse_call(common::string(&v, "input").unwrap(), &env).unwrap();
+        let d = match &c.fn_hash {
+            Some(h) => env.pinned(h).unwrap().unwrap(),
+            None => env.bound(&format!("{}/{}", c.cell.ns, c.cell.fn_name), None).unwrap().unwrap(),
+        };
+        let sig: Value = d.to_value().get("signature").unwrap().clone();
+        let back = datumesh_core::parse_reference(&c.uri(), &sig).unwrap();
+        assert_eq!(back, c.reference(), "{path}");
+        assert_eq!(datumesh_core::format_reference(&back), c.uri(), "{path}");
+    }
+}

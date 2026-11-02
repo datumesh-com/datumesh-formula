@@ -22,17 +22,17 @@ engine = ["dep:datumesh-engine", "dep:datumesh-store"]
 [dependencies]
 # Strict JSON, JCS, SHA-256 and the string rules of SPEC 3.5 (Unicode 15.1 assigned, NFC);
 # FunctionDescriptor (section 7 with spec-0.4.0's order and extent) and Fault.
-datumesh-core = "0.3.5"
+datumesh-core = "0.3.6"
 # NFC normalisation of computed strings (SPEC 15.7). Already a dependency of datumesh-core.
 unicode-normalization = { version = "0.1.26", default-features = false }
 # The Runtime and Inputs the formula evaluator plugs into.
-datumesh-engine = { version = "0.3.1", optional = true }
+datumesh-engine = { version = "0.3.2", optional = true }
 # Callee descriptors and name bindings for define and the runtime; publishing a definition.
 # Already a dependency of datumesh-engine.
 datumesh-store = { version = "0.3.2", optional = true }
 
 [dev-dependencies]
-datumesh-core = { version = "0.3.5", features = ["sign"] }
+datumesh-core = { version = "0.3.6", features = ["sign"] }
 
 [profile.dev.package."*"]
 opt-level = 3
