@@ -15,7 +15,8 @@ Without feature `engine` nothing changed.
 
 Behaviour: none changed. Code: none changed. Dependencies: `datumesh-engine` 0.4.0 (was
 0.3.2) and `datumesh-store` 0.4.0 (was 0.3.2), both optional (feature `engine`);
-`datumesh-core` 0.3.6 as before.
+`datumesh-core` 0.3.6 as before. The store is a dependency with `default-features = false`; feature
+`sqlite` (new, off) enables its SQLite backend and adds nothing to the listing.
 
 ## Full diff
 

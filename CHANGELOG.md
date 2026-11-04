@@ -5,14 +5,18 @@ All notable changes to `datumesh-formula`.
 ## 0.2.0 (unreleased)
 
 On `datumesh-engine` 0.4.0 and `datumesh-store` 0.4.0 (the optional feature `engine`; were
-0.3.2 and 0.3.2), so that the formula runtime runs on the store's SQLite backend as well as on
-PostgreSQL. Nothing else changed: no code, no behaviour (`API-CHANGES-0.2.0.md`).
+0.3.2 and 0.3.2), so that the formula runtime runs on the store's SQLite backend (feature
+`sqlite`) as well as on PostgreSQL. Nothing else changed: no code, no behaviour
+(`API-CHANGES-0.2.0.md`).
 
 - Breaking only because, with feature `engine`, the public API names the engine's and the
   store's types (`runtime::FormulaRuntime::new` takes an `Arc<dyn Store + Send + Sync>`, the
   runtime implements the engine's `Runtime`, `CallEnv` is implemented for `PgStore` and for
   `dyn Store + Send + Sync`), which are now engine 0.4's and store 0.4's: users move to the
   three together. Without feature `engine` the API is unchanged.
+- `datumesh-store` with `default-features = false`, and a new feature `sqlite` (off: `engine`
+  with `datumesh-engine/sqlite` and `datumesh-store/sqlite`) for the store's SQLite backend.
+  `PgStore` is always built, so PostgreSQL users need no new feature.
 
 ## 0.1.1 (2026-11-02)
 

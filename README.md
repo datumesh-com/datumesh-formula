@@ -258,6 +258,11 @@ Dependencies: `datumesh-core` 0.3.6 for strict JSON, JCS, SHA-256, the string ru
 `engine` (default), `datumesh-engine` 0.4.0 for `Runtime` and `datumesh-store` 0.4.0 (already a
 dependency of the engine) for the callees and `publish`. Without the feature, the language alone.
 
+| Feature | Default | What |
+|---|---|---|
+| `engine` | on | `runtime::FormulaRuntime` (the engine's `Runtime`), `define`/`publish` and `parse_call` over a store, on `datumesh-engine` and `datumesh-store` (PostgreSQL's `PgStore` always) |
+| `sqlite` | off | `engine`, and the store's SQLite backend (`SqliteStore`; `datumesh-engine/sqlite`, `datumesh-store/sqlite`). Since 0.2.0 the store is a dependency with `default-features = false`, so a build without it compiles no SQLite |
+
 
 ## Benchmark
 
