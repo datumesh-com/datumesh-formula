@@ -13,9 +13,9 @@ definition of formula functions (the canonical descriptor), and the
 
 ```toml
 [dependencies]
-datumesh-formula = "0.1.1"
-datumesh-engine = "0.3.2"
-datumesh-store = "0.3.2"
+datumesh-formula = "0.2.0"
+datumesh-engine = "0.4.0"
+datumesh-store = "0.4.0"
 datumesh-core = { version = "0.3.6", features = ["sign"] }
 ```
 
@@ -215,7 +215,7 @@ check against the latest bindings is checked against those of the evaluation aso
   vector, in a database of its own, gives the vector's value, lineage, `tx`, receipt `asof` and
   receipt hash (signed as `mesh.example.net` with the vectors' conventions), verifies at
   `recomputed`, and answers invalid vectors as 15.12 says; the engine-measured fuel equals the
-  vector's (datumesh-engine 0.3.2, blob content included).
+  vector's (datumesh-engine 0.4.0 on datumesh-store 0.4.0, blob content included).
 - Every `call` vector (27) passes `call::parse_call`.
 - The brief's tests through the engine (`tests/brief.rs`): `fib(90)` exact with 91 memoised cells;
   a curve bootstrapped over ten tenors; a weighted mean over 1,000 stations with two slice entries,
@@ -255,7 +255,7 @@ another implementation and compare them. `spec-vectors/` is a copy of the spec's
 Dependencies: `datumesh-core` 0.3.6 for strict JSON, JCS, SHA-256, the string rules of SPEC 3.5
 (Unicode 15.1 assigned code points, NFC), `FunctionDescriptor` and `Fault`; `unicode-normalization`
 (already a dependency of `datumesh-core`) to normalise computed strings to NFC; with feature
-`engine` (default), `datumesh-engine` 0.3.2 for `Runtime` and `datumesh-store` 0.3.2 (already a
+`engine` (default), `datumesh-engine` 0.4.0 for `Runtime` and `datumesh-store` 0.4.0 (already a
 dependency of the engine) for the callees and `publish`. Without the feature, the language alone.
 
 

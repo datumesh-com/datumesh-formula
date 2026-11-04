@@ -1,6 +1,6 @@
 [package]
 name = "datumesh-formula"
-version = "0.1.1"
+version = "0.2.0"
 description = "The Datumesh formula dialect: parser, resolver, type and unit checker, printer, canonical AST hash, exact decimal arithmetic and an evaluator with lineage and fuel."
 edition = "2021"
 rust-version = "1.97"
@@ -26,10 +26,10 @@ datumesh-core = "0.3.6"
 # NFC normalisation of computed strings (SPEC 15.7). Already a dependency of datumesh-core.
 unicode-normalization = { version = "0.1.26", default-features = false }
 # The Runtime and Inputs the formula evaluator plugs into.
-datumesh-engine = { version = "0.3.2", optional = true }
+datumesh-engine = { version = "0.4.0", optional = true }
 # Callee descriptors and name bindings for define and the runtime; publishing a definition.
 # Already a dependency of datumesh-engine.
-datumesh-store = { version = "0.3.2", optional = true }
+datumesh-store = { version = "0.4.0", optional = true }
 
 [dev-dependencies]
 datumesh-core = { version = "0.3.6", features = ["sign"] }
