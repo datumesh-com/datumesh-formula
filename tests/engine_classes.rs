@@ -67,16 +67,102 @@ fn a_store_answers_class_calls() {
 // ---------------------------------------------------------------------------------------------
 // Group 3: dispatch through the engine; defining and publishing classes.
 
-/// The dispatch vectors, and the local ones, through the engine with the classes put and bound in
-/// the store: the engine answers what the in-memory world does (value, lineage, receipt hash,
-/// fuel), a key outside the set as `not_covered` with `E_FORMULA_DISPATCH_KEY`.
+/// The dispatch-group vectors of the spec, `class-super` included, through the engine with the
+/// classes put and bound in the store: the engine answers what the in-memory world does (value,
+/// lineage, receipt hash under SPEC 11's licence convention, fuel), a key outside the set as
+/// `not_covered` with `E_FORMULA_DISPATCH_KEY`. `class-super` needs `Inputs::read_pinned`
+/// (datumesh-engine 0.4.2, SPEC-FINDINGS H8); formula's runtime answers `E_FORMULA_UNSUPPORTED`
+/// for a pinned read until it uses it.
 #[test]
-#[ignore = "super through the engine needs datumesh-engine 0.4.2 (a read by hash, SPEC-FINDINGS H8): class-super answers E_FORMULA_UNSUPPORTED until then; the local vectors' receipts are signed by a key id the mesh does not publish"]
 fn the_dispatch_group_through_the_engine() {
-    let n = engine::check_kind(dispatch_eval(), true, "class formula-eval (dispatch group)");
-    assert_eq!(n, 7);
+    let vectors: Vec<_> =
+        dispatch_eval().into_iter().filter(|(p, _)| !NOT_LOADABLE_THROUGH_A_STORE.contains(&p.as_str())).collect();
+    let n = engine::check_kind(vectors, true, "class formula-eval (dispatch group)");
+    assert_eq!(n, 6);
+}
+
+/// A vector whose world cannot be loaded through a store: the class `bond` names the method
+/// hash `cfd19943...` for `price`, but the world lists no descriptor with that hash (the function
+/// `bond/price` is bound to another descriptor, which is the vector's point), and `bind_class`
+/// needs the descriptor of every method it binds (`NotFound { what: "descriptor" }`). Reported as a
+/// spec finding; the in-memory runner runs it (`classes_dispatch`).
+const NOT_LOADABLE_THROUGH_A_STORE: &[&str] = &["invalid/formula-eval-class-dispatch-rebound.json"];
+
+/// The local class vectors (`tests/vectors-local`) through the engine.
+#[test]
+#[ignore = "the local vectors' receipts are signed by a key id the mesh does not publish (SPEC-FINDINGS I5)"]
+fn the_local_class_vectors_through_the_engine() {
     let n = engine::check_kind(common::local_vectors(), true, "local class vectors");
     assert_eq!(n, 11);
+}
+
+/// `formula-eval/class-super` through the engine, one vector alone: `fx_ndf/rate` reads
+/// `fx_pair/rate` pinned to the parent's function hash (`read_pinned`). The value `1.0892`, the
+/// lineage (the pinned receipt, `5a98aec5...`) and the receipt hash `a28b2591...` (under SPEC 11's
+/// convention) are the vector's, not an `E_FORMULA_UNSUPPORTED` fault.
+#[test]
+fn super_through_the_engine() {
+    let v = common::vector("formula-eval/class-super.json");
+    let mesh = engine::world_mesh(&v, true);
+    mesh.clock.set("2026-06-01T00:00:00.000000Z");
+    let (engine_, _rt) = mesh.engine();
+    let cell = cell_ref(
+        "calc.example.net/fx_ndf/rate",
+        &[("base", text("EUR")), ("quote", text("USD")), ("date", date("2026-03-16"))],
+    );
+    match engine_.get(&cell, Some("2026-06-01T00:00:00.000000Z")).unwrap() {
+        Answer::Receipt(bytes) => {
+            let r = datumesh_core::Receipt::from_json(&bytes).unwrap();
+            assert_eq!(r.value().lexical(), "1.0892");
+            assert_eq!(r.inputs(), ["5a98aec504eb80a27ef6bcc82775b3b58a41aaa7ea090828912100f93ed745ca"]);
+            assert_eq!(r.tx(), "2026-03-16T16:00:00.000000Z");
+            assert_eq!(r.asof(), "2026-03-16T16:00:00.000000Z");
+            assert_eq!(
+                engine::convention_hash(&bytes, &BTreeMap::new(), &*mesh.store),
+                "a28b25916e8c7ae34cb12d3bfc37613f4e0658cb80f0827a705dab8232b36a4d"
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+/// A pinned read relies on no binding (16.3, 8.2 rule 2): with `rates.example.org/fx_pair/rate`
+/// rebound to another function before the asof, `fx_ndf/rate` answers the same value, lineage and
+/// receipt hash, since `super` reads the function stored under the parent's hash, not what `P/m`
+/// is bound to.
+#[test]
+fn super_relies_on_no_binding_through_the_engine() {
+    let v = common::vector("formula-eval/class-super.json");
+    let mesh = engine::world_mesh(&v, true);
+    let other = v
+        .get("world")
+        .unwrap()
+        .get("functions")
+        .unwrap()
+        .get("rates.example.org/fx_pair/spot")
+        .unwrap()
+        .get("descriptor")
+        .unwrap();
+    mesh.bind("rates.example.org/fx_pair/rate", &other.to_jcs(), "2026-05-01T00:00:00.000000Z");
+    mesh.clock.set("2026-06-01T00:00:00.000000Z");
+    let (engine_, _rt) = mesh.engine();
+    let cell = cell_ref(
+        "calc.example.net/fx_ndf/rate",
+        &[("base", text("EUR")), ("quote", text("USD")), ("date", date("2026-03-16"))],
+    );
+    match engine_.get(&cell, Some("2026-06-01T00:00:00.000000Z")).unwrap() {
+        Answer::Receipt(bytes) => {
+            let r = datumesh_core::Receipt::from_json(&bytes).unwrap();
+            assert_eq!(r.value().lexical(), "1.0892");
+            assert_eq!(r.inputs(), ["5a98aec504eb80a27ef6bcc82775b3b58a41aaa7ea090828912100f93ed745ca"]);
+            assert_eq!(r.asof(), "2026-03-16T16:00:00.000000Z");
+            assert_eq!(
+                engine::convention_hash(&bytes, &BTreeMap::new(), &*mesh.store),
+                "a28b25916e8c7ae34cb12d3bfc37613f4e0658cb80f0827a705dab8232b36a4d"
+            );
+        }
+        other => panic!("{other:?}"),
+    }
 }
 
 /// Define and publish over a store: two classes defined from their descriptors (`define_class`

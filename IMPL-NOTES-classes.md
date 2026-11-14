@@ -261,3 +261,22 @@ Fail today (10 tests): the 3 vector runners `classes_methods::class_formula_vect
 Pinned and passing already: H10 `a_printed_dispatch_parses_back_with_its_signature`; H5, I1, I2 (`bare_names_resolve_through_the_alias_map`,
 `every_alias_is_recorded`, the vectors) and H6 (`the_order_of_checks`) were pinned before; H2 (`a_dispatch_key_not_canonical_for_its_class`) unchanged.
 `engine_classes::the_dispatch_group_through_the_engine` (ignored) now expects 7 dispatch vectors.
+
+## 7. `super` through the engine (datumesh-engine 0.4.2 `read_pinned`): for the implementer
+
+Formula now requires `datumesh-engine = "0.4.2"` (locally patched to `/engine`). Until the runtime implements `Inputs::read_pinned`, a pinned read through the engine
+answers `E_FORMULA_UNSUPPORTED`. Fail today (3 tests, all in `tests/engine_classes.rs`): `super_through_the_engine` (`class-super`: value `1.0892`, lineage the pinned
+receipt `5a98aec5...`, receipt hash `a28b2591...`), `super_relies_on_no_binding_through_the_engine` (`fx_pair/rate` rebound to another function before the asof changes
+nothing: the pinned read relies on no binding, 8.2 rule 2), and `the_dispatch_group_through_the_engine` (6 spec vectors; only `class-super` fails). Everything else passes.
+
+Harness changes in the same commit (`tests/common/engine.rs`, used by `engine_vectors`, `engine_classes` and `engine_determinism`):
+- **SPEC section 11 licence convention.** The vectors' `receipt_hash` is that of a receipt with `licence` `CC0-1.0`, a convention that predates licence inheritance (8.5).
+  Engine 0.4.1 and later sign the inherited licence (`CC-BY-4.0` over these worlds), so through the engine the harness compares the receipt hash after replacing `licence`
+  with `CC0-1.0` (`convention_hash`; the inputs that are the engine's own computed receipts, and the members of slice entries, are named by their convention hashes too, and
+  the members hash is recomputed: `convention_inputs`). Value, lineage (named the same way), `tx` and `asof` are compared exactly, and the actual licence is checked to be the one
+  8.5 gives over the input receipts' licences (when every input is a known receipt). The in-memory runner keeps the plain comparison.
+- **Dispatch group split.** The un-ignored `the_dispatch_group_through_the_engine` runs the spec's dispatch group; the local vectors are `the_local_class_vectors_through_the_engine`
+  (ignored: their receipts are signed by a key id the mesh does not publish, I5).
+- **One vector not loadable through a store**, skipped in the engine path: `invalid/formula-eval-class-dispatch-rebound`. Its class `bond` names `price`'s hash `cfd19943...`, the
+  world lists no descriptor with that hash (`bond/price` is bound to another one, the vector's point), and `bind_class` needs every method's descriptor (`NotFound`). A spec finding
+  to report; the in-memory runner covers it.

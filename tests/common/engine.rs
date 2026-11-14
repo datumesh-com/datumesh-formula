@@ -201,20 +201,56 @@ pub fn check_vector(path: &str, v: &Value, classes: bool) -> Result<(), String> 
         }
     }
     // The receipt: inner computed cells first, each with its own issued.
+    // SPEC section 11: the vectors' hashes use the licence convention `CC0-1.0`; `names` maps an
+    // engine receipt's actual hash to its convention hash, `known` the actual hashes to licences.
+    let mut names = std::collections::BTreeMap::new();
+    let mut known = std::collections::BTreeMap::new();
+    for r in common::array(v.get("world").unwrap().get("receipts").unwrap()) {
+        let r = Receipt::from_json(&r.to_jcs()).unwrap();
+        known.insert(r.hash().to_string(), r.licence().to_string());
+    }
     let engine = engine_with(&mesh, DEFAULT_FUEL);
     let mut inner = inner;
     inner.sort_by(|a, b| (&a.2.asof, &a.1).cmp(&(&b.2.asof, &b.1)));
+    let mut got = Vec::new();
     for (key, at, ver) in &inner {
         mesh.clock.set(issued_for(&ver.asof));
         match engine.get(&cell_ref_of(key), Some(at)) {
             Ok(Answer::Receipt(b)) => {
                 let r = Receipt::from_json(&b).unwrap();
-                if r.hash() != ver.receipt_hash {
-                    problems.push(format!("inner {} as of {at}: receipt {}", key.name, r.hash()));
-                }
+                known.insert(r.hash().to_string(), r.licence().to_string());
+                got.push((key, ver, b, r));
             }
             other => problems.push(format!("inner {} as of {at}: {other:?}", key.name)),
         }
+    }
+    // An inner receipt's convention hash needs those of the inner receipts it reads: resolve in
+    // dependency order.
+    let mut pending: Vec<_> = got.iter().collect();
+    while !pending.is_empty() {
+        let before = pending.len();
+        pending.retain(|(key, ver, b, r)| {
+            let mut deps: Vec<String> = r.inputs().to_vec();
+            for e in r.inputs().iter().filter(|e| e.starts_with("slice:")) {
+                let m = datumesh_core::json::parse(&(&*mesh.store as &dyn Store).manifest(e).unwrap()).unwrap();
+                deps.extend(common::array(m.get("members").unwrap()).iter().map(|h| h.as_str().unwrap().to_string()));
+            }
+            let ready = deps.iter().all(|h| names.contains_key(h) || !got.iter().any(|g| g.3.hash() == h));
+            if ready {
+                let conv = convention_hash(b, &names, &*mesh.store);
+                if conv != ver.receipt_hash {
+                    problems.push(format!("inner {}: receipt {conv} (convention licence CC0-1.0)", key.name));
+                }
+                if let Some(l) = inherited_licence(r, &known) {
+                    if r.licence() != l {
+                        problems.push(format!("inner {}: licence {} not the inherited {l}", key.name, r.licence()));
+                    }
+                }
+                names.insert(r.hash().to_string(), conv);
+            }
+            !ready
+        });
+        assert!(pending.len() < before, "inner receipts read each other in a cycle");
     }
     mesh.clock.set(issued_for(common::string(v, "receipt_asof").unwrap()));
     match engine.get(&cell, Some(asof)) {
@@ -225,7 +261,8 @@ pub fn check_vector(path: &str, v: &Value, classes: bool) -> Result<(), String> 
             }
             let lineage: Vec<&str> =
                 common::array(v.get("lineage").unwrap()).iter().map(|x| x.as_str().unwrap()).collect();
-            if r.inputs().iter().map(String::as_str).collect::<Vec<_>>() != lineage {
+            let named = convention_inputs(r.inputs(), &names, &*mesh.store);
+            if named.iter().map(String::as_str).collect::<Vec<_>>() != lineage {
                 problems.push(format!("lineage {:?}", r.inputs()));
             }
             if Some(r.tx()) != common::string(v, "tx") {
@@ -234,8 +271,14 @@ pub fn check_vector(path: &str, v: &Value, classes: bool) -> Result<(), String> 
             if Some(r.asof()) != common::string(v, "receipt_asof") {
                 problems.push(format!("receipt asof {}", r.asof()));
             }
-            if r.hash() != want_hash {
-                problems.push(format!("receipt hash {}", r.hash()));
+            let conv = convention_hash(&bytes, &names, &*mesh.store);
+            if conv != want_hash {
+                problems.push(format!("receipt hash {conv} (convention licence CC0-1.0, SPEC section 11)"));
+            }
+            if let Some(l) = inherited_licence(&r, &known) {
+                if r.licence() != l {
+                    problems.push(format!("licence {} is not the inherited {l} (8.5)", r.licence()));
+                }
             }
             let verified = datumesh_core::verify(&bytes, &mesh.keys, Some(&engine), None);
             if verified.level != Some(datumesh_core::Level::Recomputed) {
@@ -250,6 +293,84 @@ pub fn check_vector(path: &str, v: &Value, classes: bool) -> Result<(), String> 
     } else {
         Err(format!("{path}: {}", problems.join("; ")))
     }
+}
+
+/// The input entries of a receipt as the vectors' conventions name them (`names`: actual hash of an
+/// engine receipt to convention hash): a computed receipt by its convention hash, a slice entry
+/// with its manifest's members named and the members hash (SHA-256 of the sorted members array)
+/// recomputed; ascending (8.1).
+pub fn convention_inputs(
+    inputs: &[String],
+    names: &std::collections::BTreeMap<String, String>,
+    store: &dyn Store,
+) -> Vec<String> {
+    let mut out: Vec<String> = inputs
+        .iter()
+        .map(|e| {
+            if let Some(n) = names.get(e) {
+                n.clone()
+            } else if let Some(rest) = e.strip_prefix("slice:") {
+                let id = rest.split(':').next().unwrap();
+                let m = store.manifest(e).expect("the manifest of a slice entry is stored");
+                let m = datumesh_core::json::parse(&m).unwrap();
+                let mut members: Vec<String> = common::array(m.get("members").unwrap())
+                    .iter()
+                    .map(|h| {
+                        let h = h.as_str().unwrap();
+                        names.get(h).cloned().unwrap_or_else(|| h.to_string())
+                    })
+                    .collect();
+                members.sort();
+                let arr = Value::Array(members.into_iter().map(Value::String).collect());
+                format!("slice:{id}:{}", datumesh_core::sha256_hex(&arr.to_jcs()))
+            } else {
+                e.clone()
+            }
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// The receipt hash under the convention of SPEC section 11 ("Computed receipts of `formula-eval`
+/// and `excel` vectors"): the vectors' `receipt_hash` is that of a receipt with `licence`
+/// `CC0-1.0`, a convention that predates licence inheritance (8.5) and is kept so that hashes stay
+/// put. A mesh with inheritance (engine 0.4.1 and later) signs the inherited licence, so its
+/// receipt differs in that member (and in the inputs that are computed receipts, which carry
+/// theirs): rebuild the unsigned receipt with `licence` replaced and the inputs named by
+/// `convention_inputs`, and hash it as 8.3 does (SHA-256 of the canonical bytes without `sig`).
+pub fn convention_hash(
+    receipt: &[u8],
+    names: &std::collections::BTreeMap<String, String>,
+    store: &dyn Store,
+) -> String {
+    let r = Receipt::from_json(receipt).unwrap();
+    let mut v = datumesh_core::json::parse(receipt).unwrap();
+    if let Value::Object(m) = &mut v {
+        m.retain(|(k, _)| k != "sig");
+        for (k, x) in m.iter_mut() {
+            if k == "licence" {
+                *x = Value::String("CC0-1.0".to_string());
+            }
+            if k == "inputs" {
+                let ins = convention_inputs(r.inputs(), names, store);
+                *x = Value::Array(ins.into_iter().map(Value::String).collect());
+            }
+        }
+    }
+    datumesh_core::sha256_hex(&v.to_jcs())
+}
+
+/// The licence 8.5 gives a computed receipt over its input receipts' licences (`known`: receipt
+/// hash to licence, the world's receipts and the inner computed ones); `None` when an input is a
+/// slice entry or unknown (not checked here).
+fn inherited_licence(r: &Receipt, known: &std::collections::BTreeMap<String, String>) -> Option<String> {
+    let mut ls = Vec::new();
+    for e in r.inputs() {
+        ls.push(known.get(e)?.clone());
+    }
+    let name = format!("{}/{}", r.cell().ns, r.cell().fn_name);
+    datumesh_core::inherit_licence(ls, None, &name, r.issued(), pg::LICENCE).licence
 }
 
 /// Every vector through the engine (four threads); the failures, with `what` naming the group.

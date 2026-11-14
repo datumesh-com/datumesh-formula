@@ -12,6 +12,8 @@
 #![cfg(feature = "engine")]
 
 mod common;
+#[path = "common/engine.rs"]
+mod engine;
 #[path = "common/pg.rs"]
 mod pg;
 
@@ -201,7 +203,9 @@ fn generated_bodies_through_two_fresh_engines() {
                     if r.inputs() != &o.lineage[..] {
                         p.push(format!("lineage {:?} / {:?}", r.inputs(), o.lineage));
                     }
-                    if r.hash() != x.receipt_hash {
+                    // SPEC section 11: the vectors' hashes carry the licence convention CC0-1.0, which a mesh
+                    // with licence inheritance (engine 0.4.1 and later) does not sign.
+                    if engine::convention_hash(bytes, &BTreeMap::new(), &*ma.store) != x.receipt_hash {
                         p.push("receipt hash".to_string());
                     } else {
                         hashes += 1;
