@@ -3,7 +3,7 @@
 The formula dialect of [Datumesh](https://datumesh.com): `code.lang = "formula"`, the default
 language of computed functions, an Excel-compatible expression language over cells. It implements
 section 15, the calls of 5.8 and the classes of section 16 of [spec-0.5.0](https://github.com/datumesh-com/datumesh-spec)
-(commit `6d5633e`, untagged): the lexer and PEG
+(commit `c8896ad`, untagged): the lexer and PEG
 grammar, resolution to the canonical AST and its hash, the printer that gives `code.body`, the type
 and unit checker that derives `inputs`, exact decimal arithmetic with the 40-digit transcendental
 algorithms, units, angles and haversine, an evaluator with normative fuel, faults and lineage, the
@@ -211,7 +211,7 @@ check against the latest bindings is checked against those of the evaluation aso
 ## Conformance
 
 - Every vector of kinds `formula` (330), `formula-eval` (174), `excel` (79), `call` (45) and `decimal` (20
-  files, 6,054 cases) of spec-0.5.0 passes in the tests (648 run, 818 skipped: the verifier's kinds,
+  files, 6,054 cases) of spec-0.5.0 passes in the tests (656 run, 818 skipped: the verifier's kinds,
   which `datumesh-core` runs), and the evaluation of 11 of the 12 slice-lineage receipt vectors whose
   inputs have descriptors among the vectors. Some class tests are not green yet (see `CHANGELOG.md`
   and `SPEC-FINDINGS.md`, section I).
@@ -254,9 +254,9 @@ cargo in a container on the `datumesh` network next to a `datumesh-pg` container
 `tools/package_test.sh` is the packaging test, `tools/public_api.sh` checks `public-api.txt`,
 `tools/crosscheck.sh` the cross-language check, `tools/decimal_crosscheck.sh` the decimals. `tools/gen_cases.py`, `tools/reference_runner.py` and
 `tools/compare.py` run generated cases through this crate (`examples/formula_runner.rs`) and through
-another implementation and compare them. `spec-vectors/` is a copy of the spec's vectors at `6d5633e` (the branch `spec-0.5.0` of
-[datumesh-spec](https://github.com/datumesh-com/datumesh-spec), untagged at the time of writing; 1,466, with `units.md`);
-this crate runs the kinds `formula`, `formula-eval`, `call`, `excel` and `decimal` (648) and skips the rest
+another implementation and compare them. `spec-vectors/` is a copy of the spec's vectors at `c8896ad` (the branch `spec-0.5.0` of
+[datumesh-spec](https://github.com/datumesh-com/datumesh-spec), untagged at the time of writing; 1,474, with `units.md`);
+this crate runs the kinds `formula`, `formula-eval`, `call`, `excel` and `decimal` (656) and skips the rest
 (818, the verifier's kinds, which `datumesh-core` runs). `tests/vectors-local/` holds a few more `formula-eval`
 vectors over a small class world, written by `tools/gen_class_vectors.py` with the reference tool's results.
 

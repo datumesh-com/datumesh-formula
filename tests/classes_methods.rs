@@ -35,8 +35,8 @@ fn code_of(src: &str, returns: &str) -> String {
 // ---------------------------------------------------------------------------------------------
 // The vectors.
 
-/// The vendored vectors are the 1466 of `6d5633e`; this library runs the five kinds it
-/// implements (648) and skips the others (818: the verifier kinds are `datumesh-core`'s).
+/// The vendored vectors are the 1474 of `c8896ad`; this library runs the five kinds it
+/// implements (656) and skips the others (818: the verifier kinds are `datumesh-core`'s).
 #[test]
 fn the_vectors_are_those_of_spec_0_5_0() {
     let count = |kind: &str| common::vectors_of_kind(kind).len();
@@ -52,29 +52,29 @@ fn the_vectors_are_those_of_spec_0_5_0() {
             }
         }
     }
-    assert_eq!(all, 1466);
-    let run = [("formula", 330), ("formula-eval", 174), ("call", 45), ("excel", 79), ("decimal", 20)];
+    assert_eq!(all, 1474);
+    let run = [("formula", 331), ("formula-eval", 175), ("call", 51), ("excel", 79), ("decimal", 20)];
     for (kind, n) in run {
         assert_eq!(count(kind), n, "{kind}");
     }
-    assert_eq!(run.iter().map(|(_, n)| n).sum::<usize>(), 648);
+    assert_eq!(run.iter().map(|(_, n)| n).sum::<usize>(), 656);
     // The class vectors are the new ones of those kinds, each in one group of the three test
     // commits (`common::classes`).
-    assert_eq!(class_vectors("formula").len(), 35);
-    assert_eq!(methods_formula().len() + dispatch_formula().len(), 35);
-    assert_eq!(class_vectors("formula-eval").len(), 10);
-    assert_eq!(methods_eval().len() + common::classes::dispatch_eval().len(), 10);
-    assert_eq!(class_vectors("call").len(), 18);
+    assert_eq!(class_vectors("formula").len(), 36);
+    assert_eq!(methods_formula().len() + dispatch_formula().len(), 36);
+    assert_eq!(class_vectors("formula-eval").len(), 11);
+    assert_eq!(methods_eval().len() + common::classes::dispatch_eval().len(), 11);
+    assert_eq!(class_vectors("call").len(), 24);
 }
 
 /// Every class `formula` vector of this group: 22 valid (method calls, objects, class-typed keys,
-/// extension and inherited methods, defaults, each with its plain read) and 11 invalid.
+/// extension and inherited methods, defaults, each with its plain read) and 12 invalid.
 #[test]
 fn class_formula_vectors() {
     let t = common::check::tally(methods_formula(), common::check::formula_vector);
     let counts = t.report("class formula vectors (methods group)");
     assert!(t.failures.is_empty(), "{}", t.failures.join("\n"));
-    assert_eq!(counts, (22, 11));
+    assert_eq!(counts, (22, 12));
 }
 
 /// The class `formula-eval` vectors of this group: `this` read one way (`spot`, `forward`), the

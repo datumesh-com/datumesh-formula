@@ -74,7 +74,7 @@ fn a_store_answers_class_calls() {
 #[ignore = "super through the engine needs datumesh-engine 0.4.2 (a read by hash, SPEC-FINDINGS H8): class-super answers E_FORMULA_UNSUPPORTED until then; the local vectors' receipts are signed by a key id the mesh does not publish"]
 fn the_dispatch_group_through_the_engine() {
     let n = engine::check_kind(dispatch_eval(), true, "class formula-eval (dispatch group)");
-    assert_eq!(n, 6);
+    assert_eq!(n, 7);
     let n = engine::check_kind(common::local_vectors(), true, "local class vectors");
     assert_eq!(n, 11);
 }

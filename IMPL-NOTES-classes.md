@@ -227,3 +227,37 @@ Spec sections in brackets. "V" = a vector runner over spec vectors; "R" = expect
 - The points where the reference and the text differ or the text is silent are in `SPEC-FINDINGS.md`, section H (H1 to H10). Tests that follow the reference
   where the text is silent: `a_dispatch_key_not_canonical_for_its_class` (H2), `the_order_of_checks` (H6), the `resolved` details (H5). If you find the text says
   otherwise, change the test and say so in the report.
+
+## 6. Re-pin to spec `c8896ad` (clarifications of SPEC-FINDINGS H and I): for the implementer
+
+`spec-vectors/` is now the 1474 vectors of `c8896ad` (8 new invalid: 1 `formula`, 1 `formula-eval`, 6 `call`); this crate runs 656 and skips 818.
+Counts in the runners are updated (`formula` 331, `formula-eval` 175, `call` 51; class groups: methods `formula` 22 valid + 12 invalid, dispatch
+`formula-eval` 3 + 4, class `call` 10 + 14). The new tests are in `tests/classes_clarifications.rs`; the expectations are the reference at `c8896ad`
+run as a black box (nothing of `spec/tools/` read). No stubs were needed (`E_CLASS_PARENT` is checked as a string through `Code::as_str`; add the
+`Code` variant if the implementation wants one, as a minor API addition). No old test is made wrong by the clarified text.
+
+Fail today (10 tests): the 3 vector runners `classes_methods::class_formula_vectors`, `classes_dispatch::class_formula_eval_vectors`,
+`classes_requests::class_call_vectors` (5 vectors: `formula-class-quoted-key-not-canonical`, `formula-eval-class-dispatch-rebound`,
+`call-class-quoted-key-normalisation`, `call-class-lookup-no-now`, `call-class-extension-without-keys`) and 7 of `classes_clarifications`:
+
+- **H1** `a_method_rebound_or_unbound_at_evaluation`: a dispatch's read of `<class>/m` bound to another hash is `Code::Dispatch` (today `Method`, from typing the
+  body against the world); `<class>/m` or the class not bound as of the read (absent, or bound after the asof) is `Code::Unresolved`. Both are mesh failures.
+  The dispatch's method hash is checked by the read, not when a body is typed for an evaluation.
+- **I4** `a_dispatch_relies_on_the_methods_bindings_only`: the `asof` candidates are those of the `<class>/m` bindings read; the class's own binding start is
+  no candidate (a class bound later than the receipts but before the asof changes nothing; today the class binding's start makes the dispatch fail with
+  `Dispatch`). A class not bound at all as of the asof stays `Unresolved` (H1).
+- **H3** `a_quoted_key_encoding_is_decoded_against_its_class_in_a_body` / `_in_a_call`: a quoted encoding in a class-typed position is decoded against its class,
+  as an object literal is. Body: non-canonical string `E_FORMULA_KEY`, key names or types not the class's `E_FORMULA_TYPE`, a bare lowercase object key
+  (`currency(eur)`) `E_FORMULA_PLACEMENT`. Call: `E_KEY_NORMALISATION`, `E_CANON_TYPE`, a malformed one `E_KEY_ENCODING`. In the plain read as in the method form,
+  and in the `quote` as in the `base` position.
+- **H4** `a_call_that_needs_a_now_and_has_none`: no `asof` and no `now` and a default or a label: `E_ARG_MISSING`, also for a label the lookup has no
+  value for (the lookup is not reached); with an `asof`, an unknown label is `E_NAME_UNBOUND`. Today `[label]` with no now gives `E_NAME_UNBOUND`.
+- **H7** `an_extension_method_whose_arguments_do_not_match`: an extension method not taking the class keys first is `E_ARG_UNKNOWN` (today `E_NAME_UNBOUND`);
+  its own arguments: `E_ARG_UNKNOWN` / `E_ARG_MISSING`. `the_lookup_method_on_an_object` (`E_NAME_UNBOUND`) already passes and pins it.
+- **I3** `no_name_for_the_parent_is_a_class_parent_error`: a method using `super` whose class has `parent` but no class name bound to that hash in the definer's
+  `Env.classes` fails with `E_CLASS_PARENT` (today `E_FORMULA_UNRESOLVED`); `super` in a class without `parent` stays `E_FORMULA_METHOD`.
+  `the_parents_name_is_the_name_its_hash_is_bound_to` (passes today) pins the name: the first in ascending name order among several.
+
+Pinned and passing already: H10 `a_printed_dispatch_parses_back_with_its_signature`; H5, I1, I2 (`bare_names_resolve_through_the_alias_map`,
+`every_alias_is_recorded`, the vectors) and H6 (`the_order_of_checks`) were pinned before; H2 (`a_dispatch_key_not_canonical_for_its_class`) unchanged.
+`engine_classes::the_dispatch_group_through_the_engine` (ignored) now expects 7 dispatch vectors.

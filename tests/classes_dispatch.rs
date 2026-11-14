@@ -69,7 +69,7 @@ fn class_formula_eval_vectors() {
     let t = common::check::tally(dispatch_eval(), |p, v| common::check::eval_vector("formula-eval", p, v));
     let counts = t.report("class formula-eval vectors (dispatch group)");
     assert!(t.failures.is_empty(), "{}", t.failures.join("\n"));
-    assert_eq!(counts, (3, 3));
+    assert_eq!(counts, (3, 4));
 }
 
 /// The local vectors over a class with one number key (`tools/gen_class_vectors.py`, expected
