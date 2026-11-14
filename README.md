@@ -2,11 +2,13 @@
 
 The formula dialect of [Datumesh](https://datumesh.com): `code.lang = "formula"`, the default
 language of computed functions, an Excel-compatible expression language over cells. It implements
-section 15 and the calls of 5.8 of [spec-0.4.2](https://github.com/datumesh-com/datumesh-spec): the lexer and PEG
+section 15, the calls of 5.8 and the classes of section 16 of [spec-0.5.0](https://github.com/datumesh-com/datumesh-spec)
+(commit `6d5633e`, untagged): the lexer and PEG
 grammar, resolution to the canonical AST and its hash, the printer that gives `code.body`, the type
 and unit checker that derives `inputs`, exact decimal arithmetic with the 40-digit transcendental
 algorithms, units, angles and haversine, an evaluator with normative fuel, faults and lineage, the
-definition of formula functions (the canonical descriptor), and the
+definition of formula functions (the canonical descriptor), classes (their objects, method calls,
+bounded dispatch, `super`, and the definition of a class), and the
 [`datumesh-engine`](https://crates.io/crates/datumesh-engine) `Runtime` for `lang = "formula"`.
 
 ## Example
@@ -208,15 +210,17 @@ check against the latest bindings is checked against those of the evaluation aso
 
 ## Conformance
 
-- Every vector of kinds `formula` (295), `formula-eval` (164), `excel` (79), `call` (27) and `decimal` (20
-  files, 6,054 cases) passes, and the evaluation of 11 of the 12 slice-lineage receipt vectors whose
-  inputs have descriptors among the vectors.
+- Every vector of kinds `formula` (330), `formula-eval` (174), `excel` (79), `call` (45) and `decimal` (20
+  files, 6,054 cases) of spec-0.5.0 passes in the tests (648 run, 818 skipped: the verifier's kinds,
+  which `datumesh-core` runs), and the evaluation of 11 of the 12 slice-lineage receipt vectors whose
+  inputs have descriptors among the vectors. Some class tests are not green yet (see `CHANGELOG.md`
+  and `SPEC-FINDINGS.md`, section I).
 - Through the engine on PostgreSQL (`tests/engine_vectors.rs`): every `formula-eval` and `excel`
   vector, in a database of its own, gives the vector's value, lineage, `tx`, receipt `asof` and
   receipt hash (signed as `mesh.example.net` with the vectors' conventions), verifies at
   `recomputed`, and answers invalid vectors as 15.12 says; the engine-measured fuel equals the
   vector's (datumesh-engine 0.4.0 on datumesh-store 0.4.0, blob content included).
-- Every `call` vector (27) passes `call::parse_call`.
+- Every `call` vector (45) passes `call::parse_call`.
 - The brief's tests through the engine (`tests/brief.rs`): `fib(90)` exact with 91 memoised cells;
   a curve bootstrapped over ten tenors; a weighted mean over 1,000 stations with two slice entries,
   a backdated correction, the old receipt signed with `E_INPUT_SUPERSEDED`; `last_before` with a
@@ -256,10 +260,10 @@ this crate runs the kinds `formula`, `formula-eval`, `call`, `excel` and `decima
 (818, the verifier's kinds, which `datumesh-core` runs). `tests/vectors-local/` holds a few more `formula-eval`
 vectors over a small class world, written by `tools/gen_class_vectors.py` with the reference tool's results.
 
-Dependencies: `datumesh-core` 0.3.6 for strict JSON, JCS, SHA-256, the string rules of SPEC 3.5
+Dependencies: `datumesh-core` 0.3.8 for strict JSON, JCS, SHA-256, the string rules of SPEC 3.5
 (Unicode 15.1 assigned code points, NFC), `FunctionDescriptor` and `Fault`; `unicode-normalization`
 (already a dependency of `datumesh-core`) to normalise computed strings to NFC; with feature
-`engine` (default), `datumesh-engine` 0.4.0 for `Runtime` and `datumesh-store` 0.4.0 (already a
+`engine` (default), `datumesh-engine` 0.4.0 for `Runtime` and `datumesh-store` 0.4.1 (already a
 dependency of the engine) for the callees and `publish`. Without the feature, the language alone.
 
 | Feature | Default | What |

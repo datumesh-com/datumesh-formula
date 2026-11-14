@@ -2,6 +2,36 @@
 
 All notable changes to `datumesh-formula`.
 
+## 0.3.0 (unreleased)
+
+For spec-0.5.0 (the commit `6d5633e` of [datumesh-spec](https://github.com/datumesh-com/datumesh-spec),
+on the branch `spec-0.5.0`, untagged): classes (SPEC 16) and the requests of 5.8 by the types of their
+positions. On `datumesh-core` 0.3.8 (was 0.3.6) and
+`datumesh-store` 0.4.1 (was 0.4.0); `datumesh-engine` stays 0.4.0. Breaking: a new variant of
+`Node`, new members of public structs, and the minimum versions of the dependencies
+(`API-CHANGES-0.3.0.md`).
+
+- Method calls (16.3): `N(keys).m(args)` is the plain read of `N/m`, the same canonical AST, cell and
+  cell id; objects bind their keys by the class's order or by label; extension methods by qualified
+  name; `this` in a method's body; `super` as a read pinned to the parent's method hash
+  (`Node::Read::fn_hash`, printed `P/m@<hash>(...)`).
+- Dispatch (16.6): a method call on a key declared with `classes` (or returned as one) is a
+  `Node::Dispatch` over the declared set; the lineage holds the receipt of the function actually
+  called; a key outside the set is the fault `E_FORMULA_DISPATCH_KEY`.
+- Key normalisation (7, 16.4): a function's `key_normalisation` is checked for literals at define
+  (`E_FORMULA_KEY`) and for every argument value at evaluation (the fault `E_FORMULA_KEY`).
+- Defaults (16.7): `"default": "asof"` binds `asof()` (an instant) or `date_of(asof())` (a date)
+  in the AST.
+- Requests (5.8): each argument is read by the declared type of its position; a class-typed
+  position takes a key encoding; bare names resolve through the alias map (a short call, recorded
+  in `resolved`); `N[label]` resolves through the class's `lookup` as of the call's asof; the
+  result reports `resolved`; `E_KEY_NORMALISATION` and `E_KEY_ENCODING` are `bad_request` codes.
+- Define of classes (16.2): `define_class` over `datumesh-core`'s `define_class` and
+  `publish_class` (store 0.4.1's `put_class` and `bind_class`); `define_method`; the environment
+  reads `classes` and `method_of`.
+- The formula runtime (feature `engine`) answers dispatch and classes from the store; `super` is
+  `E_FORMULA_UNSUPPORTED` through the engine until engine 0.4.2 reads by hash.
+
 ## 0.2.0 (unreleased)
 
 On `datumesh-engine` 0.4.0 and `datumesh-store` 0.4.0 (the optional feature `engine`; were
