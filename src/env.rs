@@ -247,6 +247,9 @@ pub struct Env {
     /// Since spec-0.5.0 (16.3): the class whose method the function being defined is, which
     /// gives `this` and `super` their meaning; `None` outside a method's body.
     pub method_of: Option<String>,
+    /// Whether the body is a stored one being evaluated (`check_descriptor`): a pinned read is
+    /// accepted there, as the printed form of `super` (16.3).
+    pub(crate) stored_body: bool,
 }
 
 impl Env {
@@ -259,6 +262,7 @@ impl Env {
             aliases: BTreeMap::new(),
             classes: Classes::new(),
             method_of: None,
+            stored_body: false,
         }
     }
 

@@ -73,8 +73,10 @@ pub struct MemoryWorld {
     functions: BTreeMap<String, Binding>,
     classes: BTreeMap<String, ClassBinding>,
     stored: Vec<Stored>,
+    /// Compiled bodies by function hash; cleared when a name is bound.
     compiled: HashMap<String, Arc<Compiled>>,
-    memo: HashMap<(CellKey, String), Result<Option<Version>, Code>>,
+    /// Computed versions by cell, evaluation asof and function hash.
+    memo: HashMap<(CellKey, String, String), Result<Option<Version>, Code>>,
     /// Blob content by SHA-256 (a vector world's `blobs`, spec-0.4.2).
     blobs: HashMap<String, Vec<u8>>,
     computed: HashMap<String, Computed>,
@@ -178,7 +180,7 @@ impl MemoryWorld {
     pub fn bind(&mut self, name: &str, descriptor: &Value, start: &str) -> Result<(), EnvError> {
         let f = Function::from_value(descriptor)?;
         self.functions.insert(name.to_string(), Binding { function: Arc::new(f), start: start.to_string() });
-        self.compiled.remove(name);
+        self.compiled.clear();
         Ok(())
     }
 
@@ -189,6 +191,7 @@ impl MemoryWorld {
         let d =
             datumesh_core::ClassDescriptor::from_value(descriptor).map_err(|e| bad(format!("class {name}: {e}")))?;
         let class_hash = d.hash();
+        self.compiled.clear();
         self.classes
             .insert(name.to_string(), ClassBinding { class: Arc::new(d), class_hash, start: start.to_string() });
         Ok(())
@@ -223,7 +226,7 @@ impl MemoryWorld {
         let mut out: Vec<(CellKey, String, Version)> = self
             .memo
             .iter()
-            .filter_map(|((cell, at), r)| match r {
+            .filter_map(|((cell, at, _), r)| match r {
                 Ok(Some(v)) => Some((cell.clone(), at.clone(), v.clone())),
                 _ => None,
             })
@@ -237,13 +240,20 @@ impl MemoryWorld {
         self.computed.get(hash)
     }
 
-    /// The compiled body of a formula function.
-    fn compiled_of(&mut self, name: &str) -> Result<Arc<Compiled>, Code> {
-        if let Some(c) = self.compiled.get(name) {
+    /// The class whose method `name` is (16.3): the prefix class bound to `name`'s method hash.
+    fn method_class(&self, name: &str, fn_hash: &str) -> Option<String> {
+        let (class, method) = name.rsplit_once('/')?;
+        let c = self.classes.get(class)?;
+        (c.class.methods.get(method).map(String::as_str) == Some(fn_hash)).then(|| class.to_string())
+    }
+
+    /// The compiled body of the formula function `f` named `name` (by its hash, so that a pinned
+    /// read compiles the function it is pinned to), checked against the bindings and classes as they
+    /// are now: a callee rebound since define time is checked again, with the same codes (15.8).
+    fn compiled_of(&mut self, name: &str, f: &Arc<Function>) -> Result<Arc<Compiled>, Code> {
+        if let Some(c) = self.compiled.get(&f.hash) {
             return Ok(c.clone());
         }
-        let b = self.functions.get(name).ok_or(Code::Unresolved)?;
-        let f = b.function.clone();
         if f.lang != "formula" {
             return Err(Code::Unresolved);
         }
@@ -255,20 +265,11 @@ impl MemoryWorld {
             env.classes.insert(n, (*c.class).clone());
         }
         env.method_of = self.method_class(name, &f.hash);
-        // Checked against the bindings as they are now: a callee rebound since define time is
-        // checked again, with the same codes (15.8).
         let c = Arc::new(
             crate::check_descriptor(name, &f.value, &env).map_err(|e| e.formula_code().unwrap_or(Code::Syntax))?,
         );
-        self.compiled.insert(name.to_string(), c.clone());
+        self.compiled.insert(f.hash.clone(), c.clone());
         Ok(c)
-    }
-
-    /// The class whose method `name` is (16.3): the prefix class bound to `name`'s method hash.
-    fn method_class(&self, name: &str, fn_hash: &str) -> Option<String> {
-        let (class, method) = name.rsplit_once('/')?;
-        let c = self.classes.get(class)?;
-        (c.class.methods.get(method).map(String::as_str) == Some(fn_hash)).then(|| class.to_string())
     }
 
     /// The version of a stored cell answering as of `at`: the latest `tx` among its receipts with
@@ -295,14 +296,20 @@ impl MemoryWorld {
     /// Evaluate a computed cell as of `asof`, building its receipt; fuel is charged to
     /// [`MemoryWorld::fuel`].
     pub fn compute(&mut self, cell: &CellKey, asof: &str) -> Result<Computed, Code> {
+        let f = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.function.clone();
+        self.compute_with(&cell.name, f, cell, asof)
+    }
+
+    /// [`MemoryWorld::compute`] for the function `f` (the one named `name`, or one pinned to by its
+    /// hash).
+    fn compute_with(&mut self, name: &str, f: Arc<Function>, cell: &CellKey, asof: &str) -> Result<Computed, Code> {
         if self.stack.contains(cell) {
             return Err(Code::Cycle);
         }
         if self.stack.len() >= self.max_depth {
             return Err(Code::Depth);
         }
-        let compiled = self.compiled_of(&cell.name)?;
-        let f = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.function.clone();
+        let compiled = self.compiled_of(name, &f)?;
         let saved = std::mem::replace(&mut self.asof, asof.to_string());
         self.stack.push(cell.clone());
         let r = eval::evaluate(&compiled, &f, &cell.args, asof, self);
@@ -322,15 +329,26 @@ impl MemoryWorld {
     /// The version of a cell as of `at`, without charging the read: a stored version, or the
     /// computed cell evaluated (memoised).
     fn version(&mut self, cell: &CellKey, at: &str) -> Result<Option<Version>, Code> {
-        let b = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.clone();
-        if b.function.lang == "stored" {
-            return Ok(self.stored_version(cell, &b.function.hash, at));
+        let f = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.function.clone();
+        self.version_with(&cell.name, f, cell, at)
+    }
+
+    /// [`MemoryWorld::version`] of the function `f`.
+    fn version_with(
+        &mut self,
+        name: &str,
+        f: Arc<Function>,
+        cell: &CellKey,
+        at: &str,
+    ) -> Result<Option<Version>, Code> {
+        if f.lang == "stored" {
+            return Ok(self.stored_version(cell, &f.hash, at));
         }
-        let key = (cell.clone(), at.to_string());
+        let key = (cell.clone(), at.to_string(), f.hash.clone());
         if let Some(r) = self.memo.get(&key) {
             return r.clone();
         }
-        let r = self.compute(cell, at).map(|c| {
+        let r = self.compute_with(name, f, cell, at).map(|c| {
             Some(Version {
                 value: c.outcome.value.clone(),
                 receipt_hash: c.receipt_hash.clone(),
@@ -473,6 +491,18 @@ impl World for MemoryWorld {
     fn class(&mut self, name: &str, at: Option<&str>) -> Result<Option<ClassBinding>, Self::Error> {
         let at = at.unwrap_or(&self.asof);
         Ok(self.classes.get(name).filter(|b| b.start.as_str() <= at).cloned())
+    }
+
+    fn function_by_hash(&mut self, fn_hash: &str) -> Result<Option<Arc<Function>>, Self::Error> {
+        Ok(self.functions.values().find(|b| b.function.hash == fn_hash).map(|b| b.function.clone()))
+    }
+
+    fn read_pinned(&mut self, fn_hash: &str, cell: &CellKey) -> Result<Option<Version>, Stop<Self::Error>> {
+        self.charge(1)?;
+        let f = self.functions.values().find(|b| b.function.hash == fn_hash).map(|b| b.function.clone());
+        let f = f.ok_or(Stop::Code(Code::Unresolved))?;
+        let at = self.asof.clone();
+        Ok(self.version_with(&cell.name, f, cell, &at)?)
     }
 }
 

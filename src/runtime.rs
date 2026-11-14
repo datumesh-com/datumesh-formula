@@ -31,7 +31,7 @@ use datumesh_engine::{Budget, EvalError, FnBinding, Inputs, Pattern, Runtime, Sl
 
 use crate::definition::{Callees, LATEST};
 use crate::env::{Env, Function};
-use crate::eval::{self, Args, Binding, CellKey, PatternArg, SliceKey, Stop, Version, World};
+use crate::eval::{self, Args, Binding, CellKey, ClassBinding, PatternArg, SliceKey, Stop, Version, World};
 use crate::{check_descriptor, Code, Compiled, DefineError};
 
 /// Counts of a runtime's evaluations ([`FormulaRuntime::stats`]).
@@ -87,6 +87,15 @@ struct StoreCallees(Arc<dyn datumesh_store::Store + Send + Sync>);
 impl Callees for StoreCallees {
     fn callee(&self, name: &str, at: &str) -> Result<Option<crate::definition::Callee>, String> {
         (*self.0).callee(name, at)
+    }
+    fn bound_class(&self, name: &str, at: &str) -> Result<Option<crate::definition::ClassCallee>, String> {
+        (*self.0).bound_class(name, at)
+    }
+    fn class_descriptor(&self, class_hash: &str) -> Result<Option<datumesh_core::ClassDescriptor>, String> {
+        (*self.0).class_descriptor(class_hash)
+    }
+    fn function_descriptor(&self, fn_hash: &str) -> Result<Option<datumesh_core::json::Value>, String> {
+        (*self.0).function_descriptor(fn_hash)
     }
 }
 
@@ -153,6 +162,12 @@ impl FormulaRuntime {
                 env.add_function(callee, &c.descriptor).map_err(|e| DefineError::Callees(e.0))?;
             }
         }
+        for class in input_classes(d) {
+            if let Some(c) = self.callees.bound_class(&class, LATEST).map_err(DefineError::Callees)? {
+                env.classes.insert(&class, c.descriptor);
+            }
+        }
+        env.method_of = method_class(&env, name, &function.hash);
         let compiled = Arc::new(check_descriptor(name, &value, &env)?);
         let p = Arc::new(Prepared { function, env, compiled });
         // Errors are not kept: a later binding may cure them.
@@ -185,6 +200,12 @@ impl FormulaRuntime {
                 hashes.push(String::new());
             }
         }
+        for class in input_classes(d) {
+            if let Some(c) = self.callees.bound_class(&class, LATEST).map_err(EvalError::Runtime)? {
+                env.classes.insert(&class, c.descriptor);
+            }
+        }
+        env.method_of = method_class(&env, name, &function.hash);
         let key = (function.hash.clone(), hashes);
         if let Some(p) = self.prepared_at.lock().unwrap_or_else(|p| p.into_inner()).get(&key) {
             return Ok(p.clone());
@@ -223,6 +244,27 @@ impl FormulaRuntime {
         self.rechecked.lock().unwrap_or_else(|p| p.into_inner()).insert(key, r.clone());
         r
     }
+}
+
+/// The classes a descriptor's inputs name: each input `N/m` that is a method of a class `N`
+/// (16.3), and a dispatch's classes (their methods are inputs).
+fn input_classes(d: &FunctionDescriptor) -> std::collections::BTreeSet<String> {
+    let mut out: std::collections::BTreeSet<String> = d
+        .inputs
+        .iter()
+        .filter_map(|i| i.rsplit_once('/').map(|(c, _)| c.to_string()))
+        .filter(|c| crate::names::is_function_name(c))
+        .collect();
+    out.extend(d.arg_extras.values().filter_map(|x| x.classes.clone()).flatten());
+    out.extend(d.returns_classes.iter().flatten().cloned());
+    out
+}
+
+/// The class whose method `name` with this hash is, among the environment's classes (16.3).
+fn method_class(env: &Env, name: &str, fn_hash: &str) -> Option<String> {
+    let (class, method) = name.rsplit_once('/')?;
+    let c = env.classes.get(class)?;
+    (c.methods.get(method).map(String::as_str) == Some(fn_hash)).then(|| class.to_string())
 }
 
 fn runtime_error(code: Code, detail: &str) -> EvalError {
@@ -387,6 +429,16 @@ impl World for EngineWorld<'_> {
 
     fn asof(&mut self) -> Result<String, Stop<EvalError>> {
         Ok(self.inputs.asof())
+    }
+
+    /// A class as the store binds it (16.3, 9.7): the engine's inputs bind functions, and classes
+    /// are the store's, through the callees.
+    fn class(&mut self, name: &str, at: Option<&str>) -> Result<Option<ClassBinding>, EvalError> {
+        // The evaluator asks as of a method's binding start (the transaction that binds the class's
+        // methods too), which does not make the receipt depend on the asof (`Inputs::asof` would).
+        let at = at.unwrap_or(LATEST).to_string();
+        let Some(c) = self.rt.callees.bound_class(name, &at).map_err(EvalError::Runtime)? else { return Ok(None) };
+        Ok(Some(ClassBinding { class: Arc::new(c.descriptor), class_hash: c.class_hash, start: c.start }))
     }
 
     /// The engine's blob content (`Inputs::read_blob`, which checks the length and the hash);

@@ -216,6 +216,7 @@ pub fn check_descriptor(name: &str, descriptor: &Value, env: &Env) -> Result<Com
     let mut env = env.clone();
     env.name = name.to_string();
     env.signature = f.signature.clone();
+    env.stored_body = true;
     let c = define(&f.body, &env)?;
     if c.body != f.body {
         return Err(

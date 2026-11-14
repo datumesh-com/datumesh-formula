@@ -431,7 +431,7 @@ impl Checker<'_> {
             Node::Agg(n) => Err(e(Code::Enum, format!("{n} is an aggregate of scan or window only"))),
             Node::Key(n) => Err(e(Code::Along, format!("{n} names a dimension only in along"))),
             Node::Read { .. } => self.read(id),
-            Node::Dispatch { .. } => todo!("checking a dispatch (SPEC 16.6)"),
+            Node::Dispatch { on, method, classes, args } => self.dispatch(*on, method, classes, args),
             Node::Call { fn_name, args, named } => self.call(id, fn_name, args, named),
         }
     }
@@ -573,13 +573,18 @@ impl Checker<'_> {
 
     fn read(&mut self, id: NodeId) -> Result<Ty, Error> {
         let ast = self.ast;
-        let Node::Read { fn_name, args, .. } = ast.node(id) else { unreachable!("read") };
+        let Node::Read { fn_name, fn_hash, args } = ast.node(id) else { unreachable!("read") };
         if self.in_lambda > 0 {
             return Err(e(Code::LambdaRead, "no cell reads inside a lambda: join instead"));
         }
         self.inputs.insert(fn_name.clone());
         let env = self.env;
-        let sig = env.signature_of(fn_name).ok_or_else(|| e(Code::Unresolved, format!("{fn_name} has no binding")))?;
+        // A pinned read (16.3) is of the function with that hash, whatever the name is bound to.
+        let sig = match fn_hash {
+            Some(h) => crate::resolve::signature_by_hash(env, h),
+            None => env.signature_of(fn_name),
+        }
+        .ok_or_else(|| e(Code::Unresolved, format!("{fn_name} has no binding")))?;
         let lang = env.lang_of(fn_name).unwrap_or("stored").to_string();
         // Argument expressions, ascending by label.
         let mut bound: Vec<(String, Option<Ty>)> = Vec::new();
@@ -696,6 +701,50 @@ impl Checker<'_> {
         } else {
             Ok(Ty::Slice(Box::new(elem), keys))
         }
+    }
+
+    /// A dispatched method call (16.6): the key is a string, the classes' methods are inputs, and the
+    /// arguments are checked against the method's own signature (the first class's; the resolver
+    /// checked that they agree).
+    fn dispatch(
+        &mut self,
+        on: NodeId,
+        method: &str,
+        classes: &[String],
+        args: &[(String, NodeId)],
+    ) -> Result<Ty, Error> {
+        let t = self.scalar_of(on)?;
+        if t != Ty::Str {
+            return Err(e(Code::Type, format!("a dispatch on a {}, not an object key", t.name())));
+        }
+        let env = self.env;
+        for c in classes {
+            self.inputs.insert(format!("{c}/{method}"));
+        }
+        let first = format!("{}/{method}", classes[0]);
+        let sig = env.signature_of(&first).ok_or_else(|| e(Code::Unresolved, format!("{first} has no binding")))?;
+        let varies = |_: &str| -> Result<NumUnit, Error> { Ok(NumUnit::Varies) };
+        for (name, x) in args {
+            let decl =
+                sig.args.get(name).ok_or_else(|| e(Code::ArgUnknown, format!("{first} has no argument {name}")))?;
+            let got = self.scalar_of(*x)?;
+            if got.scalar_type() != Some(decl.ty) {
+                return Err(e(Code::Type, format!("{first}({name}) is a {}, not a {}", decl.ty.as_str(), got.name())));
+            }
+            if let (Ty::Num(g), Some(u)) = (&got, &decl.unit) {
+                let want = decl_unit(u, &varies)?;
+                if want != NumUnit::Varies {
+                    same_unit(g, &want, &format!("{first}({name})"))?;
+                }
+            }
+        }
+        Ok(match sig.returns {
+            Type::Number => Ty::Num(match &sig.returns_unit {
+                Some(u) => decl_unit(u, &varies)?,
+                None => NumUnit::Known(Unit::one()),
+            }),
+            t => scalar(t),
+        })
     }
 
     /// Open and ranged arguments over a function that is not `stored` (15.13).

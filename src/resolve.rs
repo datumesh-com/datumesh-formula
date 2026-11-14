@@ -59,6 +59,26 @@ pub(crate) fn check_variable(w: &str) -> Result<(), Error> {
     Ok(())
 }
 
+/// The signature of the environment's function with this hash (16.3).
+pub(crate) fn signature_by_hash<'e>(env: &'e Env, fn_hash: &str) -> Option<&'e Signature> {
+    env.functions.values().find(|f| f.hash == fn_hash).map(|f| &f.signature)
+}
+
+/// A method's own signature: its arguments and order without the first `keys` of its order (the
+/// class keys, 16.3), and the same return.
+fn own_signature(sig: &Signature, keys: usize) -> Signature {
+    let order = sig.order.clone().unwrap_or_default();
+    let (keyed, own) = order.split_at(keys.min(order.len()));
+    let args = sig.args.iter().filter(|(n, _)| !keyed.contains(n)).map(|(n, d)| (n.clone(), d.clone())).collect();
+    Signature {
+        args,
+        order: Some(own.to_vec()),
+        returns: sig.returns,
+        returns_unit: sig.returns_unit.clone(),
+        returns_classes: sig.returns_classes.clone(),
+    }
+}
+
 /// A key of an object: the node it is written as (pushed where it is used) and its key value
 /// (16.5), absent for `this`'s keys, which are the method's own arguments.
 #[derive(Clone, Debug)]
@@ -270,14 +290,35 @@ impl Resolver<'_> {
                 let b = self.node(*body)?;
                 Ok(self.push(Node::Lambda { params: params.clone(), body: b }))
             }
-            PNode::Read { pin: Some(_), name, .. } => Err(Error::new(
-                Code::Placement,
-                format!("a pinned read of {name} is a request form (5.8), not part of a body"),
-            )),
+            PNode::Read { pin: Some(pin), name, args, .. } => {
+                if !self.pins_allowed() {
+                    return Err(Error::new(
+                        Code::Placement,
+                        format!("a pinned read of {name} is a request form (5.8), or super in a method's body"),
+                    ));
+                }
+                self.pinned_read(name, pin, args)
+            }
             PNode::Read { name, alias, args, .. } => self.read(name, *alias, args),
             PNode::Call { name, args } => self.call(name, args),
             PNode::Method { recv, name, qualified, args } => self.method(*recv, name, *qualified, args),
         }
+    }
+
+    /// Whether a pinned read is written here: in a method's body (`super`, 16.3) or a stored body.
+    fn pins_allowed(&self) -> bool {
+        self.env.is_some_and(|env| env.method_of.is_some() || env.stored_body)
+    }
+
+    /// A read pinned to a function hash (16.3): its arguments bound by the signature of that function,
+    /// which is found by its hash, not by a binding.
+    fn pinned_read(&mut self, name: &str, pin: &str, args: &[PArg]) -> Result<NodeId, Error> {
+        let sig = self
+            .env
+            .and_then(|env| signature_by_hash(env, pin))
+            .ok_or_else(|| e(Code::Unresolved, format!("{name}@{pin} has no descriptor here")))?;
+        let bound = self.bind(name, Some(sig), Vec::new(), args)?;
+        Ok(self.push(Node::Read { fn_name: name.to_string(), fn_hash: Some(pin.to_string()), args: bound }))
     }
 
     /// The class a read names, through the alias map for an alias (16.3): the full name, when it is
@@ -554,13 +595,16 @@ impl Resolver<'_> {
         }
     }
 
-    /// A method call `recv.name(args)` (16.3): the receiver is an object, or `this` in a method's
-    /// body. A method is the read of `<class>/<name>`, bound to the class's method hash, with the
-    /// object's keys first; an extension method is a qualified function whose first arguments are
-    /// the class's keys in order.
+    /// A method call `recv.name(args)` (16.3, 16.6). The receiver is an object (a class's name, or
+    /// `this` in a method's body), `super` (the parent's method, pinned to its hash), or a key: an
+    /// argument declaring `classes`, or a read or dispatch returning a key, which dispatches among
+    /// those classes. A method is the read of `<class>/<name>`, bound to the class's method hash,
+    /// with the object's keys first; an extension method is a qualified function whose first
+    /// arguments are the class's keys in order.
     fn method(&mut self, recv: Id, name: &str, qualified: bool, args: &[PArg]) -> Result<NodeId, Error> {
         let env = self.env.ok_or_else(|| e(Code::Reserved, "a method needs an environment"))?;
         let obj = match self.tree.get(recv) {
+            PNode::Super => return self.super_method(env, name, qualified, args),
             PNode::This => {
                 let cls = env.method_of.as_deref().ok_or_else(|| {
                     e(Code::Reserved, "this is the receiver of a method call in a method's body only")
@@ -574,9 +618,7 @@ impl Resolver<'_> {
                 let class = self.class_named(cname, *alias).unwrap_or_default();
                 self.object(&class, oargs)?
             }
-            _ => {
-                return Err(e(Code::Reserved, format!(".{name}(...) is reserved: its receiver is not an object")));
-            }
+            _ => return self.dispatch(recv, name, qualified, args),
         };
         let desc =
             env.classes.get(&obj.class).ok_or_else(|| e(Code::Unresolved, format!("{} is not bound", obj.class)))?;
@@ -616,6 +658,110 @@ impl Resolver<'_> {
         let pre = self.pre_keys(&obj, &order[..k])?;
         let bound = self.bind(&fq, Some(sig), pre, args)?;
         Ok(self.push(Node::Read { fn_name: fq, fn_hash: None, args: bound }))
+    }
+
+    /// `super.name(args)` in a method's body (16.3): the parent's method by its hash, read with the
+    /// parent's keys (this class's own, by name) first. The parent is the class's `parent`, found by
+    /// its hash in the environment; without a parent, or without the method, `E_FORMULA_METHOD`.
+    fn super_method(&mut self, env: &Env, name: &str, qualified: bool, args: &[PArg]) -> Result<NodeId, Error> {
+        let cls = env
+            .method_of
+            .as_deref()
+            .ok_or_else(|| e(Code::Reserved, "super is the receiver of a method call in a method's body only"))?;
+        let desc = env.classes.get(cls).ok_or_else(|| e(Code::Unresolved, format!("{cls} is not bound")))?;
+        let parent = desc.parent.as_deref().ok_or_else(|| e(Code::Method, format!("{cls} has no parent")))?;
+        let (pname, pdesc) = env
+            .classes
+            .by_hash(parent)
+            .ok_or_else(|| e(Code::Unresolved, format!("the parent of {cls} is not bound")))?;
+        if qualified || pdesc.lookup.as_deref() == Some(name) || !pdesc.methods.contains_key(name) {
+            return Err(e(Code::Method, format!("{pname} has no method {name}")));
+        }
+        let hash = pdesc.methods[name].clone();
+        let fq = format!("{pname}/{name}");
+        let sig =
+            signature_by_hash(env, &hash).ok_or_else(|| e(Code::Unresolved, format!("{fq}@{hash} is not known")))?;
+        let pre = pdesc.order.iter().map(|k| (k.clone(), Node::Var(k.clone()))).collect();
+        let bound = self.bind(&fq, Some(sig), pre, args)?;
+        Ok(self.push(Node::Read { fn_name: fq, fn_hash: Some(hash), args: bound }))
+    }
+
+    /// A dispatched method call (16.6): the receiver is a key, whose classes are the declared ones
+    /// (an argument's `classes`) or the returned ones (a read or dispatch returning a key). Every
+    /// class must have the method, bound to its hash, and the same signature once its keys are taken
+    /// away; the arguments bind to that signature.
+    fn dispatch(&mut self, recv: Id, name: &str, qualified: bool, args: &[PArg]) -> Result<NodeId, Error> {
+        let env = self.env.ok_or_else(|| e(Code::Reserved, "a method needs an environment"))?;
+        let declared = match self.tree.get(recv) {
+            PNode::Var(v) => env.signature.args.get(v).and_then(|d| d.extras.classes.clone()),
+            _ => None,
+        };
+        let on = self.node(recv)?;
+        let classes = match declared {
+            Some(c) => Some(c),
+            None => self.returned_classes(on),
+        };
+        let Some(mut classes) = classes else {
+            return Err(e(Code::Reserved, format!(".{name}(...) is reserved: its receiver is not an object or a key")));
+        };
+        if qualified {
+            return Err(e(Code::Method, format!("{name}: a dispatched method is named by its name")));
+        }
+        classes.sort();
+        classes.dedup();
+        let mut own: Option<Signature> = None;
+        for c in &classes {
+            let desc = env.classes.get(c).ok_or_else(|| e(Code::Unresolved, format!("{c} is not bound")))?;
+            if desc.lookup.as_deref() == Some(name) || !desc.methods.contains_key(name) {
+                return Err(e(Code::Method, format!("{c} has no method {name}")));
+            }
+            let fq = format!("{c}/{name}");
+            let f = env.functions.get(&fq).ok_or_else(|| e(Code::Unresolved, format!("{fq} has no binding")))?;
+            if f.hash != desc.methods[name] {
+                return Err(e(Code::Method, format!("{fq} is not bound to the method's hash")));
+            }
+            let order = f.signature.order.clone().unwrap_or_default();
+            let k = desc.order.len();
+            if order.len() < k || order[..k] != desc.order[..] {
+                return Err(e(Code::Method, format!("{fq} does not take the keys of {c} first")));
+            }
+            let sig = own_signature(&f.signature, k);
+            match &own {
+                None => own = Some(sig),
+                Some(prev) if *prev != sig => {
+                    return Err(e(Code::Dispatch, format!("{name} differs in signature between the dispatch classes")));
+                }
+                Some(_) => {}
+            }
+        }
+        let Some(own) = own else { return Err(e(Code::Dispatch, "a dispatch over no class")) };
+        let mut bound = Vec::new();
+        for (n, a) in self.bind(name, Some(&own), Vec::new(), args)? {
+            match a {
+                ReadArg::Expr(x) => bound.push((n, x)),
+                _ => return Err(e(Code::Placement, "* and ranges are arguments of a read only")),
+            }
+        }
+        Ok(self.push(Node::Dispatch { on, method: name.to_string(), classes, args: bound }))
+    }
+
+    /// The classes of the key a node returns (16.6): a read's or a dispatch's declared classes.
+    fn returned_classes(&self, id: NodeId) -> Option<Vec<String>> {
+        let env = self.env?;
+        match &self.out[id as usize] {
+            Node::Read { fn_name, fn_hash, .. } => {
+                let sig = match fn_hash {
+                    Some(h) => signature_by_hash(env, h),
+                    None => env.signature_of(fn_name),
+                };
+                sig.and_then(|s| s.returns_classes.clone())
+            }
+            Node::Dispatch { classes, method, .. } => classes
+                .first()
+                .and_then(|c| env.signature_of(&format!("{c}/{method}")))
+                .and_then(|s| s.returns_classes.clone()),
+            _ => None,
+        }
     }
 
     /// The keys of an object named `names`, as the first arguments of a method's function.

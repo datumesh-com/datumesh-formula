@@ -71,7 +71,7 @@ fn a_store_answers_class_calls() {
 /// the store: the engine answers what the in-memory world does (value, lineage, receipt hash,
 /// fuel), a key outside the set as `not_covered` with `E_FORMULA_DISPATCH_KEY`.
 #[test]
-#[ignore = "needs datumesh-store 0.4.1 (put_class, bind_class): todo!() stubs on the branch at the time of writing"]
+#[ignore = "super through the engine needs datumesh-engine 0.4.2 (a read by hash, SPEC-FINDINGS H8): class-super answers E_FORMULA_UNSUPPORTED until then; the local vectors' receipts are signed by a key id the mesh does not publish"]
 fn the_dispatch_group_through_the_engine() {
     let n = engine::check_kind(dispatch_eval(), true, "class formula-eval (dispatch group)");
     assert_eq!(n, 6);
@@ -85,7 +85,6 @@ fn the_dispatch_group_through_the_engine() {
 /// classes from the store), and the engine answering it: the same function hash as the vectors'
 /// `price_of`, the same lineage.
 #[test]
-#[ignore = "needs datumesh-store 0.4.1 (put_class, bind_class): todo!() stubs on the branch at the time of writing"]
 fn define_publish_and_dispatch_over_a_store() {
     const T0: &str = "2026-01-01T00:00:00.000000Z";
     let v = common::vector("formula-eval/class-dispatch-bond.json");

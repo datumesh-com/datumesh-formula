@@ -742,7 +742,7 @@ impl<W: World + ?Sized> Eval<'_, W> {
                 r
             }
             Node::Read { .. } => self.read(id, None),
-            Node::Dispatch { .. } => todo!("evaluating a dispatch (SPEC 16.6)"),
+            Node::Dispatch { on, method, classes, args } => self.dispatch(*on, method, classes, args),
             Node::Call { fn_name, args, named } => self.call(id, fn_name, args, named),
             Node::Lambda { .. } | Node::Agg(_) | Node::Key(_) => Err(Code::Type.into()),
         }
@@ -876,14 +876,92 @@ impl<W: World + ?Sized> Eval<'_, W> {
         Ok(out)
     }
 
-    /// A read node: one cell, or a slice (narrowed by a lookup's bound when given).
+    /// A read node: one cell, or a slice (narrowed by a lookup's bound when given). A pinned read
+    /// (16.3, `super`) is of the function with its hash, and relies on no binding.
     fn read(&mut self, id: NodeId, narrow: Option<Narrow>) -> R<V, W::Error> {
-        let Node::Read { fn_name, .. } = self.c.ast.node(id) else { return Err(Code::Type.into()) };
+        let Node::Read { fn_name, fn_hash, .. } = self.c.ast.node(id) else { return Err(Code::Type.into()) };
         let fn_name = fn_name.clone();
+        if let Some(h) = fn_hash.clone() {
+            let f = self.world.function_by_hash(&h).map_err(Stop::World)?.ok_or(Stop::Code(Code::Unsupported))?;
+            let pattern = self.read_args(id, &f)?;
+            return self.read_pattern(fn_name, f, pattern, narrow, Some(h));
+        }
         let b = self.binding(&fn_name, None)?;
-        let mut pattern = self.read_args(id, &b.function)?;
+        let pattern = self.read_args(id, &b.function)?;
+        self.read_pattern(fn_name, b.function.clone(), pattern, narrow, None)
+    }
+
+    /// A dispatched method call (16.6): the key is decoded, and it must be the key of an object of
+    /// one of the classes, with exactly the class's keys, else the fault `E_FORMULA_DISPATCH_KEY`
+    /// (15.12). Then `<class>/m` must be the function bound to the class's method hash, else the
+    /// mesh's failure `E_FORMULA_DISPATCH`; the read is of that function with the key's values as its
+    /// keys and the call's arguments, so lineage holds the receipt of the function actually called.
+    fn dispatch(&mut self, on: NodeId, method: &str, classes: &[String], args: &[(String, NodeId)]) -> R<V, W::Error> {
+        let V::Str(key) = self.node(on)? else { return Err(Code::Type.into()) };
+        let obj = datumesh_core::parse_object_key(&key).map_err(|_| Stop::Code(Code::DispatchKey))?;
+        if datumesh_core::format_object_key(&obj) != key || !classes.contains(&obj.class) {
+            return Err(Code::DispatchKey.into());
+        }
+        // The method's function as bound now, and the class as of that binding (which binds the
+        // class's methods in the same transaction): a method no longer bound to the class's hash is
+        // the mesh's failure.
+        let fq = format!("{}/{}", obj.class, method);
+        let bound = self.world.function(&fq, None).map_err(Stop::World)?.ok_or(Stop::Code(Code::Dispatch))?;
+        let class =
+            self.world.class(&obj.class, Some(&bound.start)).map_err(Stop::World)?.ok_or(Stop::Code(Code::Dispatch))?;
+        if class.class.methods.get(method) != Some(&bound.function.hash) {
+            return Err(Code::Dispatch.into());
+        }
+        // The key's values are the class's, by kind: a scalar of its type, or an object of its class.
+        if !obj.keys.keys().eq(class.class.keys.keys()) {
+            return Err(Code::DispatchKey.into());
+        }
+        for (k, v) in &obj.keys {
+            let shape_ok = match (class.class.keys.get(k), v) {
+                (Some(datumesh_core::ClassKey::Scalar { ty, .. }), datumesh_core::KeyValue::Scalar(sc)) => {
+                    sc.ty() == *ty
+                }
+                (Some(datumesh_core::ClassKey::Class(c)), datumesh_core::KeyValue::Object(o)) => o.class == *c,
+                _ => false,
+            };
+            if !shape_ok {
+                return Err(Code::DispatchKey.into());
+            }
+        }
+        let b = self.binding(&fq, None)?;
+        let mut pattern = BTreeMap::new();
+        for (k, v) in &obj.keys {
+            let value = match v {
+                datumesh_core::KeyValue::Scalar(sc) => from_scalar(sc)?,
+                datumesh_core::KeyValue::Object(o) => V::Str(datumesh_core::format_object_key(o)),
+                _ => return Err(Code::DispatchKey.into()),
+            };
+            let decl = b.function.signature.args.get(k).ok_or(Stop::Code(Code::Dispatch))?;
+            let p = typed(&value, decl.ty)?;
+            key_checked(decl.extras.key_normalisation, &p)?;
+            pattern.insert(k.clone(), PatternArg::Value(p));
+        }
+        for (name, x) in args {
+            let decl = b.function.signature.args.get(name).ok_or(Stop::Code(Code::Unresolved))?;
+            let p = typed(&self.node(*x)?, decl.ty)?;
+            key_checked(decl.extras.key_normalisation, &p)?;
+            pattern.insert(name.clone(), PatternArg::Value(p));
+        }
+        self.read_pattern(fq, b.function.clone(), pattern, None, None)
+    }
+
+    /// The value of a read of `fn_name` (function `f`) at the arguments `pattern`: one cell, read
+    /// through the world (pinned to `pin` when given), or a slice.
+    fn read_pattern(
+        &mut self,
+        fn_name: String,
+        f: Arc<Function>,
+        mut pattern: BTreeMap<String, PatternArg>,
+        narrow: Option<Narrow>,
+        pin: Option<String>,
+    ) -> R<V, W::Error> {
         if let Some(n) = narrow {
-            let ty = b.function.signature.args.get(&n.key).map(|d| d.ty).ok_or(Stop::Code(Code::Along))?;
+            let ty = f.signature.args.get(&n.key).map(|d| d.ty).ok_or(Stop::Code(Code::Along))?;
             let (lo, hi) = (typed(&n.lo, ty)?, typed(&n.hi, ty)?);
             let (lo, hi) = match pattern.get(&n.key) {
                 Some(PatternArg::Range(a, z)) => (
@@ -904,7 +982,11 @@ impl<W: World + ?Sized> Eval<'_, W> {
                 })
                 .collect();
             let cell = CellKey { name: fn_name, args };
-            return match self.world.read(&cell, None)? {
+            let got = match &pin {
+                None => self.world.read(&cell, None)?,
+                Some(h) => self.world.read_pinned(h, &cell)?,
+            };
+            return match got {
                 Some(v) => {
                     self.lineage.insert(v.receipt_hash.clone());
                     self.note_version(&v);
@@ -913,8 +995,10 @@ impl<W: World + ?Sized> Eval<'_, W> {
                 None => Err(Code::NotCovered.into()),
             };
         }
+        if pin.is_some() {
+            return Err(Code::Unsupported.into());
+        }
         let slice = SliceKey { name: fn_name.clone(), args: pattern };
-        let f = b.function.clone();
         let members = self.world.members(&slice)?;
         // Lineage: one entry for the slice.
         if self.track {

@@ -413,8 +413,32 @@ impl Ast {
                             seq.push(Item::Node(*value));
                             seq.push(Item::Text("}"));
                         }
-                        Node::Dispatch { .. } => todo!("the dispatch node's JSON form (SPEC 16.6)"),
-                        Node::Read { fn_name, args, .. } => {
+                        Node::Dispatch { on, method, classes, args } => {
+                            seq.push(Item::Text("{\"args\":{"));
+                            let mut sorted: Vec<&(String, NodeId)> = args.iter().collect();
+                            sorted.sort_by(|a, b| a.0.cmp(&b.0));
+                            for (i, (k, a)) in sorted.into_iter().enumerate() {
+                                if i > 0 {
+                                    seq.push(Item::Text(","));
+                                }
+                                seq.push(Item::Str(k));
+                                seq.push(Item::Text(":"));
+                                seq.push(Item::Node(*a));
+                            }
+                            seq.push(Item::Text("},\"classes\":["));
+                            for (i, c) in classes.iter().enumerate() {
+                                if i > 0 {
+                                    seq.push(Item::Text(","));
+                                }
+                                seq.push(Item::Str(c));
+                            }
+                            seq.push(Item::Text("],\"method\":"));
+                            seq.push(Item::Str(method));
+                            seq.push(Item::Text(",\"node\":\"dispatch\",\"on\":"));
+                            seq.push(Item::Node(*on));
+                            seq.push(Item::Text("}"));
+                        }
+                        Node::Read { fn_name, fn_hash, args } => {
                             seq.push(Item::Text("{\"args\":{"));
                             for (i, (k, a)) in args.iter().enumerate() {
                                 if i > 0 {
@@ -426,6 +450,10 @@ impl Ast {
                             }
                             seq.push(Item::Text("},\"fn\":"));
                             seq.push(Item::Str(fn_name));
+                            if let Some(h) = fn_hash {
+                                seq.push(Item::Text(",\"fn_hash\":"));
+                                seq.push(Item::Str(h));
+                            }
                             seq.push(Item::Text(",\"node\":\"read\"}"));
                         }
                         Node::Call { fn_name, args, named } => {
@@ -594,9 +622,27 @@ fn print(ast: &Ast) -> String {
                         seq.push(Item::Text(" in "));
                         seq.push(Item::Node(*body, false));
                     }
-                    Node::Dispatch { .. } => todo!("the dispatch node's printed form (SPEC 16.6)"),
-                    Node::Read { fn_name, args, .. } => {
+                    Node::Dispatch { on, method, args, .. } => {
+                        // The receiver is a key's expression: a name, a read or a dispatch (16.6).
+                        let l = level(ast, *on);
+                        seq.push(Item::Node(*on, l != 1));
+                        seq.push(Item::Owned(format!(".{method}(")));
+                        let mut sorted: Vec<&(String, NodeId)> = args.iter().collect();
+                        sorted.sort_by(|a, b| a.0.cmp(&b.0));
+                        for (i, (k, a)) in sorted.into_iter().enumerate() {
+                            if i > 0 {
+                                seq.push(Item::Text(", "));
+                            }
+                            seq.push(Item::Owned(format!("{k}: ")));
+                            seq.push(Item::Node(*a, false));
+                        }
+                        seq.push(Item::Text(")"));
+                    }
+                    Node::Read { fn_name, fn_hash, args } => {
                         seq.push(Item::Text(fn_name));
+                        if let Some(h) = fn_hash {
+                            seq.push(Item::Owned(format!("@{h}")));
+                        }
                         seq.push(Item::Text("("));
                         for (i, (k, a)) in args.iter().enumerate() {
                             if i > 0 {
