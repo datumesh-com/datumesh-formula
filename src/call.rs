@@ -836,10 +836,12 @@ pub fn parse_call(text: &str, env: &dyn CallEnv) -> Result<Call, CallError> {
     } else {
         match env.alias(&req.head.text).map_err(CallError::Env)? {
             Some(n) => {
-                // A short call is a bare name through the alias map (16.7). An `@alias` is as it was
-                // before (call/positional), and a pinned callee is named by its hash: neither is a
-                // resolution of the call.
-                if req.pin.is_none() && !req.head.alias {
+                // A bare name through the alias map is a short call (16.7) and is recorded. An `@alias`
+                // is recorded only where the environment has an alias snapshot (`aliases_tx`): the
+                // vectors without one (call/positional, call/pinned-alias) expect no `resolved`. A pinned
+                // callee is named by its hash, not an alias resolution.
+                let snapshot = env.aliases_tx().map_err(CallError::Env)?.is_some();
+                if req.pin.is_none() && (!req.head.alias || snapshot) {
                     r.alias_used = true;
                     r.resolutions.push(resolution(Resolution::new(&req.head.written, ResolutionKind::Alias, &n))?);
                 }

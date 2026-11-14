@@ -175,7 +175,7 @@ fn the_dispatch_node() {
         r#"{"args":{"edition":{"node":"str","value":"uxlc"}},"classes":["scripture.example.org/verse"],"method":"text","node":"dispatch","on":{"args":{},"classes":["scripture.example.org/verse"],"method":"next","node":"dispatch","on":{"name":"v","node":"var"}}}"#
     );
     assert_eq!(chain.print(), "v.next().text(edition: \"uxlc\")");
-    assert_eq!(chain.depth(), 4);
+    assert_eq!(chain.depth(), 3); // text -> next -> v: three nodes on the longest path (Ast::depth)
 }
 
 /// A read pinned to a function hash (what `super` compiles to): the `read` node has `fn_hash`, and

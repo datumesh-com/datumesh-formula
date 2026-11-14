@@ -89,7 +89,7 @@ fn define_publish_and_dispatch_over_a_store() {
     const T0: &str = "2026-01-01T00:00:00.000000Z";
     let v = common::vector("formula-eval/class-dispatch-bond.json");
     let world = v.get("world").unwrap();
-    let mesh = Mesh::new(&["calc.example.net"]);
+    let mesh = Mesh::new(&["calc.example.net", "rates.example.org"]); // the world's stored receipts are signed by rates.example.org
     for name in ["calc.example.net/bond/price", "calc.example.net/swap/price"] {
         let d = world.get("functions").unwrap().get(name).unwrap().get("descriptor").unwrap();
         mesh.store.put_descriptor(&d.to_jcs()).unwrap();
