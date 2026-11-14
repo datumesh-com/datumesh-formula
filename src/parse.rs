@@ -717,15 +717,13 @@ impl<'a> Parser<'a> {
             }
             "and" | "or" if called => return self.call(&lower),
             "then" | "else" | "in" | "and" | "or" => return Err(self.unexpected("an expression")),
-            "this" | "super" if called => return Err(err(Code::Reserved, format!("{} is reserved", t.text))),
-            "this" => {
+            // `this` and `super` are operands only as the receiver of a method call (16.3, the
+            // `.` that postfix takes). A bare one is E_FORMULA_RESERVED at its token, whatever follows.
+            "this" | "super" if self.peek_at(1).is(".") => {
                 self.bump();
-                return Ok(self.push(PNode::This));
+                return Ok(self.push(if lower == "this" { PNode::This } else { PNode::Super }));
             }
-            "super" => {
-                self.bump();
-                return Ok(self.push(PNode::Super));
-            }
+            "this" | "super" => return Err(err(Code::Reserved, format!("{} is reserved (16.3)", t.text))),
             _ => {}
         }
         if called {

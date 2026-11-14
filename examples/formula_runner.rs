@@ -84,6 +84,19 @@ fn run(v: &Value) -> Value {
     }
 }
 
+/// The output line with the input's `id` member first (the members after it stay in canonical
+/// order); without an id, the line is unchanged.
+fn with_id(id: Option<Vec<u8>>, line: &[u8]) -> Vec<u8> {
+    let Some(id) = id else { return line.to_vec() };
+    let mut out = b"{\"id\":".to_vec();
+    out.extend_from_slice(&id);
+    if line.len() > 2 {
+        out.push(b',');
+    }
+    out.extend_from_slice(&line[1..]);
+    out
+}
+
 fn main() {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
@@ -93,11 +106,11 @@ fn main() {
         if line.trim().is_empty() {
             continue;
         }
-        let r = match json::parse(line.as_bytes()) {
-            Ok(v) => run(&v),
-            Err(e) => obj(vec![("error", s(&format!("malformed line: {e:?}")))]),
+        let (id, r) = match json::parse(line.as_bytes()) {
+            Ok(v) => (v.get("id").map(Value::to_jcs), run(&v)),
+            Err(e) => (None, obj(vec![("error", s(&format!("malformed line: {e:?}")))])),
         };
-        let _ = out.write_all(&r.to_jcs());
+        let _ = out.write_all(&with_id(id, &r.to_jcs()));
         let _ = out.write_all(b"\n");
     }
 }

@@ -45,6 +45,8 @@ positions. On `datumesh-core` 0.3.8 (was 0.3.6) and
   not taking the class keys is `E_ARG_UNKNOWN`; `super` with no class name bound to the parent's
   hash is `E_CLASS_PARENT` (new `Code::ClassParent`), and the printed name is the first ascending
   name bound to it; a printed dispatch needs its signature to parse back (text only).
+- A bare `this` or `super` (not followed by `.`) is `E_FORMULA_RESERVED` at its token, whatever follows,
+  inside and outside a method body; `examples/formula_runner` echoes the input's `id` first in each line.
 
 ## 0.2.0 (unreleased)
 
