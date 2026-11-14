@@ -9,7 +9,9 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use datumesh_core::json::Value;
-use datumesh_core::Type;
+use datumesh_core::{ArgExtras, Type};
+
+use crate::classes::Classes;
 
 /// A malformed environment, descriptor or world: the caller's error, not a formula code.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -65,6 +67,10 @@ pub struct ArgDecl {
     pub valid: bool,
     /// Its extent, if declared.
     pub extent: Option<Extent>,
+    /// Since spec-0.5.0 (7): `classes` (a string argument holding the key of an object of one of
+    /// them, 16.6), `default: "asof"` (16.7) and `key_normalisation` (16.4), core's
+    /// [`ArgExtras`]; absent members are the defaults.
+    pub extras: ArgExtras,
 }
 
 /// A signature (7).
@@ -78,6 +84,9 @@ pub struct Signature {
     pub returns: Type,
     /// The return unit, for numbers.
     pub returns_unit: Option<UnitDecl>,
+    /// Since spec-0.5.0 (7): `returns` is `{"type": "string", "classes": [...]}`, a returned
+    /// object key (16.6): the classes.
+    pub returns_classes: Option<Vec<String>>,
 }
 
 /// A function descriptor: language, body, inputs, signature, and its function hash.
@@ -146,7 +155,7 @@ impl Signature {
                 }
                 Some(_) => return Err(bad("extent shape")),
             };
-            args.insert(name.clone(), ArgDecl { ty, unit, valid, extent });
+            args.insert(name.clone(), ArgDecl { ty, unit, valid, extent, extras: ArgExtras::default() });
         }
         let order = match v.get("order") {
             None => None,
@@ -170,7 +179,7 @@ impl Signature {
             }
             _ => return Err(bad("returns shape")),
         };
-        Ok(Signature { args, order, returns, returns_unit })
+        Ok(Signature { args, order, returns, returns_unit, returns_classes: None })
     }
 }
 
@@ -210,15 +219,29 @@ pub struct Env {
     pub functions: BTreeMap<String, Function>,
     /// The resolver's alias map: alias (without `@`) to fully qualified name.
     pub aliases: BTreeMap<String, String>,
+    /// Since spec-0.5.0 (16): the classes a body may read as objects, by class name. The
+    /// methods' functions are in `functions` as `<class>/<method>`.
+    pub classes: Classes,
+    /// Since spec-0.5.0 (16.3): the class whose method the function being defined is, which
+    /// gives `this` and `super` their meaning; `None` outside a method's body.
+    pub method_of: Option<String>,
 }
 
 impl Env {
     /// An environment with no functions and no aliases.
     pub fn new(name: &str, signature: Signature) -> Env {
-        Env { name: name.to_string(), signature, functions: BTreeMap::new(), aliases: BTreeMap::new() }
+        Env {
+            name: name.to_string(),
+            signature,
+            functions: BTreeMap::new(),
+            aliases: BTreeMap::new(),
+            classes: Classes::new(),
+            method_of: None,
+        }
     }
 
-    /// Read `{"name", "signature", "functions": {name: descriptor}, "aliases": {alias: name}}`.
+    /// Read `{"name", "signature", "functions": {name: descriptor}, "aliases": {alias: name}}` and,
+    /// since spec-0.5.0, `classes` (class name to flattened descriptor) and `method_of`.
     pub fn from_value(v: &Value) -> Result<Env, EnvError> {
         let name = v.get("name").and_then(Value::as_str).ok_or_else(|| bad("env without name"))?;
         let signature = Signature::from_value(v.get("signature").ok_or_else(|| bad("env without signature"))?)?;

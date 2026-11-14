@@ -23,7 +23,10 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use datumesh_core::json::Value;
-use datumesh_core::{format_reference, lexical, Arg, Args, CellRef, FunctionDescriptor, Reference, Scalar, Type};
+use datumesh_core::{
+    format_reference, lexical, Arg, Args, CellRef, ClassDescriptor, FunctionDescriptor, Reference, Resolved, Scalar,
+    Type,
+};
 
 use crate::lex::{self, Kind, Token};
 use crate::Code;
@@ -37,6 +40,39 @@ pub trait CallEnv {
     fn bound(&self, name: &str, asof: Option<&str>) -> Result<Option<FunctionDescriptor>, String>;
     /// The descriptor whose function hash is `fn_hash`, when known.
     fn pinned(&self, fn_hash: &str) -> Result<Option<FunctionDescriptor>, String>;
+
+    /// The flattened class descriptor the class `name` is bound to as of `asof` (`None`: now), or
+    /// `None` when `name` is not a class (a function name, or unbound). Binding a class binds each
+    /// method `N/m`, so the method functions come from [`CallEnv::bound`]. Since spec-0.5.0
+    /// (16.3). Provided: no classes.
+    fn bound_class(&self, name: &str, asof: Option<&str>) -> Result<Option<ClassDescriptor>, String> {
+        let _ = (name, asof);
+        Ok(None)
+    }
+
+    /// The instant of the alias snapshot [`CallEnv::alias`] answers from, recorded in the answer's
+    /// `resolved.aliases_tx` when a call resolved an alias (16.7). Since spec-0.5.0. Provided:
+    /// none.
+    fn aliases_tx(&self) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+
+    /// The mesh's now, which a call without `?asof=` takes for an `asof` default and for a label's
+    /// lookup (16.7). Since spec-0.5.0. Provided: none (the call then cannot default or look up).
+    fn now(&self) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+
+    /// **The lookup hook** (16.1, 16.7): the class's `lookup` method read at `label` as of `asof`
+    /// (the call's `asof`, or [`CallEnv::now`]): the cell `N/<lookup>(label: ...)`'s value, a key
+    /// encoding of an object of `class` (16.5). `label` has been read as the lookup function's
+    /// `label` argument already (its `key_normalisation`, if it carries one, holds). `None`: the
+    /// cell has no value as of `asof`, which is `E_NAME_UNBOUND`. Since spec-0.5.0. Provided:
+    /// never a value.
+    fn lookup(&self, class: &str, label: &str, asof: &str) -> Result<Option<String>, String> {
+        let _ = (class, label, asof);
+        Ok(None)
+    }
 }
 
 /// A [`CallEnv`] in memory: functions bound by name (at every time), an alias map and
@@ -49,6 +85,16 @@ pub struct MapCallEnv {
     pub aliases: BTreeMap<String, String>,
     /// Descriptors known by hash (besides those of `functions`).
     pub descriptors: BTreeMap<String, FunctionDescriptor>,
+    /// Since spec-0.5.0: flattened class descriptors by class name (bound at every time).
+    pub classes: BTreeMap<String, ClassDescriptor>,
+    /// Since spec-0.5.0: the instant of the alias snapshot (`aliases_tx`).
+    pub aliases_tx: Option<String>,
+    /// Since spec-0.5.0: the mesh's now, for an `asof` default or a lookup in a call without
+    /// `?asof=`.
+    pub now: Option<String>,
+    /// Since spec-0.5.0: class name to `{label: key encoding}`, the cells of the class's `lookup`
+    /// method (the class's alias table), read at any `asof`.
+    pub lookups: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 impl MapCallEnv {
@@ -74,6 +120,24 @@ impl MapCallEnv {
                 env.descriptors.insert(d.hash(), d);
             }
         }
+        if let Some(cs) = v.get("classes").and_then(Value::as_object) {
+            for (n, d) in cs {
+                env.classes.insert(n.clone(), ClassDescriptor::from_value(d)?);
+            }
+        }
+        env.aliases_tx = v.get("aliases_tx").and_then(Value::as_str).map(str::to_string);
+        env.now = v.get("now").and_then(Value::as_str).map(str::to_string);
+        if let Some(ls) = v.get("lookups").and_then(Value::as_object) {
+            for (class, labels) in ls {
+                let mut m = BTreeMap::new();
+                for (label, key) in labels.as_object().into_iter().flatten() {
+                    if let Some(k) = key.as_str() {
+                        m.insert(label.clone(), k.to_string());
+                    }
+                }
+                env.lookups.insert(class.clone(), m);
+            }
+        }
         Ok(env)
     }
 }
@@ -90,6 +154,18 @@ impl CallEnv for MapCallEnv {
             return Ok(Some(d.clone()));
         }
         Ok(self.functions.values().find(|d| d.hash() == fn_hash).cloned())
+    }
+    fn bound_class(&self, name: &str, _asof: Option<&str>) -> Result<Option<ClassDescriptor>, String> {
+        Ok(self.classes.get(name).cloned())
+    }
+    fn aliases_tx(&self) -> Result<Option<String>, String> {
+        Ok(self.aliases_tx.clone())
+    }
+    fn now(&self) -> Result<Option<String>, String> {
+        Ok(self.now.clone())
+    }
+    fn lookup(&self, class: &str, label: &str, _asof: &str) -> Result<Option<String>, String> {
+        Ok(self.lookups.get(class).and_then(|m| m.get(label)).cloned())
     }
 }
 
@@ -189,6 +265,11 @@ pub struct Call {
     pub cell: CellRef,
     /// The pin: the function hash the call names, if any.
     pub fn_hash: Option<String>,
+    /// Since spec-0.5.0 (16.7, 5.5): what the call resolved, for the answer's envelope member
+    /// `resolved`: the full canonical call and each alias, method, default and lookup resolution,
+    /// with `aliases_tx` when an alias was used. `None` when nothing was resolved: a call
+    /// written in full (`call/class-method-plain`).
+    pub resolved: Option<Resolved>,
 }
 
 impl Call {
@@ -329,7 +410,11 @@ pub fn parse_call(text: &str, env: &dyn CallEnv) -> Result<Call, CallError> {
         cell_args.insert(arg, value);
     }
     let (ns, fn_name) = name.rsplit_once('/').unwrap_or(("", name.as_str()));
-    Ok(Call { cell: CellRef { ns: ns.to_string(), fn_name: fn_name.to_string(), args: cell_args, asof }, fn_hash: pin })
+    Ok(Call {
+        cell: CellRef { ns: ns.to_string(), fn_name: fn_name.to_string(), args: cell_args, asof },
+        fn_hash: pin,
+        resolved: None,
+    })
 }
 
 type Callee = (String, bool, Option<String>);

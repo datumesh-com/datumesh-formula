@@ -139,7 +139,7 @@ impl TreeGen<'_> {
                 }
                 args.sort_by(|a, b| a.0.cmp(&b.0));
                 let fn_name = self.rng.pick(FNS).to_string();
-                self.push(Node::Read { fn_name, args })
+                self.push(Node::Read { fn_name, fn_hash: None, args })
             }
             _ => self.call(d),
         }

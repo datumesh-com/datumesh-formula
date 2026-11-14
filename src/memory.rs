@@ -15,7 +15,9 @@ use datumesh_core::json::Value;
 use datumesh_core::{Scalar, Type};
 
 use crate::env::{Env, EnvError, Function};
-use crate::eval::{self, Args, Binding, CellKey, Fuel, Outcome, SliceKey, Stop, Version, World, ZERO_INSTANT};
+use crate::eval::{
+    self, Args, Binding, CellKey, ClassBinding, Fuel, Outcome, SliceKey, Stop, Version, World, ZERO_INSTANT,
+};
 use crate::{define, Code, Compiled};
 
 /// The vectors' default fuel (15.12): 10,000,000.
@@ -69,6 +71,7 @@ pub struct Computed {
 #[derive(Clone)]
 pub struct MemoryWorld {
     functions: BTreeMap<String, Binding>,
+    classes: BTreeMap<String, ClassBinding>,
     stored: Vec<Stored>,
     compiled: HashMap<String, Arc<Compiled>>,
     memo: HashMap<(CellKey, String), Result<Option<Version>, Code>>,
@@ -123,6 +126,7 @@ impl MemoryWorld {
     pub fn new(asof: &str) -> MemoryWorld {
         MemoryWorld {
             functions: BTreeMap::new(),
+            classes: BTreeMap::new(),
             stored: Vec::new(),
             compiled: HashMap::new(),
             memo: HashMap::new(),
@@ -137,7 +141,7 @@ impl MemoryWorld {
     }
 
     /// The world of a vector: `{"functions": {name: {"descriptor", "bound"}}, "receipts": [...],
-    /// "max_depth"?}`.
+    /// "max_depth"?}` and, since spec-0.5.0, `"classes": {name: {"descriptor", "bound"}}`.
     pub fn from_value(world: &Value, asof: &str) -> Result<MemoryWorld, EnvError> {
         let mut w = MemoryWorld::new(asof);
         let fs = world.get("functions").and_then(Value::as_object).ok_or_else(|| bad("world without functions"))?;
@@ -168,6 +172,18 @@ impl MemoryWorld {
         let f = Function::from_value(descriptor)?;
         self.functions.insert(name.to_string(), Binding { function: Arc::new(f), start: start.to_string() });
         self.compiled.remove(name);
+        Ok(())
+    }
+
+    /// Bind the class `name` to a flattened class descriptor from `start` (SPEC 16.1, 9.7). The
+    /// methods' functions are bound as functions (`<class>/<method>`, [`MemoryWorld::bind`]),
+    /// as a vector's `world.functions` has them.
+    pub fn bind_class(&mut self, name: &str, descriptor: &Value, start: &str) -> Result<(), EnvError> {
+        let d =
+            datumesh_core::ClassDescriptor::from_value(descriptor).map_err(|e| bad(format!("class {name}: {e}")))?;
+        let class_hash = d.hash();
+        self.classes
+            .insert(name.to_string(), ClassBinding { class: Arc::new(d), class_hash, start: start.to_string() });
         Ok(())
     }
 
@@ -434,6 +450,11 @@ impl World for MemoryWorld {
 
     fn blob(&mut self, sha256: &str, _length: u64) -> Result<Option<Vec<u8>>, Stop<Self::Error>> {
         Ok(self.blobs.get(sha256).cloned())
+    }
+
+    fn class(&mut self, name: &str, at: Option<&str>) -> Result<Option<ClassBinding>, Self::Error> {
+        let at = at.unwrap_or(&self.asof);
+        Ok(self.classes.get(name).filter(|b| b.start.as_str() <= at).cloned())
     }
 }
 

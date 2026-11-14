@@ -431,6 +431,7 @@ impl Checker<'_> {
             Node::Agg(n) => Err(e(Code::Enum, format!("{n} is an aggregate of scan or window only"))),
             Node::Key(n) => Err(e(Code::Along, format!("{n} names a dimension only in along"))),
             Node::Read { .. } => self.read(id),
+            Node::Dispatch { .. } => todo!("checking a dispatch (SPEC 16.6)"),
             Node::Call { fn_name, args, named } => self.call(id, fn_name, args, named),
         }
     }
@@ -572,7 +573,7 @@ impl Checker<'_> {
 
     fn read(&mut self, id: NodeId) -> Result<Ty, Error> {
         let ast = self.ast;
-        let Node::Read { fn_name, args } = ast.node(id) else { unreachable!("read") };
+        let Node::Read { fn_name, args, .. } = ast.node(id) else { unreachable!("read") };
         if self.in_lambda > 0 {
             return Err(e(Code::LambdaRead, "no cell reads inside a lambda: join instead"));
         }

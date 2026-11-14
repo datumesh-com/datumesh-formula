@@ -220,3 +220,75 @@ but not to `E_FORMULA_UNRESOLVED` at a `T` before a binding, nor to a define-tim
 when a rebound callee no longer checks. The crate reports them as the engine's runtime error (an
 `error` envelope, `E_EVAL_UNAVAILABLE`). Proposal: state that every other evaluation code is a
 mesh failure.
+
+## H. spec-0.5.0, classes (found while writing the tests at `6d5633e`; the tests follow the reference, black box)
+
+The tests of `tests/classes_*.rs` were derived from the vectors and from SPEC 5.8, 7, 15.5, 15.11,
+15.12 and 16; where a case is not a vector its expected result is what the reference tool
+(`tools/formula.py` and `canon.py` of `6d5633e`, run as black boxes) gives. The points below are where the
+text is silent or the reference and the text differ. None blocked the tests: a point the tests do not
+decide is marked "not tested".
+
+H1. **`E_FORMULA_DISPATCH` at evaluation.** 15.11 and 16.6 say a method no longer bound to `<class>/m`
+at evaluation is `E_FORMULA_DISPATCH`, the mesh's failure. Through an evaluator that checks a body
+again against the bindings of the asof, as 15.8 requires, the reference never gives it: `<class>/m`
+or the class not bound at the asof is `E_FORMULA_UNRESOLVED`, and `<class>/m` bound to another hash
+than the class's is `E_FORMULA_METHOD` (the define-time check, repeated). Not tested; the codes are
+all mesh failures either way. Proposal: say which of the three a rebinding gives.
+
+H2. **A well-formed dispatch key that is not canonical for its class.** 16.6 makes "keys that are not
+its class's" `E_FORMULA_DISPATCH_KEY`. For `calc.example.net/bond(isin:"xs0001")` (a bond's key,
+lowercase under `upper_ascii`) the reference decodes the key as the class's, then reads
+`bond/price(isin: "xs0001")`, whose argument carries the rule: the fault is `E_FORMULA_KEY`, not
+`E_FORMULA_DISPATCH_KEY`. Tested (`a_dispatch_key_not_canonical_for_its_class`) as the reference
+has it. Proposal: say whether a key not canonical under its class's rules is a key of the class.
+
+H3. **Class-typed positions and normalisation.** An object literal in a class-typed position is
+checked against the class's rules (`currency("eur")` is `E_FORMULA_KEY`, in a call
+`E_KEY_NORMALISATION`), but the same encoding as a quoted string (`"iso.example.org/currency(code:""eur"")"`)
+is accepted by the reference both in a body and in a call, with no normalisation check on the key
+inside it; 16.5 says an encoding whose class is known "is decoded against it as well". Not tested for
+the quoted form. A bare lowercase word as the key of an object literal is a variable, so
+`currency(eur)` is `E_FORMULA_PLACEMENT` (an object with a non-literal key), which the text of
+16.3 implies without saying. Not tested.
+
+H4. **`now`.** A call without `?asof=` takes the mesh's now for an `asof` default and for a label's
+lookup (16.7). With no now to take, the reference answers `E_ARG_MISSING` (a default) and treats
+`N[label]` as `N(label)`. The spec does not say what a mesh without a clock answers; `CallEnv::now`
+returns `None` then. Not tested; every test gives a now or an asof.
+
+H5. **`resolved` details** (5.5, 16.7). The reference puts `aliases_tx` in `resolved` exactly when an
+alias was resolved (never for a call that used none, even when the environment has a snapshot; none
+when the environment has none), records `@name` as written for an `@alias`, orders the
+resolutions alias, lookup, method, default (as the vectors show for pairs), and omits `resolved`
+altogether when nothing was resolved. The text of 16.7 gives the members and the kinds, not these. Tested
+as the reference has it.
+
+H6. **The order of checks for a method call.** 5.8 says the receiver's keys "are bound and read first,
+each as it is written, then the method's arguments as above", while its list of checks reads values "in
+ascending order of argument names". For `fx_pair(EUR, usd).rate(notadate)` the reference reports the key
+(`E_KEY_NORMALISATION`) before the method's argument `date` (`E_CANON_TYPE`, which sorts before `quote`),
+and `fx_pair(eur, USD).rate()` reports `E_KEY_NORMALISATION` before `E_ARG_MISSING`. Tested as the reference has
+it (the receiver is read first, normalisation included); the sentence could say so.
+
+H7. **The lookup method on an object, and an extension method that does not take the keys, in a call.**
+16.1 and 16.3 give `E_FORMULA_METHOD` in a body for both. In a call the reference gives `E_PARSE_URI` for
+`fx_pair(EUR, USD).named(cable)` and `E_ARG_UNKNOWN` for an extension method whose arguments differ. Not tested.
+
+H8. **`super` through the engine.** A pinned read relies on no binding (16.3), but datumesh-engine 0.4's
+`Inputs` read by name only, so `FormulaRuntime` cannot evaluate a pinned read without relying on the binding
+of `P/m` being the parent's hash. The in-memory world can (`formula-eval/class-super`). The contract's item 7
+lists method reads, dispatch and defaults through the engine, not `super`; `World::read_pinned` is
+the hook, and the runtime answers `E_FORMULA_UNSUPPORTED` until the engine can read by hash.
+
+H9. **Memoised faults and the engine.** 15.12 says an evaluator memoizes the faults, `E_FORMULA_KEY` and
+`E_FORMULA_DISPATCH_KEY` included, as it memoizes a value; datumesh-engine 0.4 recomputes faults
+("faults are not memoised as answers", `tests/faults.rs` of the engine). The in-memory world memoizes every
+code that is not the mesh's failure, so the new faults are memoized without a line of code there. Not
+tested (not observable: a fault ends the evaluation of the cell that reads it).
+
+H10. **15.6's "parse(print(ast)) = ast, without an environment" and the dispatch node.** A printed dispatch
+(`instrument.price(date: date)`, `v.next().text(edition: "uxlc")`) carries no class set: the node's `classes` come from the
+declaration of an argument or of a returned key in the signature, so without an environment the printed body cannot give the AST back.
+The sentence of 15.6 holds for every node of spec-0.4. Not tested (the round-trip test generates no dispatch). Proposal: say that a dispatch is the exception,
+or that the printer round-trips with the signature.

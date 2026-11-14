@@ -75,12 +75,26 @@ codes! {
     Unsupported => "E_FORMULA_UNSUPPORTED",
     Inputs => "E_FORMULA_INPUTS",
     NotCanonical => "E_FORMULA_NOT_CANONICAL",
+    /// Since spec-0.5.0 (16.3): a class read used as a value, a method the class does not have
+    /// or whose `<class>/<method>` is not bound to the class's method hash, `super` without a
+    /// parent, an extension method that does not take the class keys first.
+    Method => "E_FORMULA_METHOD",
+    /// Since spec-0.5.0 (16.6): at define, a dispatched method whose signature (keys taken
+    /// away) differs between the classes of the set; at evaluation, a method no longer bound.
+    Dispatch => "E_FORMULA_DISPATCH",
+    /// Since spec-0.5.0 (16.4): at define, a literal key not canonical under its
+    /// normalisation or a malformed literal object key; at evaluation, the fault of a computed
+    /// string argument not canonical under its argument's `key_normalisation`.
+    Key => "E_FORMULA_KEY",
     DivZero => "E_FORMULA_DIV_ZERO",
     Domain => "E_FORMULA_DOMAIN",
     Range => "E_FORMULA_RANGE",
     Empty => "E_FORMULA_EMPTY",
     Absent => "E_FORMULA_ABSENT",
     Future => "E_FORMULA_FUTURE",
+    /// Fault, since spec-0.5.0 (16.6): a value dispatched on that is not the key of an object of
+    /// a class in the dispatch set.
+    DispatchKey => "E_FORMULA_DISPATCH_KEY",
     NotCovered => "E_FORMULA_NOT_COVERED",
     Budget => "E_FORMULA_BUDGET",
     Cycle => "E_FORMULA_CYCLE",

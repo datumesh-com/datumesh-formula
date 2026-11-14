@@ -201,7 +201,7 @@ impl Resolver<'_> {
             }
         }
         bound.sort_by(|a, b| a.0.cmp(&b.0));
-        Ok(self.push(Node::Read { fn_name: fq, args: bound }))
+        Ok(self.push(Node::Read { fn_name: fq, fn_hash: None, args: bound }))
     }
 
     fn call(&mut self, name: &str, args: &[PArg]) -> Result<NodeId, Error> {

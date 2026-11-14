@@ -177,8 +177,26 @@ pub enum Node {
     Read {
         /// The fully qualified function name.
         fn_name: String,
+        /// Since spec-0.5.0 (16.3): the function hash a `super` read is pinned to; printed
+        /// `<fn>@<fn_hash>(...)`, JSON member `fn_hash`. Accepted in the body of a method and
+        /// by an evaluator reading a stored body only (`E_FORMULA_PLACEMENT` elsewhere).
+        fn_hash: Option<String>,
         /// The arguments, ascending by name.
         args: Vec<(String, ReadArg)>,
+    },
+    /// Since spec-0.5.0 (16.6): a method call on an object key, dispatched among a static set
+    /// of classes. JSON `{"args": {...}, "classes": [...], "method": m, "node": "dispatch",
+    /// "on": <expr>}`, printed `<on>.<method>(name: value, ...)`; the derived inputs hold
+    /// `<class>/<method>` for every class of the set.
+    Dispatch {
+        /// The expression whose value is the object key.
+        on: NodeId,
+        /// The method name.
+        method: String,
+        /// The classes the method may be called on, in the order the key's declaration gives.
+        classes: Vec<String>,
+        /// The method's own arguments (the class keys are taken away), ascending by name.
+        args: Vec<(String, NodeId)>,
     },
     /// A built-in call: required arguments positional, optional ones named (in the built-in's
     /// parameter order, which is how they print; the JSON form sorts them).
@@ -279,6 +297,7 @@ impl Ast {
                 }
                 v
             }
+            Node::Dispatch { on, args, .. } => std::iter::once(*on).chain(args.iter().map(|(_, n)| *n)).collect(),
             Node::Call { args, named, .. } => args.iter().copied().chain(named.iter().map(|(_, n)| *n)).collect(),
             Node::Lambda { body, .. } => vec![*body],
             _ => Vec::new(),
@@ -394,7 +413,8 @@ impl Ast {
                             seq.push(Item::Node(*value));
                             seq.push(Item::Text("}"));
                         }
-                        Node::Read { fn_name, args } => {
+                        Node::Dispatch { .. } => todo!("the dispatch node's JSON form (SPEC 16.6)"),
+                        Node::Read { fn_name, args, .. } => {
                             seq.push(Item::Text("{\"args\":{"));
                             for (i, (k, a)) in args.iter().enumerate() {
                                 if i > 0 {
@@ -574,7 +594,8 @@ fn print(ast: &Ast) -> String {
                         seq.push(Item::Text(" in "));
                         seq.push(Item::Node(*body, false));
                     }
-                    Node::Read { fn_name, args } => {
+                    Node::Dispatch { .. } => todo!("the dispatch node's printed form (SPEC 16.6)"),
+                    Node::Read { fn_name, args, .. } => {
                         seq.push(Item::Text(fn_name));
                         seq.push(Item::Text("("));
                         for (i, (k, a)) in args.iter().enumerate() {

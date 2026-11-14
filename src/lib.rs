@@ -32,6 +32,7 @@ pub mod calendar;
 pub mod call;
 mod casing_table;
 mod check;
+pub mod classes;
 pub mod decimal;
 pub mod definition;
 mod env;
@@ -52,6 +53,7 @@ use datumesh_core::Type;
 
 pub use ast::{Ast, Node, NodeId, Op, ReadArg};
 pub use check::{KeyTy, NumUnit, Ty};
+pub use classes::Classes;
 pub use env::{ArgDecl, Env, EnvError, Extent, Function, Signature, UnitDecl, UnitSide};
 pub use error::{Code, DefineError, Error};
 pub use parse::{BUILTINS as BUILTIN_NAMES, FORBIDDEN as FORBIDDEN_NAMES, MAX_NESTING};

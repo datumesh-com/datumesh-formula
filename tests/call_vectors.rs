@@ -10,39 +10,17 @@ use datumesh_formula::call::{parse_call, CallEnv, MapCallEnv};
 
 #[test]
 fn every_call_vector() {
-    let (mut valid, mut invalid) = (0, 0);
-    let mut failures = Vec::new();
-    for (path, v) in common::vectors_of_kind("call") {
-        let env = MapCallEnv::from_value(v.get("env").unwrap()).unwrap();
-        let input = common::string(&v, "input").unwrap();
-        let got = parse_call(input, &env);
-        if common::boolean(&v, "valid") == Some(true) {
-            valid += 1;
-            let want = common::string(&v, "uri").unwrap();
-            match got {
-                Ok(c) if c.uri() == want => {}
-                Ok(c) => failures.push(format!("{path}: uri {}", c.uri())),
-                Err(e) => failures.push(format!("{path}: {e}")),
-            }
-        } else {
-            invalid += 1;
-            let want = common::string(&v, "error").unwrap();
-            match got {
-                Err(e) if e.code() == want => {}
-                Err(e) => failures.push(format!("{path}: {e}, expected {want}")),
-                Ok(c) => failures.push(format!("{path}: parsed to {}, expected {want}", c.uri())),
-            }
-        }
-    }
-    assert!(failures.is_empty(), "{}", failures.join("\n"));
-    assert_eq!((valid, invalid), (10, 17));
+    // The vectors of spec-0.4.2: the class vectors of spec-0.5.0 are `classes_requests.rs`'s.
+    let t = common::check::tally(common::old_vectors_of_kind("call"), common::check::call_vector);
+    assert!(t.failures.is_empty(), "{}", t.failures.join("\n"));
+    assert_eq!((t.valid, t.invalid), (10, 17));
 }
 
 /// The unpinned URI a call gives is the one URI of its cell reference (5.2): the core's parse
 /// of it gives the same reference back.
 #[test]
 fn an_unpinned_call_is_its_uri() {
-    for (path, v) in common::vectors_of_kind("call") {
+    for (path, v) in common::old_vectors_of_kind("call") {
         if common::boolean(&v, "valid") != Some(true) || common::string(&v, "uri").unwrap().contains("fn_hash=") {
             continue;
         }
@@ -77,7 +55,7 @@ fn a_pinned_call_needs_the_descriptor_not_the_binding() {
 /// (against the signature of the descriptor it names) to the call's reference.
 #[test]
 fn every_call_uri_is_a_reference() {
-    for (path, v) in common::vectors_of_kind("call") {
+    for (path, v) in common::old_vectors_of_kind("call") {
         if common::boolean(&v, "valid") != Some(true) {
             continue;
         }

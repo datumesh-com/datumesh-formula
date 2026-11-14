@@ -1,6 +1,9 @@
-//! Loading the vendored spec vectors (`spec-vectors/`: every vector of datumesh-spec at the spec-0.4.2 tag, fc870ab).
+//! Loading the vendored spec vectors (`spec-vectors/`: every vector of datumesh-spec at `6d5633e`, the
+//! spec-0.5.0 branch, 1466 of them).
 #![allow(dead_code)]
 
+pub mod check;
+pub mod classes;
 pub mod generate;
 pub mod union;
 
@@ -71,4 +74,21 @@ pub fn vector(rel: &str) -> Value {
 /// with the shared signature, and no other functions.
 pub fn formula_env() -> datumesh_formula::Env {
     datumesh_formula::Env::from_value(vector("formula/add.json").get("env").unwrap()).unwrap()
+}
+
+/// Whether a vector (by its path under `spec-vectors/`) is one of the class vectors of spec-0.5.0:
+/// `formula/class-*`, `formula-eval/class-*`, `call/class-*` and the `invalid/` vectors named
+/// `formula-class-*`, `formula-eval-class-*` and `call-class-*`. Every other `formula`,
+/// `formula-eval` and `call` vector is one of spec-0.4.2's and keeps its result.
+pub fn is_class_vector(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.starts_with("class-")
+        || name.starts_with("formula-class-")
+        || name.starts_with("formula-eval-class-")
+        || name.starts_with("call-class-")
+}
+
+/// The vectors of `kind` that are not class vectors (the vectors of spec-0.4.2).
+pub fn old_vectors_of_kind(kind: &str) -> Vec<(String, Value)> {
+    vectors_of_kind(kind).into_iter().filter(|(p, _)| !is_class_vector(p)).collect()
 }

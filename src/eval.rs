@@ -39,6 +39,19 @@ pub struct Binding {
     pub start: String,
 }
 
+/// The binding of a class name: the flattened class descriptor and the start of the binding
+/// (an instant). Since spec-0.5.0 (16.3, 9.7): binding a class name binds each method `N/m` to
+/// the method's function hash from the same instant.
+#[derive(Clone, Debug)]
+pub struct ClassBinding {
+    /// The flattened descriptor the name resolves to.
+    pub class: Arc<datumesh_core::ClassDescriptor>,
+    /// Its class hash.
+    pub class_hash: String,
+    /// When the binding began.
+    pub start: String,
+}
+
 /// A version of a cell: its value and the receipt that states it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Version {
@@ -240,6 +253,35 @@ pub trait World {
     fn rebound(&mut self, name: &str, binding: &Binding) -> Result<Option<Arc<Compiled>>, Stop<Self::Error>> {
         let _ = (name, binding);
         Ok(None)
+    }
+
+    /// The class `name` is bound to as of the evaluation asof, or as of the transaction time `at`
+    /// when given, and when that binding began; `None` when it is not bound then. A dispatch
+    /// (16.6) asks for the classes of its set, to decode the key it dispatches on and to check
+    /// that `<class>/m` is bound to the class's method hash. Free. Since spec-0.5.0. Provided:
+    /// `None` (a world without classes).
+    fn class(&mut self, name: &str, at: Option<&str>) -> Result<Option<ClassBinding>, Self::Error> {
+        let _ = (name, at);
+        Ok(None)
+    }
+
+    /// The function with this function hash, for a read pinned to it (`super`, 16.3): a pinned read
+    /// relies on no binding, so the function is found by its hash and not through a name (the
+    /// binding of `P/m` may be another function, or none, at the asof). Free. Since spec-0.5.0.
+    /// Provided: `None`.
+    fn function_by_hash(&mut self, fn_hash: &str) -> Result<Option<Arc<Function>>, Self::Error> {
+        let _ = fn_hash;
+        Ok(None)
+    }
+
+    /// The version of `cell` as a cell of the function with hash `fn_hash`, as of the evaluation
+    /// asof: a read pinned to that function (16.3), costing 1 as a read does, whose binding start is
+    /// not an `asof` candidate (8.2 rule 2: no binding was relied on). Since spec-0.5.0. Provided: a
+    /// world that cannot read by hash, `E_FORMULA_UNSUPPORTED` (the engine 0.4 `Inputs` read by name
+    /// only).
+    fn read_pinned(&mut self, fn_hash: &str, cell: &CellKey) -> Result<Option<Version>, Stop<Self::Error>> {
+        let _ = (fn_hash, cell);
+        Err(Stop::Code(Code::Unsupported))
     }
 }
 
@@ -667,6 +709,7 @@ impl<W: World + ?Sized> Eval<'_, W> {
                 r
             }
             Node::Read { .. } => self.read(id, None),
+            Node::Dispatch { .. } => todo!("evaluating a dispatch (SPEC 16.6)"),
             Node::Call { fn_name, args, named } => self.call(id, fn_name, args, named),
             Node::Lambda { .. } | Node::Agg(_) | Node::Key(_) => Err(Code::Type.into()),
         }

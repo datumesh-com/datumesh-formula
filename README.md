@@ -250,7 +250,10 @@ cargo in a container on the `datumesh` network next to a `datumesh-pg` container
 `tools/package_test.sh` is the packaging test, `tools/public_api.sh` checks `public-api.txt`,
 `tools/crosscheck.sh` the cross-language check, `tools/decimal_crosscheck.sh` the decimals. `tools/gen_cases.py`, `tools/reference_runner.py` and
 `tools/compare.py` run generated cases through this crate (`examples/formula_runner.rs`) and through
-another implementation and compare them. `spec-vectors/` is a copy of the spec's vectors at the `spec-0.4.2` tag (`fc870ab`, 1,146).
+another implementation and compare them. `spec-vectors/` is a copy of the spec's vectors at `6d5633e` (the branch `spec-0.5.0` of
+[datumesh-spec](https://github.com/datumesh-com/datumesh-spec), untagged at the time of writing; 1,466, with `units.md`);
+this crate runs the kinds `formula`, `formula-eval`, `call`, `excel` and `decimal` (648) and skips the rest
+(818, the verifier's kinds, which `datumesh-core` runs).
 
 Dependencies: `datumesh-core` 0.3.6 for strict JSON, JCS, SHA-256, the string rules of SPEC 3.5
 (Unicode 15.1 assigned code points, NFC), `FunctionDescriptor` and `Fault`; `unicode-normalization`

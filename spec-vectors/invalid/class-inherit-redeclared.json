@@ -1,0 +1,542 @@
+{
+  "id": "invalid/class-inherit-redeclared",
+  "kind": "class",
+  "description": "spec-0.5.0: A parent key is inherited, never redeclared or retyped.",
+  "valid": false,
+  "input": "{\n  \"steward\": {\n    \"process\": \"https://calc.example.net/classes\",\n    \"namespace\": \"calc.example.net\"\n  },\n  \"parent\": \"41ee5e9dc9d354ed7774477375c05733b14631a578f0d08a45980b5c334c90ba\",\n  \"order\": [\n    \"base\"\n  ],\n  \"methods\": {\n    \"fixing_date\": \"da0afe5c735342a1d433b1174af6b96dfd77c79a7f5708b2f7a2265963456df4\"\n  },\n  \"keys\": {\n    \"base\": {\n      \"type\": \"string\",\n      \"key_normalisation\": \"none\"\n    }\n  }\n}",
+  "name": "calc.example.net/fx_ndf",
+  "env": {
+    "classes": [
+      {
+        "keys": {
+          "base": {
+            "key_normalisation": "upper_ascii",
+            "type": "string"
+          },
+          "quote": {
+            "key_normalisation": "upper_ascii",
+            "type": "string"
+          }
+        },
+        "methods": {
+          "rate": "530bf86365ff4afb5a70196542d45f293fad5909026e015eddcfd866290f85b8"
+        },
+        "order": [
+          "base",
+          "quote"
+        ],
+        "steward": {
+          "namespace": "rates.example.org",
+          "process": "https://rates.example.org/classes/change"
+        }
+      },
+      {
+        "keys": {
+          "base": {
+            "key_normalisation": "upper_ascii",
+            "type": "string"
+          },
+          "quote": {
+            "key_normalisation": "upper_ascii",
+            "type": "string"
+          }
+        },
+        "methods": {
+          "rate": "530bf86365ff4afb5a70196542d45f293fad5909026e015eddcfd866290f85b8"
+        },
+        "order": [
+          "base",
+          "quote"
+        ],
+        "steward": {
+          "namespace": "rates.example.org",
+          "process": "https://rates.example.org/classes/change"
+        },
+        "final": true
+      },
+      {
+        "keys": {
+          "base": {
+            "key_normalisation": "upper_ascii",
+            "type": "string"
+          },
+          "quote": {
+            "key_normalisation": "upper_ascii",
+            "type": "string"
+          }
+        },
+        "methods": {
+          "rate": "530bf86365ff4afb5a70196542d45f293fad5909026e015eddcfd866290f85b8"
+        },
+        "order": [
+          "base",
+          "quote"
+        ],
+        "steward": {
+          "namespace": "rates.example.org",
+          "process": "https://rates.example.org/classes/change"
+        },
+        "final": true,
+        "open": [
+          "rate"
+        ]
+      },
+      {
+        "keys": {},
+        "methods": {
+          "price": "f5bd96afcf9c6ba0584e6c2849da89c5513d921e9d61c4e092983cb05a14257b"
+        },
+        "order": [],
+        "steward": {
+          "namespace": "rates.example.org",
+          "process": "https://rates.example.org/classes/change"
+        }
+      }
+    ],
+    "definer": "calc.example.net",
+    "functions": [
+      {
+        "code": {
+          "body": "",
+          "lang": "stored"
+        },
+        "inputs": [],
+        "signature": {
+          "args": {
+            "base": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            },
+            "date": {
+              "type": "date",
+              "valid": true
+            },
+            "quote": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            }
+          },
+          "order": [
+            "base",
+            "quote",
+            "date"
+          ],
+          "returns": {
+            "type": "number",
+            "unit": {
+              "of": {
+                "arg": "quote"
+              },
+              "per": {
+                "arg": "base"
+              }
+            }
+          }
+        }
+      },
+      {
+        "code": {
+          "body": "a re-derived rate\n",
+          "lang": "expr"
+        },
+        "inputs": [
+          "rates.example.org/fx_pair/rate"
+        ],
+        "signature": {
+          "args": {
+            "base": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            },
+            "date": {
+              "type": "date",
+              "valid": true
+            },
+            "quote": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            }
+          },
+          "order": [
+            "base",
+            "quote",
+            "date"
+          ],
+          "returns": {
+            "type": "number",
+            "unit": {
+              "of": {
+                "arg": "quote"
+              },
+              "per": {
+                "arg": "base"
+              }
+            }
+          }
+        }
+      },
+      {
+        "code": {
+          "body": "x\n",
+          "lang": "expr"
+        },
+        "inputs": [],
+        "signature": {
+          "args": {
+            "base": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            },
+            "date": {
+              "type": "date",
+              "valid": true
+            },
+            "quote": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            }
+          },
+          "order": [
+            "base",
+            "quote",
+            "date"
+          ],
+          "returns": {
+            "type": "number",
+            "unit": "1"
+          }
+        }
+      },
+      {
+        "code": {
+          "body": "",
+          "lang": "stored"
+        },
+        "inputs": [],
+        "signature": {
+          "args": {
+            "base": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            },
+            "quote": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            }
+          },
+          "order": [
+            "base",
+            "quote"
+          ],
+          "returns": {
+            "type": "string",
+            "classes": [
+              "iso.example.org/pair"
+            ]
+          }
+        }
+      },
+      {
+        "code": {
+          "body": "",
+          "lang": "stored"
+        },
+        "inputs": [],
+        "signature": {
+          "args": {
+            "base": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            },
+            "quote": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            }
+          },
+          "order": [
+            "base",
+            "quote"
+          ],
+          "returns": {
+            "type": "string",
+            "classes": [
+              "rates.example.org/fx_pair"
+            ]
+          }
+        }
+      },
+      {
+        "code": {
+          "body": "",
+          "lang": "stored"
+        },
+        "inputs": [],
+        "signature": {
+          "args": {
+            "base": {
+              "type": "string",
+              "valid": false
+            },
+            "quote": {
+              "type": "string",
+              "valid": false
+            }
+          },
+          "order": [
+            "base",
+            "quote"
+          ],
+          "returns": "boolean"
+        }
+      },
+      {
+        "code": {
+          "body": "",
+          "lang": "stored"
+        },
+        "inputs": [],
+        "signature": {
+          "args": {
+            "base": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            },
+            "fixing": {
+              "type": "string",
+              "valid": false
+            },
+            "quote": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            }
+          },
+          "order": [
+            "base",
+            "quote",
+            "fixing"
+          ],
+          "returns": "date"
+        }
+      },
+      {
+        "code": {
+          "body": "",
+          "lang": "stored"
+        },
+        "inputs": [],
+        "signature": {
+          "args": {
+            "pair": {
+              "type": "string",
+              "valid": false
+            },
+            "date": {
+              "type": "date",
+              "valid": true
+            }
+          },
+          "order": [
+            "pair",
+            "date"
+          ],
+          "returns": {
+            "type": "number",
+            "unit": "1"
+          }
+        }
+      },
+      {
+        "code": {
+          "body": "abstract\n",
+          "lang": "expr"
+        },
+        "inputs": [],
+        "signature": {
+          "args": {
+            "date": {
+              "type": "date",
+              "valid": true
+            }
+          },
+          "order": [
+            "date"
+          ],
+          "returns": {
+            "type": "number",
+            "unit": "1"
+          }
+        }
+      },
+      {
+        "code": {
+          "body": "a price\n",
+          "lang": "expr"
+        },
+        "inputs": [],
+        "signature": {
+          "args": {
+            "base": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            },
+            "date": {
+              "type": "date",
+              "valid": true
+            },
+            "quote": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            }
+          },
+          "order": [
+            "base",
+            "quote",
+            "date"
+          ],
+          "returns": {
+            "type": "number",
+            "unit": "1"
+          }
+        }
+      },
+      {
+        "code": {
+          "body": "",
+          "lang": "stored"
+        },
+        "inputs": [],
+        "signature": {
+          "args": {
+            "base": {
+              "type": "string",
+              "valid": false
+            },
+            "date": {
+              "type": "date",
+              "valid": true
+            },
+            "quote": {
+              "type": "string",
+              "valid": false
+            }
+          },
+          "order": [
+            "base",
+            "quote",
+            "date"
+          ],
+          "returns": {
+            "type": "number",
+            "unit": {
+              "of": {
+                "arg": "quote"
+              },
+              "per": {
+                "arg": "base"
+              }
+            }
+          }
+        }
+      },
+      {
+        "code": {
+          "body": "",
+          "lang": "stored"
+        },
+        "inputs": [],
+        "signature": {
+          "args": {
+            "label": {
+              "type": "string",
+              "valid": false
+            }
+          },
+          "order": [
+            "label"
+          ],
+          "returns": {
+            "type": "string",
+            "classes": [
+              "rates.example.org/fx_pair"
+            ]
+          }
+        }
+      },
+      {
+        "code": {
+          "body": "",
+          "lang": "stored"
+        },
+        "inputs": [],
+        "signature": {
+          "args": {
+            "label": {
+              "type": "string",
+              "valid": false
+            }
+          },
+          "order": [
+            "label"
+          ],
+          "returns": {
+            "type": "string",
+            "classes": [
+              "iso.example.org/pair"
+            ]
+          }
+        }
+      },
+      {
+        "code": {
+          "body": "",
+          "lang": "stored"
+        },
+        "inputs": [],
+        "signature": {
+          "args": {
+            "base": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            },
+            "label": {
+              "type": "string",
+              "valid": false
+            },
+            "quote": {
+              "type": "string",
+              "valid": false,
+              "key_normalisation": "upper_ascii"
+            }
+          },
+          "order": [
+            "base",
+            "quote",
+            "label"
+          ],
+          "returns": {
+            "type": "string",
+            "classes": [
+              "rates.example.org/fx_pair"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "error": "E_CLASS_INHERIT"
+}

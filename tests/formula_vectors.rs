@@ -9,72 +9,11 @@ use datumesh_formula::{define, Env};
 
 #[test]
 fn formula_vectors() {
-    let mut valid = 0;
-    let mut invalid = 0;
-    let mut failures = Vec::new();
-    for (path, v) in common::vectors_of_kind("formula") {
-        let input = common::string(&v, "input").unwrap();
-        let env = Env::from_value(v.get("env").unwrap()).unwrap_or_else(|e| panic!("{path}: env: {e}"));
-        let got = define(input, &env);
-        if common::boolean(&v, "valid") == Some(true) {
-            valid += 1;
-            let c = match got {
-                Ok(c) => c,
-                Err(e) => {
-                    failures.push(format!("{path}: {input:?}: unexpected {e}"));
-                    continue;
-                }
-            };
-            let ast = String::from_utf8(c.ast.to_jcs()).unwrap();
-            let mut problems = Vec::new();
-            if ast != common::string(&v, "ast").unwrap() {
-                problems.push(format!("ast {ast}"));
-            }
-            if c.ast.hash() != common::string(&v, "ast_sha256").unwrap() {
-                problems.push("ast_sha256".to_string());
-            }
-            if c.body != common::string(&v, "body").unwrap() {
-                problems.push(format!("body {:?}", c.body));
-            }
-            let inputs: Vec<&str> =
-                common::array(v.get("inputs").unwrap()).iter().map(|x| x.as_str().unwrap()).collect();
-            if c.inputs.iter().map(String::as_str).collect::<Vec<_>>() != inputs {
-                problems.push(format!("inputs {:?}", c.inputs));
-            }
-            if c.returns.to_value() != *v.get("returns").unwrap() {
-                problems.push(format!("returns {:?}", String::from_utf8(c.returns.to_value().to_jcs())));
-            }
-            if Some(c.asof_dependent) != common::boolean(&v, "asof_dependent") {
-                problems.push(format!("asof_dependent {}", c.asof_dependent));
-            }
-            if !problems.is_empty() {
-                failures.push(format!("{path}: {input:?}: {}", problems.join("; ")));
-            }
-        } else {
-            invalid += 1;
-            let want = common::string(&v, "error").unwrap();
-            match got {
-                Ok(c) => failures.push(format!("{path}: {input:?}: accepted as {:?}, expected {want}", c.body)),
-                Err(e) => {
-                    if e.code.as_str() != want {
-                        failures.push(format!("{path}: {input:?}: got {e}, expected {want}"));
-                    } else if e.token.as_deref() != common::string(&v, "token") {
-                        failures.push(format!(
-                            "{path}: token {:?}, expected {:?}",
-                            e.token,
-                            common::string(&v, "token")
-                        ));
-                    }
-                }
-            }
-        }
-    }
-    eprintln!("formula vectors: {valid} valid, {invalid} invalid, {} failures", failures.len());
-    for f in &failures {
-        eprintln!("  {f}");
-    }
+    // The vectors of spec-0.4.2: the class vectors of spec-0.5.0 are `classes_*.rs`'s.
+    let t = common::check::tally(common::old_vectors_of_kind("formula"), common::check::formula_vector);
+    let (valid, invalid) = t.report("formula vectors");
     assert_eq!((valid, invalid), (172, 123));
-    assert!(failures.is_empty());
+    assert!(t.failures.is_empty());
 }
 
 /// Brief test 3: a body whose callee would have to be computed fails at parse.
