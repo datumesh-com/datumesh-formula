@@ -763,6 +763,7 @@ pub datumesh_formula::Code::Arity
 pub datumesh_formula::Code::BlobUnavailable
 pub datumesh_formula::Code::Budget
 pub datumesh_formula::Code::Chain
+pub datumesh_formula::Code::ClassParent
 pub datumesh_formula::Code::Cycle
 pub datumesh_formula::Code::Date
 pub datumesh_formula::Code::Depth

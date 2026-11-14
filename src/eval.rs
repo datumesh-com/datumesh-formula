@@ -902,13 +902,14 @@ impl<W: World + ?Sized> Eval<'_, W> {
         if datumesh_core::format_object_key(&obj) != key || !classes.contains(&obj.class) {
             return Err(Code::DispatchKey.into());
         }
-        // The method's function as bound now, and the class as of that binding (which binds the
-        // class's methods in the same transaction): a method no longer bound to the class's hash is
-        // the mesh's failure.
+        // The method's function as bound now, and the class (16.3: a class's methods are bound in its
+        // transaction): a method, or a class, not bound is unresolved, and a method no longer bound
+        // to the class's hash is the mesh's failure (15.8, 15.12).
+        // The class is read as of the evaluation asof, not as of the method's binding: its start is
+        // no `asof` candidate (16.6, 8.2), the method's binding is the only one relied on.
         let fq = format!("{}/{}", obj.class, method);
-        let bound = self.world.function(&fq, None).map_err(Stop::World)?.ok_or(Stop::Code(Code::Dispatch))?;
-        let class =
-            self.world.class(&obj.class, Some(&bound.start)).map_err(Stop::World)?.ok_or(Stop::Code(Code::Dispatch))?;
+        let bound = self.world.function(&fq, None).map_err(Stop::World)?.ok_or(Stop::Code(Code::Unresolved))?;
+        let class = self.world.class(&obj.class, None).map_err(Stop::World)?.ok_or(Stop::Code(Code::Unresolved))?;
         if class.class.methods.get(method) != Some(&bound.function.hash) {
             return Err(Code::Dispatch.into());
         }

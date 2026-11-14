@@ -31,6 +31,17 @@ positions. On `datumesh-core` 0.3.8 (was 0.3.6) and
   reads `classes` and `method_of`.
 - The formula runtime (feature `engine`) answers dispatch and classes from the store; `super` is
   `E_FORMULA_UNSUPPORTED` through the engine until engine 0.4.2 reads by hash.
+- Clarifications of spec-0.5.0 at `c8896ad` (SPEC-FINDINGS H and I; the tests of
+  `tests/classes_clarifications.rs`, the vectors re-pinned to 1474, 656 run here): a dispatch whose
+  `<class>/m` is bound to another hash is `E_FORMULA_DISPATCH` at evaluation, and an unbound method
+  or class `E_FORMULA_UNRESOLVED`, both mesh failures (`is_mesh_failure`); a dispatch relies on the
+  method's binding only (no class start is an `asof` candidate); a quoted key encoding in a
+  class-typed position is decoded and checked against its class (`E_FORMULA_KEY` and
+  `E_FORMULA_TYPE` in a body, `E_KEY_NORMALISATION` and `E_CANON_TYPE` in a call); a call with no
+  asof and no now that needs one, for a default or a label, is `E_ARG_MISSING`; an extension method
+  not taking the class keys is `E_ARG_UNKNOWN`; `super` with no class name bound to the parent's
+  hash is `E_CLASS_PARENT` (new `Code::ClassParent`), and the printed name is the first ascending
+  name bound to it; a printed dispatch needs its signature to parse back (text only).
 
 ## 0.2.0 (unreleased)
 

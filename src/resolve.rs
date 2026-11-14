@@ -112,6 +112,30 @@ fn decode(text: &str) -> Result<ObjectKey, Error> {
     Ok(obj)
 }
 
+/// A decoded key encoding checked against its class, as an object literal is (16.5, 16.3): its key
+/// names are the class's, each value has its key's type (a class-typed key checked against its own
+/// class), and each string value is canonical under its key's normalisation. Key names or types not
+/// the class's are `E_FORMULA_TYPE`; a string not canonical is `E_FORMULA_KEY`. A class not bound
+/// here is not checked.
+fn check_encoding(env: &Env, obj: &ObjectKey) -> Result<(), Error> {
+    let Some(desc) = env.classes.get(&obj.class) else { return Ok(()) };
+    if !obj.keys.keys().eq(desc.keys.keys()) {
+        return Err(e(Code::Type, format!("the keys of {} are not its class's", obj.class)));
+    }
+    for (k, v) in &obj.keys {
+        match (desc.keys.get(k), v) {
+            (Some(ClassKey::Scalar { ty, key_normalisation, .. }), KeyValue::Scalar(sc)) if sc.ty() == *ty => {
+                if let (Scalar::String(t), Some(rule)) = (sc, key_normalisation) {
+                    rule.check(t).map_err(|_| e(Code::Key, format!("{t:?} is not canonical under {rule}")))?;
+                }
+            }
+            (Some(ClassKey::Class(c)), KeyValue::Object(o)) if o.class == *c => check_encoding(env, o)?,
+            _ => return Err(e(Code::Type, format!("the key {k} of {} is not of its type", obj.class))),
+        }
+    }
+    Ok(())
+}
+
 /// The children of a node, in the order the canonical numbering visits them.
 fn children_of(n: &Node) -> Vec<NodeId> {
     match n {
@@ -483,6 +507,9 @@ impl Resolver<'_> {
                     if !classes.contains(&obj.class) {
                         return Err(e(Code::Type, format!("{} is not one of the classes of this position", obj.class)));
                     }
+                    if let Some(env) = self.env {
+                        check_encoding(env, &obj)?;
+                    }
                     return Ok(self.push(Node::Str(text)));
                 }
                 _ => {}
@@ -586,6 +613,9 @@ impl Resolver<'_> {
                     if ok.class != *cname {
                         return Err(e(Code::Type, format!("{} is not {cname}", ok.class)));
                     }
+                    if let Some(env) = self.env {
+                        check_encoding(env, &ok)?;
+                    }
                     Ok(Key { node: Node::Str(s.clone()), value: Some(KeyValue::Object(ok)) })
                 }
                 PNode::Read { .. } => Err(e(Code::Type, format!("a key of class {cname}"))),
@@ -673,7 +703,7 @@ impl Resolver<'_> {
         let (pname, pdesc) = env
             .classes
             .by_hash(parent)
-            .ok_or_else(|| e(Code::Unresolved, format!("the parent of {cls} is not bound")))?;
+            .ok_or_else(|| e(Code::ClassParent, format!("no class name is bound to the parent of {cls}")))?;
         if qualified || pdesc.lookup.as_deref() == Some(name) || !pdesc.methods.contains_key(name) {
             return Err(e(Code::Method, format!("{pname} has no method {name}")));
         }
@@ -717,7 +747,7 @@ impl Resolver<'_> {
             }
             let fq = format!("{c}/{name}");
             let f = env.functions.get(&fq).ok_or_else(|| e(Code::Unresolved, format!("{fq} has no binding")))?;
-            if f.hash != desc.methods[name] {
+            if f.hash != desc.methods[name] && !env.evaluating {
                 return Err(e(Code::Method, format!("{fq} is not bound to the method's hash")));
             }
             let order = f.signature.order.clone().unwrap_or_default();

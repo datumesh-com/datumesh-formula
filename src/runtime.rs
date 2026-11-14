@@ -206,6 +206,7 @@ impl FormulaRuntime {
             }
         }
         env.method_of = method_class(&env, name, &function.hash);
+        env.evaluating = true;
         let key = (function.hash.clone(), hashes);
         if let Some(p) = self.prepared_at.lock().unwrap_or_else(|p| p.into_inner()).get(&key) {
             return Ok(p.clone());
@@ -234,6 +235,7 @@ impl FormulaRuntime {
             }
         } else {
             let mut env = p.env.clone();
+            env.evaluating = true;
             env.functions.insert(name.to_string(), function.clone());
             match check_descriptor(&p.env.name, &p.function.value, &env) {
                 Ok(c) if c.types_eq(&p.compiled) => Ok(None),

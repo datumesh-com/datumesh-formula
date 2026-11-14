@@ -265,6 +265,7 @@ impl MemoryWorld {
             env.classes.insert(n, (*c.class).clone());
         }
         env.method_of = self.method_class(name, &f.hash);
+        env.evaluating = true;
         let c = Arc::new(
             crate::check_descriptor(name, &f.value, &env).map_err(|e| e.formula_code().unwrap_or(Code::Syntax))?,
         );

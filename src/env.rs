@@ -250,6 +250,10 @@ pub struct Env {
     /// Whether the body is a stored one being evaluated (`check_descriptor`): a pinned read is
     /// accepted there, as the printed form of `super` (16.3).
     pub(crate) stored_body: bool,
+    /// Whether the body is checked again at evaluation, against the bindings an evaluation reads
+    /// (15.8). There a dispatch's method bound to another hash is not a define-time failure: the
+    /// dispatch's read gives `E_FORMULA_DISPATCH` (16.6).
+    pub(crate) evaluating: bool,
 }
 
 impl Env {
@@ -263,6 +267,7 @@ impl Env {
             classes: Classes::new(),
             method_of: None,
             stored_body: false,
+            evaluating: false,
         }
     }
 

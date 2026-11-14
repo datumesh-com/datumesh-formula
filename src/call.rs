@@ -639,7 +639,33 @@ impl Resolving<'_> {
         if !classes.contains(&key.class) {
             return fail("E_CANON_TYPE", format!("{} is not one of the classes of this position", key.class));
         }
+        self.check_encoding(&key)?;
         Ok(text.to_string())
+    }
+
+    /// A decoded key encoding checked against its class, as an object written there is (16.5, 5.8):
+    /// its key names are the class's and each value has its key's type (`E_CANON_TYPE`), and each
+    /// string value is canonical under its key's normalisation (`E_KEY_NORMALISATION`). A class not
+    /// bound here is not checked.
+    fn check_encoding(&self, obj: &ObjectKey) -> Result<(), CallError> {
+        let Some(desc) = self.bound_class(&obj.class)? else { return Ok(()) };
+        if !obj.keys.keys().eq(desc.keys.keys()) {
+            return fail("E_CANON_TYPE", format!("the keys of {} are not its class's", obj.class));
+        }
+        for (k, v) in &obj.keys {
+            match (desc.keys.get(k), v) {
+                (Some(datumesh_core::ClassKey::Scalar { ty, key_normalisation, .. }), KeyValue::Scalar(sc))
+                    if sc.ty() == *ty =>
+                {
+                    check_key(*key_normalisation, sc)?;
+                }
+                (Some(datumesh_core::ClassKey::Class(c)), KeyValue::Object(o)) if o.class == *c => {
+                    self.check_encoding(o)?;
+                }
+                _ => return fail("E_CANON_TYPE", format!("the key {k} of {} is not of its type", obj.class)),
+            }
+        }
+        Ok(())
     }
 
     /// The keys of an object of `class` (16.5), bound by the class's `order` or by label, every key
@@ -936,8 +962,10 @@ fn class_call(
                     }
                 }
             }
+            // A label is read at the call's asof or the mesh's now (16.7): with neither, the lookup
+            // is not reached.
             let Some(at) = r.instant()? else {
-                return fail("E_NAME_UNBOUND", format!("the label {label} has no asof to be read at"));
+                return fail("E_ARG_MISSING", format!("the label {label} needs an asof: the mesh has no now"));
             };
             let Some(enc) = r.env.lookup(class, &label, &at).map_err(CallError::Env)? else {
                 return fail("E_NAME_UNBOUND", format!("the label {label} has no value as of {at}"));
@@ -966,7 +994,7 @@ fn class_call(
         let order = desc.order.clone().unwrap_or_default();
         let k = cd.order.len();
         if order.len() < k || order[..k] != cd.order[..] {
-            return fail("E_NAME_UNBOUND", format!("{name} does not take the keys of {class} first"));
+            return fail("E_ARG_UNKNOWN", format!("{name} does not take the keys of {class} first"));
         }
         (name.clone(), desc, k)
     } else {

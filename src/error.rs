@@ -101,6 +101,10 @@ codes! {
     Depth => "E_FORMULA_DEPTH",
     /// `text_of` cannot obtain the blob's content (spec-0.4.2): the evaluator's failure.
     BlobUnavailable => "E_FORMULA_BLOB_UNAVAILABLE",
+    /// Since spec-0.5.0 (10.2, 16.3): a define of a method whose body uses `super` when no class
+    /// name is bound to the parent's hash in the definer's environment. A class code, not a formula
+    /// one, returned by define.
+    ClassParent => "E_CLASS_PARENT",
 }
 
 impl Code {
@@ -127,9 +131,21 @@ impl Code {
     }
 
     /// Whether it is the mesh's failure rather than the cell's (SPEC 15.12): budget, cycle,
-    /// depth. A mesh answers these with an `error` envelope and `E_EVAL_UNAVAILABLE`.
+    /// depth, and since spec-0.5.0 the other evaluation codes that are neither faults nor
+    /// `E_FORMULA_NOT_COVERED`: an unresolved name (a binding absent as of the read, 15.8), a
+    /// dispatch whose method is bound to another hash (16.6), and an unsupported read. A mesh
+    /// answers these with an `error` envelope and `E_EVAL_UNAVAILABLE`.
     pub const fn is_mesh_failure(self) -> bool {
-        matches!(self, Code::Budget | Code::Cycle | Code::Depth | Code::BlobUnavailable)
+        matches!(
+            self,
+            Code::Budget
+                | Code::Cycle
+                | Code::Depth
+                | Code::BlobUnavailable
+                | Code::Unresolved
+                | Code::Dispatch
+                | Code::Unsupported
+        )
     }
 }
 

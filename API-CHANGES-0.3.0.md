@@ -33,7 +33,9 @@ everything that breaks a user is an addition to a type that does not declare `#[
 
 - `formula::Code` (`#[non_exhaustive]`): `Method` (`E_FORMULA_METHOD`), `Dispatch`
   (`E_FORMULA_DISPATCH`), `Key` (`E_FORMULA_KEY`, a fault), `DispatchKey` (`E_FORMULA_DISPATCH_KEY`,
-  a fault). `Code::ALL` in the order of 15.11.
+  a fault), and, since the clarifications of `c8896ad`, `ClassParent` (`E_CLASS_PARENT`, 10.2: the
+  define of a `super` read with no class name bound to the parent's hash). `Code::ALL` in the order
+  of 15.11, `ClassParent` last.
 - `formula::Classes` (new module `classes`): flattened class descriptors by name, `by_hash`.
 - `definition`: `define_method`, `define_class`, `publish_class` (feature `engine`), `ClassCallee`,
   `ClassDefinition`; the trait `Callees` gains the provided methods `bound_class`,
@@ -60,6 +62,13 @@ everything that breaks a user is an addition to a type that does not declare `#[
   is byte-identical to its 0.2.0 form (7).
 - The AST's arena is numbered in a canonical order (post-order); the JSON and the printed body are
   unchanged.
+- Clarifications of spec-0.5.0 at `c8896ad` (SPEC-FINDINGS H and I; no hash changes, no API
+  signature changes): `Code::is_mesh_failure` is true for `E_FORMULA_UNRESOLVED`, `E_FORMULA_DISPATCH`
+  and `E_FORMULA_UNSUPPORTED` as well as for budget, cycle, depth and blob codes (15.12: they are
+  the mesh's failures, never faults and not memoized); a dispatch relies on the method's binding
+  only, and the class is read as of the evaluation asof; a quoted key encoding in a class-typed
+  position is checked against its class; `E_FORMULA_ARG_MISSING` for a call that needs a now and
+  has none; an extension method not taking the class keys is `E_ARG_UNKNOWN` in a call.
 
 ## Full diff
 
@@ -179,6 +188,7 @@ the `--no-default-features` listing differs by the same items without the engine
 > pub fn datumesh_formula::memory::MemoryWorld::class(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::ClassBinding>, Self::Error>
 > pub fn datumesh_formula::memory::MemoryWorld::function_by_hash(&mut self, &str) -> core::result::Result<core::option::Option<alloc::rcs::arc::Arc<datumesh_formula::Function>>, Self::Error>
 > pub fn datumesh_formula::memory::MemoryWorld::read_pinned(&mut self, &str, &datumesh_formula::eval::CellKey) -> core::result::Result<core::option::Option<datumesh_formula::eval::Version>, datumesh_formula::eval::Stop<Self::Error>>
+> pub datumesh_formula::Code::ClassParent
 > pub datumesh_formula::Code::Dispatch
 > pub datumesh_formula::Code::DispatchKey
 > pub datumesh_formula::Code::Key
