@@ -24,8 +24,8 @@ use std::fmt;
 
 use datumesh_core::json::Value;
 use datumesh_core::{
-    format_reference, lexical, Arg, Args, CellRef, ClassDescriptor, FunctionDescriptor, Reference, Resolved, Scalar,
-    Type,
+    format_object_key, format_reference, lexical, parse_object_key, Arg, CellRef, ClassDescriptor, FunctionDescriptor,
+    KeyNormalisation, KeyValue, ObjectKey, Reference, Resolution, ResolutionKind, Resolved, Scalar, Type,
 };
 
 use crate::lex::{self, Kind, Token};
@@ -193,6 +193,21 @@ fn store_bound<S: datumesh_store::Store + ?Sized>(
     }
 }
 
+/// The flattened class descriptor a store binds the class name to as of `asof` (16.1, 9.7).
+#[cfg(feature = "engine")]
+fn store_class<S: datumesh_store::Store + ?Sized>(
+    store: &S,
+    name: &str,
+    asof: Option<&str>,
+) -> Result<Option<ClassDescriptor>, String> {
+    let at = asof.unwrap_or(crate::definition::LATEST);
+    let Some(b) = store.resolve_class_binding(name, at).map_err(|e| e.to_string())? else { return Ok(None) };
+    match store.class(&b.class_hash).map_err(|e| e.to_string())? {
+        Some(bytes) => ClassDescriptor::from_json(&bytes).map(Some).map_err(|e| e.to_string()),
+        None => Err(format!("class {} is bound but not stored", b.class_hash)),
+    }
+}
+
 /// A store as a [`CallEnv`]: bindings and descriptors from it, no aliases (a mesh's alias map is
 /// its own: wrap the store to add one). `None` as the asof is the latest binding.
 #[cfg(feature = "engine")]
@@ -202,6 +217,9 @@ impl CallEnv for datumesh_store::PgStore {
     }
     fn bound(&self, name: &str, asof: Option<&str>) -> Result<Option<FunctionDescriptor>, String> {
         store_bound(self, name, asof)
+    }
+    fn bound_class(&self, name: &str, asof: Option<&str>) -> Result<Option<ClassDescriptor>, String> {
+        store_class(self, name, asof)
     }
     fn pinned(&self, fn_hash: &str) -> Result<Option<FunctionDescriptor>, String> {
         store_descriptor(self, fn_hash)
@@ -215,6 +233,9 @@ impl CallEnv for dyn datumesh_store::Store + Send + Sync {
     }
     fn bound(&self, name: &str, asof: Option<&str>) -> Result<Option<FunctionDescriptor>, String> {
         store_bound(self, name, asof)
+    }
+    fn bound_class(&self, name: &str, asof: Option<&str>) -> Result<Option<ClassDescriptor>, String> {
+        store_class(self, name, asof)
     }
     fn pinned(&self, fn_hash: &str) -> Result<Option<FunctionDescriptor>, String> {
         store_descriptor(self, fn_hash)
@@ -287,16 +308,6 @@ impl Call {
     }
 }
 
-/// A literal as written: its kind and text.
-enum Lit {
-    Number(String),
-    Str(String),
-    Date(String),
-    Instant(String),
-    Bool(bool),
-    Open,
-}
-
 /// The read's text and its query, split at the first `?` outside a string.
 fn split_query(text: &str) -> (&str, Option<&str>) {
     let mut in_string = false;
@@ -310,11 +321,486 @@ fn split_query(text: &str) -> (&str, Option<&str>) {
     (text, None)
 }
 
+/// An unquoted token's kind (5.8): exactly one token of the dialect.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Bare {
+    Number,
+    Word,
+    Date,
+    Instant,
+    Period,
+}
+
+/// A value as written in a request (5.8): `*`, a quoted string, an unquoted token, or an object
+/// (a class-typed position's key, written as the object).
+#[derive(Clone, Debug)]
+enum Val {
+    Open,
+    Quoted(String),
+    Bare(Bare, String),
+    Object(String, Vec<RArg>),
+}
+
+/// An argument as written: its label, if any, and its value.
+#[derive(Clone, Debug)]
+struct RArg {
+    label: Option<String>,
+    val: Val,
+}
+
+/// The receiver of a call: the parenthesised arguments of a function, an object's keys, or a
+/// label in brackets (before a method, 16.7).
+#[derive(Clone, Debug)]
+enum Recv {
+    Args(Vec<RArg>),
+    Label(Val),
+}
+
+/// A method call `.name(args)` after the receiver.
+#[derive(Clone, Debug)]
+struct Method {
+    name: String,
+    qualified: bool,
+    args: Vec<RArg>,
+}
+
+/// The callee as written.
+#[derive(Clone, Debug)]
+struct Head {
+    /// As written: `fx_rate`, `@fx_rate` or the qualified name.
+    written: String,
+    /// The name (for an alias or a bare name, without `@`).
+    text: String,
+    alias: bool,
+    qualified: bool,
+}
+
+/// A request's read as written (5.8), before any lookup.
+#[derive(Clone, Debug)]
+struct Request {
+    head: Head,
+    pin: Option<String>,
+    recv: Recv,
+    method: Option<Method>,
+}
+
+/// A recursive-descent reader of a request's tokens (the grammar of Appendix A, `call`).
+struct Reader<'a> {
+    t: &'a [Token],
+    i: usize,
+}
+
+fn syntax<T>(what: &str) -> Result<T, CallError> {
+    fail("E_PARSE_URI", format!("not a call: {what}"))
+}
+
+impl Reader<'_> {
+    fn at(&self, k: usize) -> Option<&Token> {
+        self.t.get(self.i + k).filter(|t| t.kind != Kind::End)
+    }
+
+    fn is(&self, k: usize, p: &str) -> bool {
+        self.at(k).is_some_and(|t| t.is(p))
+    }
+
+    /// `"(" [ arg *( "," arg ) ] ")"`, with the cursor at `(`.
+    fn args(&mut self) -> Result<Vec<RArg>, CallError> {
+        if !self.is(0, "(") {
+            return syntax("arguments in parentheses");
+        }
+        self.i += 1;
+        let mut out = Vec::new();
+        if self.is(0, ")") {
+            self.i += 1;
+            return Ok(out);
+        }
+        loop {
+            let mut label = None;
+            if self.at(0).is_some_and(|t| t.kind == Kind::Word) && self.is(1, ":") {
+                label = self.at(0).map(|t| t.text.clone());
+                self.i += 2;
+            } else if out.iter().any(|a: &RArg| a.label.is_some()) {
+                return syntax("a positional argument after a labelled one");
+            }
+            let val = self.value()?;
+            out.push(RArg { label, val });
+            if self.is(0, ",") {
+                self.i += 1;
+            } else if self.is(0, ")") {
+                self.i += 1;
+                return Ok(out);
+            } else {
+                return syntax("arguments are separated by commas and closed by )");
+            }
+        }
+    }
+
+    /// One value (5.8): `*` where an argument ends, a quoted string, an unquoted token, or an
+    /// object (a qualified name and its arguments).
+    fn value(&mut self) -> Result<Val, CallError> {
+        let Some(t) = self.at(0) else { return syntax("an argument is missing") };
+        let next_ends = self.is(1, ",") || self.is(1, ")");
+        let val = match t.kind {
+            Kind::Punct if t.text == "*" && next_ends => {
+                self.i += 1;
+                return Ok(Val::Open);
+            }
+            Kind::Punct if t.text == "-" => match self.at(1) {
+                Some(n) if n.kind == Kind::Number && n.unit.is_none() => {
+                    let v = Val::Bare(Bare::Number, format!("-{}", n.text));
+                    self.i += 2;
+                    return Ok(v);
+                }
+                _ => return syntax("'-' before something other than a number"),
+            },
+            Kind::Str => Val::Quoted(t.text.clone()),
+            Kind::Number if t.unit.is_none() => Val::Bare(Bare::Number, t.text.clone()),
+            Kind::Date => Val::Bare(Bare::Date, t.text.clone()),
+            Kind::Instant => Val::Bare(Bare::Instant, t.text.clone()),
+            Kind::Period => Val::Bare(Bare::Period, t.text.clone()),
+            Kind::Word => Val::Bare(Bare::Word, t.text.clone()),
+            Kind::Qualified if self.is(1, "(") => {
+                let name = t.text.clone();
+                self.i += 1;
+                let args = self.args()?;
+                return Ok(Val::Object(name, args));
+            }
+            _ => return syntax("an argument is a literal, an object or *"),
+        };
+        self.i += 1;
+        Ok(val)
+    }
+
+    /// The whole request: callee, pin, receiver, optional method, and nothing else.
+    fn request(&mut self) -> Result<Request, CallError> {
+        let Some(t) = self.at(0) else { return syntax("empty") };
+        let head = match t.kind {
+            Kind::Qualified => Head { written: t.text.clone(), text: t.text.clone(), alias: false, qualified: true },
+            Kind::Alias => {
+                Head { written: format!("@{}", t.text), text: t.text.clone(), alias: true, qualified: false }
+            }
+            Kind::Word => Head { written: t.text.clone(), text: t.text.clone(), alias: false, qualified: false },
+            _ => return fail("E_PARSE_URI", "not a call: it starts with a name or an alias"),
+        };
+        self.i += 1;
+        let pin = match self.at(0).cloned() {
+            Some(p) if p.kind == Kind::Pin && (head.qualified || head.alias) => {
+                self.i += 1;
+                Some(p.text)
+            }
+            _ => None,
+        };
+        let recv = if self.is(0, "[") {
+            self.i += 1;
+            let v = self.value()?;
+            if matches!(v, Val::Open | Val::Object(..)) || !self.is(0, "]") {
+                return syntax("a label is one value in brackets");
+            }
+            self.i += 1;
+            if !self.is(0, ".") {
+                return syntax("a label names an object before a method");
+            }
+            Recv::Label(v)
+        } else {
+            Recv::Args(self.args()?)
+        };
+        let method = if self.is(0, ".") {
+            let named = self.at(1).is_some_and(|t| matches!(t.kind, Kind::Word | Kind::Qualified)) && self.is(2, "(");
+            if !named {
+                return syntax("a method is .name(arguments)");
+            }
+            let t = self.at(1).cloned().unwrap_or_else(|| self.t[self.i].clone());
+            self.i += 2;
+            let args = self.args()?;
+            Some(Method { name: t.text.clone(), qualified: t.kind == Kind::Qualified, args })
+        } else {
+            None
+        };
+        if self.at(0).is_some() {
+            return syntax("nothing but ?asof= follows the call");
+        }
+        if matches!(recv, Recv::Label(_)) && method.is_none() {
+            return syntax("a label is a receiver of a method");
+        }
+        Ok(Request { head, pin, recv, method })
+    }
+}
+
+/// The request's read as written (5.8), by the grammar of Appendix A; anything else is
+/// `E_PARSE_URI`.
+fn parse_request(tokens: &[Token]) -> Result<Request, CallError> {
+    let mut r = Reader { t: tokens, i: 0 };
+    r.request()
+}
+
+/// The lexical form of a token of `ty`, for the type's code on failure.
+fn lexical_of(ty: Type, text: &str) -> Result<Scalar, CallError> {
+    Scalar::from_lexical(ty, text).map_err(|e| CallError::Code(e.code_str(), e.to_string()))
+}
+
+/// A key's final value and its key value (16.5): the cell argument and the object's key.
+type Key = (Arg, KeyValue);
+
+/// A string value under its key normalisation (7, 16.4): canonical, or `E_KEY_NORMALISATION`
+/// (a `bad_request` code). Other values have none.
+fn check_key(rule: Option<KeyNormalisation>, scalar: &Scalar) -> Result<(), CallError> {
+    match (rule, scalar) {
+        (Some(rule), Scalar::String(t)) if rule.check(t).is_err() => {
+            fail("E_KEY_NORMALISATION", format!("{t:?} is not canonical under {rule}"))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// The key encoding of an object's keys (16.5).
+fn encode(class: &str, keys: &BTreeMap<String, Key>) -> Result<String, CallError> {
+    let pairs = keys.iter().map(|(k, (_, v))| (k.clone(), v.clone())).collect::<Vec<_>>();
+    let obj = ObjectKey::new(class, pairs).map_err(|e| CallError::Code(e.code_str(), e.to_string()))?;
+    Ok(format_object_key(&obj))
+}
+
+/// A canonical literal of a scalar, as the `call` member of `resolved` writes it (16.7).
+fn literal(a: &Arg) -> String {
+    match a {
+        Arg::Slice => "*".to_string(),
+        Arg::Value(Scalar::String(t)) => format!("\"{}\"", t.replace('"', "\"\"")),
+        Arg::Value(Scalar::Blob(t)) => format!("\"{}\"", t.replace('"', "\"\"")),
+        Arg::Value(Scalar::Boolean(b)) => b.to_string(),
+        Arg::Value(s) => s.lexical().to_string(),
+    }
+}
+
+/// The state of one call's resolution: its environment, the call's asof, what it resolved.
+struct Resolving<'a> {
+    env: &'a dyn CallEnv,
+    asof: Option<String>,
+    resolutions: Vec<Resolution>,
+    alias_used: bool,
+}
+
+fn resolution(f: Result<Resolution, datumesh_core::Error>) -> Result<Resolution, CallError> {
+    f.map_err(|e| CallError::Code(e.code_str(), e.to_string()))
+}
+
+impl Resolving<'_> {
+    /// The instant of a lookup or a default: the call's asof, else the mesh's now (16.7).
+    fn instant(&self) -> Result<Option<String>, CallError> {
+        match &self.asof {
+            Some(a) => Ok(Some(a.clone())),
+            None => self.env.now().map_err(CallError::Env),
+        }
+    }
+
+    fn bound_class(&self, name: &str) -> Result<Option<ClassDescriptor>, CallError> {
+        self.env.bound_class(name, self.asof.as_deref()).map_err(CallError::Env)
+    }
+
+    fn bound(&self, name: &str) -> Result<Option<FunctionDescriptor>, CallError> {
+        self.env.bound(name, self.asof.as_deref()).map_err(CallError::Env)
+    }
+
+    /// A value of a scalar type, read by its position's type (5.8, D91).
+    fn scalar(ty: Type, val: &Val) -> Result<Arg, CallError> {
+        let v = match (val, ty) {
+            (Val::Open, _) => return Ok(Arg::Slice),
+            (Val::Quoted(t) | Val::Bare(_, t), Type::String | Type::Blob) => lexical_of(ty, t)?,
+            (Val::Bare(Bare::Number, t), Type::Number) => lexical_of(ty, t)?,
+            (Val::Bare(Bare::Date, t), Type::Date) => lexical_of(ty, t)?,
+            (Val::Bare(Bare::Instant, t), Type::Instant) => lexical_of(ty, t)?,
+            (Val::Bare(Bare::Word, t), Type::Boolean) if t == "true" || t == "false" => Scalar::Boolean(t == "true"),
+            _ => return fail("E_CANON_TYPE", format!("a value of the wrong kind for a {}", ty.as_str())),
+        };
+        Ok(Arg::Value(v))
+    }
+
+    /// A key-typed value of an argument declaring `classes` (16.5): an object of one of them, or
+    /// its encoding quoted; `*` is a slice.
+    fn class_value(&mut self, classes: &[String], val: &Val) -> Result<Arg, CallError> {
+        match val {
+            Val::Open => Ok(Arg::Slice),
+            Val::Object(name, args) => {
+                if !classes.contains(name) {
+                    return fail("E_CANON_TYPE", format!("{name} is not one of the classes of this position"));
+                }
+                let keys = self.object_keys(name, args)?;
+                Ok(Arg::Value(Scalar::String(encode(name, &keys)?)))
+            }
+            Val::Quoted(text) => Ok(Arg::Value(Scalar::String(self.encoding(text, classes)?))),
+            Val::Bare(..) => fail("E_CANON_TYPE", "a bare token in a class-typed position"),
+        }
+    }
+
+    /// A quoted key encoding (16.5): decoded, canonical, of one of `classes`.
+    fn encoding(&self, text: &str, classes: &[String]) -> Result<String, CallError> {
+        let key = parse_object_key(text).map_err(|e| CallError::Code("E_KEY_ENCODING", e.to_string()))?;
+        if format_object_key(&key) != text {
+            return fail("E_KEY_ENCODING", format!("not the canonical encoding: {text}"));
+        }
+        if !classes.contains(&key.class) {
+            return fail("E_CANON_TYPE", format!("{} is not one of the classes of this position", key.class));
+        }
+        Ok(text.to_string())
+    }
+
+    /// The keys of an object of `class` (16.5), bound by the class's `order` or by label, every key
+    /// once, then each read by its declaration in ascending order of names.
+    fn object_keys(&mut self, class: &str, args: &[RArg]) -> Result<BTreeMap<String, Key>, CallError> {
+        let desc = self
+            .bound_class(class)?
+            .ok_or_else(|| CallError::Code("E_NAME_UNBOUND", format!("{class} is not a class")))?;
+        let mut bound: BTreeMap<String, &Val> = BTreeMap::new();
+        let mut i = 0;
+        for a in args {
+            let key = match &a.label {
+                Some(l) => {
+                    if !desc.keys.contains_key(l) {
+                        return fail("E_ARG_UNKNOWN", format!("{class} has no key {l}"));
+                    }
+                    l.clone()
+                }
+                None => match desc.order.get(i) {
+                    Some(k) => {
+                        i += 1;
+                        k.clone()
+                    }
+                    None => return fail("E_ARG_UNKNOWN", format!("positional key {} has no parameter", i + 1)),
+                },
+            };
+            if bound.contains_key(&key) {
+                return fail("E_CANON_ARG_DUPLICATE", format!("{key} is bound twice"));
+            }
+            bound.insert(key, &a.val);
+        }
+        if let Some(k) = desc.keys.keys().find(|k| !bound.contains_key(*k)) {
+            return fail("E_ARG_MISSING", format!("{k} is not bound"));
+        }
+        let mut keys = BTreeMap::new();
+        for (k, ck) in &desc.keys {
+            let val = bound[k];
+            let key = match ck {
+                datumesh_core::ClassKey::Scalar { ty, key_normalisation, .. } => {
+                    if matches!(val, Val::Open) {
+                        return syntax("* is not a key");
+                    }
+                    let Arg::Value(scalar) = Self::scalar(*ty, val)? else { return syntax("* is not a key") };
+                    check_key(*key_normalisation, &scalar)?;
+                    (Arg::Value(scalar.clone()), KeyValue::Scalar(scalar))
+                }
+                datumesh_core::ClassKey::Class(c) => {
+                    let text = match val {
+                        Val::Object(name, oargs) => {
+                            if name != c {
+                                return fail("E_CANON_TYPE", format!("{name} is not {c}"));
+                            }
+                            encode(name, &self.object_keys(name, oargs)?)?
+                        }
+                        Val::Quoted(t) => self.encoding(t, std::slice::from_ref(c))?,
+                        Val::Open => return syntax("* is not a key"),
+                        Val::Bare(..) => return fail("E_CANON_TYPE", "a bare token in a class-typed position"),
+                    };
+                    let obj = parse_object_key(&text).map_err(|e| CallError::Code("E_KEY_ENCODING", e.to_string()))?;
+                    (Arg::Value(Scalar::String(text)), KeyValue::Object(obj))
+                }
+                _ => return syntax("a key of an unknown kind"),
+            };
+            keys.insert(k.clone(), key);
+        }
+        Ok(keys)
+    }
+
+    /// Bind the arguments of a read of `name` (5.8): the pre-bound keys, then the positional ones
+    /// after them, then the labelled; the missing ones (a defaulted one takes the asof, 16.7); then
+    /// each value by its type, in ascending order of names.
+    fn bind(
+        &mut self,
+        name: &str,
+        desc: &FunctionDescriptor,
+        pre: Vec<(String, Arg)>,
+        args: &[RArg],
+    ) -> Result<BTreeMap<String, Arg>, CallError> {
+        enum Src<'v> {
+            Pre(Arg),
+            Written(&'v Val),
+            Default,
+        }
+        let declared = &desc.signature.args;
+        let extras = &desc.arg_extras;
+        let order = desc.order.clone().unwrap_or_default();
+        let skip = pre.len();
+        let mut bound: BTreeMap<String, Src> = BTreeMap::new();
+        for (k, a) in pre {
+            bound.insert(k, Src::Pre(a));
+        }
+        let mut i = 0;
+        for a in args {
+            let arg = match &a.label {
+                None => match order.get(skip + i) {
+                    Some(p) => {
+                        i += 1;
+                        p.clone()
+                    }
+                    None => return fail("E_ARG_UNKNOWN", format!("positional argument {} has no parameter", i + 1)),
+                },
+                Some(l) => {
+                    if !declared.contains_key(l) {
+                        return fail("E_ARG_UNKNOWN", format!("{name} has no argument {l}"));
+                    }
+                    l.clone()
+                }
+            };
+            if bound.contains_key(&arg) {
+                return fail("E_CANON_ARG_DUPLICATE", format!("{arg} is bound twice"));
+            }
+            bound.insert(arg, Src::Written(&a.val));
+        }
+        for k in declared.keys() {
+            if bound.contains_key(k) {
+                continue;
+            }
+            if extras.get(k).is_some_and(|x| x.default_asof) {
+                bound.insert(k.clone(), Src::Default);
+            } else {
+                return fail("E_ARG_MISSING", format!("{k} is not bound"));
+            }
+        }
+        let mut out = BTreeMap::new();
+        for (k, src) in bound {
+            let decl = &declared[&k];
+            let x = extras.get(&k).cloned().unwrap_or_default();
+            let arg = match src {
+                Src::Pre(a) => a,
+                Src::Written(val) => match &x.classes {
+                    Some(classes) => self.class_value(classes, val)?,
+                    None => {
+                        let arg = Self::scalar(decl.ty, val)?;
+                        if let Arg::Value(scalar) = &arg {
+                            check_key(x.key_normalisation, scalar)?;
+                        }
+                        arg
+                    }
+                },
+                Src::Default => {
+                    let Some(at) = self.instant()? else {
+                        return fail("E_ARG_MISSING", format!("{k} defaults to the asof, and the mesh has no now"));
+                    };
+                    let text = if decl.ty == Type::Date { at[..10].to_string() } else { at };
+                    self.resolutions.push(resolution(Resolution::new(&k, ResolutionKind::Default, &text))?);
+                    Arg::Value(lexical_of(decl.ty, &text)?)
+                }
+            };
+            out.insert(k, arg);
+        }
+        Ok(out)
+    }
+}
+
 /// Parse a call (5.8) against `env`, reporting the first failure in the order 5.8 gives: the
 /// text a read of literals then `?asof=` and nothing else (`E_PARSE_URI`, or a literal's code),
 /// `asof` an instant, the callee (`E_NAME_UNBOUND`, `E_FN_UNAVAILABLE`), the arguments left to
 /// right (`E_ARG_UNKNOWN`, `E_CANON_ARG_DUPLICATE`), the missing ones (`E_ARG_MISSING`), then
-/// each value as written (`E_CANON_TYPE`, then its lexical form).
+/// each value as written (`E_CANON_TYPE`, then its lexical form, then its key normalisation).
+/// Since spec-0.5.0, a method call is read through its object (16.3), a label through the
+/// class's lookup (16.7), and the result says what was resolved (`resolved`, 5.5).
 pub fn parse_call(text: &str, env: &dyn CallEnv) -> Result<Call, CallError> {
     let (read, query) = split_query(text);
     // 1. A read of literals.
@@ -328,7 +814,7 @@ pub fn parse_call(text: &str, env: &dyn CallEnv) -> Result<Call, CallError> {
         };
         fail(code, e.to_string())
     })?;
-    let (callee, args) = read_of_literals(&tokens)?;
+    let req = parse_request(&tokens)?;
     // 2. Then `?asof=` and nothing else; the asof an instant.
     let asof = match query {
         None => None,
@@ -343,150 +829,169 @@ pub fn parse_call(text: &str, env: &dyn CallEnv) -> Result<Call, CallError> {
             Some(a.to_string())
         }
     };
-    // 3. The callee.
-    let (name_text, is_alias, pin) = callee;
-    let name = if is_alias {
-        match env.alias(&name_text).map_err(CallError::Env)? {
-            Some(n) => n,
-            None => return fail("E_NAME_UNBOUND", format!("@{name_text} is not an alias of this mesh")),
-        }
+    let mut r = Resolving { env, asof: asof.clone(), resolutions: Vec::new(), alias_used: false };
+    // 3. The callee: a bare name or an alias through the alias map; a qualified name as it is.
+    let fq = if req.head.qualified {
+        req.head.text.clone()
     } else {
-        name_text
+        match env.alias(&req.head.text).map_err(CallError::Env)? {
+            Some(n) => {
+                // A short call is a bare name through the alias map (16.7). An `@alias` is as it was
+                // before (call/positional), and a pinned callee is named by its hash: neither is a
+                // resolution of the call.
+                if req.pin.is_none() && !req.head.alias {
+                    r.alias_used = true;
+                    r.resolutions.push(resolution(Resolution::new(&req.head.written, ResolutionKind::Alias, &n))?);
+                }
+                n
+            }
+            None if req.head.alias => {
+                return fail("E_NAME_UNBOUND", format!("{} is not an alias of this mesh", req.head.written))
+            }
+            None => return fail("E_NAME_UNBOUND", format!("{} is not an alias of this mesh", req.head.text)),
+        }
     };
-    let descriptor = match &pin {
+    let pinned = match &req.pin {
         Some(h) => match env.pinned(h).map_err(CallError::Env)? {
-            Some(d) => d,
+            Some(d) => Some(d),
             None => return fail("E_FN_UNAVAILABLE", format!("no descriptor of {h} is known")),
         },
-        None => match env.bound(&name, asof.as_deref()).map_err(CallError::Env)? {
-            Some(d) => d,
-            None => return fail("E_NAME_UNBOUND", format!("{name} is not bound")),
-        },
+        None => None,
     };
-    // 4. The arguments, left to right.
-    let declared = &descriptor.signature.args;
-    let mut bound: BTreeMap<String, Lit> = BTreeMap::new();
-    let mut written: Vec<String> = Vec::new();
-    for (i, (label, lit)) in args.into_iter().enumerate() {
-        let arg = match label {
-            None => match descriptor.order.as_ref().and_then(|o| o.get(i)) {
-                Some(a) => a.clone(),
-                None => return fail("E_ARG_UNKNOWN", format!("positional argument {} has no parameter", i + 1)),
-            },
-            Some(l) => {
-                if !declared.contains_key(&l) {
-                    return fail("E_ARG_UNKNOWN", format!("{name} has no argument {l}"));
-                }
-                l
-            }
-        };
-        if bound.contains_key(&arg) {
-            return fail("E_CANON_ARG_DUPLICATE", format!("{arg} is bound twice"));
+    let (call_name, cell_args) = match (pinned, r.bound_class(&fq)?) {
+        (None, Some(cd)) => {
+            let Some(m) = &req.method else { return syntax("a call of a class names one method") };
+            let (name, _, args) = class_call(&mut r, &fq, &cd, &req.recv, m)?;
+            (name, args)
         }
-        written.push(arg.clone());
-        bound.insert(arg, lit);
-    }
-    // 5. The missing ones.
-    if let Some(missing) = declared.keys().find(|k| !bound.contains_key(*k)) {
-        return fail("E_ARG_MISSING", format!("{missing} is not bound"));
-    }
-    // 6. Each value as written: its kind, then its lexical form.
-    let mut cell_args = Args::new();
-    for arg in written {
-        let ty = declared[&arg].ty;
-        let lit = &bound[&arg];
-        let value = match (lit, ty) {
-            (Lit::Open, _) => Arg::Slice,
-            (Lit::Bool(b), Type::Boolean) => Arg::Value(Scalar::Boolean(*b)),
-            (Lit::Number(t), Type::Number)
-            | (Lit::Str(t), Type::String | Type::Blob)
-            | (Lit::Date(t), Type::Date)
-            | (Lit::Instant(t), Type::Instant) => match Scalar::from_lexical(ty, t) {
-                Ok(s) => Arg::Value(s),
-                Err(e) => return Err(CallError::Code(e.code_str(), e.to_string())),
-            },
-            _ => return fail("E_CANON_TYPE", format!("{arg} is a {}, not written as one", ty.as_str())),
-        };
-        cell_args.insert(arg, value);
-    }
-    let (ns, fn_name) = name.rsplit_once('/').unwrap_or(("", name.as_str()));
+        (pinned, _) => {
+            let desc = match pinned {
+                Some(d) => d,
+                None => match r.bound(&fq)? {
+                    Some(d) => d,
+                    None => return fail("E_NAME_UNBOUND", format!("{fq} is not bound")),
+                },
+            };
+            let Recv::Args(args) = &req.recv else { return syntax("a label is a receiver of a method") };
+            if req.method.is_some() {
+                return syntax("a method is called on an object");
+            }
+            let cell_args = r.bind(&fq, &desc, Vec::new(), args)?;
+            (fq.clone(), cell_args)
+        }
+    };
+    // What was resolved, for the envelope (16.7): none when nothing was.
+    let resolved = if r.resolutions.is_empty() {
+        None
+    } else {
+        let mut parts: Vec<String> = cell_args.iter().map(|(k, a)| format!("{k}: {}", literal(a))).collect();
+        parts.sort();
+        let mut call = format!("{call_name}({})", parts.join(", "));
+        if let Some(a) = &asof {
+            call.push_str(&format!("?asof={a}"));
+        }
+        let mut res = resolved_of(&call, r.resolutions)?;
+        if r.alias_used {
+            if let Some(t) = env.aliases_tx().map_err(CallError::Env)? {
+                res = res.with_aliases_tx(&t).map_err(|e| CallError::Code(e.code_str(), e.to_string()))?;
+            }
+        }
+        Some(res)
+    };
+    let (ns, fn_name) = call_name.rsplit_once('/').unwrap_or(("", call_name.as_str()));
     Ok(Call {
         cell: CellRef { ns: ns.to_string(), fn_name: fn_name.to_string(), args: cell_args, asof },
-        fn_hash: pin,
-        resolved: None,
+        fn_hash: req.pin,
+        resolved,
     })
 }
 
-type Callee = (String, bool, Option<String>);
-/// The arguments as written: label (if any) and literal.
-type Written = Vec<(Option<String>, Lit)>;
+fn resolved_of(call: &str, resolutions: Vec<Resolution>) -> Result<Resolved, CallError> {
+    Resolved::new(call, resolutions).map_err(|e| CallError::Code(e.code_str(), e.to_string()))
+}
 
-/// The tokens of a read of literals: the callee (name or alias, whether an alias, the pin) and
-/// the arguments (label, literal) as written; anything else is `E_PARSE_URI`.
-fn read_of_literals(tokens: &[Token]) -> Result<(Callee, Written), CallError> {
-    let syntax = |what: &str| fail::<()>("E_PARSE_URI", format!("not a call: {what}"));
-    let mut i = 0;
-    let at = |i: usize| tokens.get(i).filter(|t| t.kind != Kind::End);
-    let Some(head) = at(0).filter(|t| matches!(t.kind, Kind::Qualified | Kind::Alias)) else {
-        return fail("E_PARSE_URI", "not a call: it starts with a qualified name or an alias");
-    };
-    i += 1;
-    let pin = match at(i) {
-        Some(t) if t.kind == Kind::Pin => {
-            i += 1;
-            Some(t.text.clone())
-        }
-        _ => None,
-    };
-    if !at(i).is_some_and(|t| t.is("(")) {
-        syntax("the callee is followed by (")?;
-    }
-    i += 1;
-    let mut args = Vec::new();
-    let mut labelled = false;
-    if at(i).is_some_and(|t| t.is(")")) {
-        i += 1;
-    } else {
-        loop {
-            let mut label = None;
-            if at(i).is_some_and(|t| t.kind == Kind::Word) && at(i + 1).is_some_and(|t| t.is(":")) {
-                label = at(i).map(|t| t.text.clone());
-                labelled = true;
-                i += 2;
-            } else if labelled {
-                syntax("a positional argument after a labelled one")?;
-            }
-            let lit = match at(i) {
-                Some(t) if t.is("-") => match at(i + 1) {
-                    Some(n) if n.kind == Kind::Number && n.unit.is_none() => {
-                        i += 1;
-                        Lit::Number(format!("-{}", n.text))
-                    }
-                    _ => return fail("E_PARSE_URI", "not a call: '-' before something other than a number"),
-                },
-                Some(t) if t.kind == Kind::Number && t.unit.is_none() => Lit::Number(t.text.clone()),
-                Some(t) if t.kind == Kind::Str => Lit::Str(t.text.clone()),
-                Some(t) if t.kind == Kind::Date => Lit::Date(t.text.clone()),
-                Some(t) if t.kind == Kind::Instant => Lit::Instant(t.text.clone()),
-                Some(t) if t.is_word("true") => Lit::Bool(true),
-                Some(t) if t.is_word("false") => Lit::Bool(false),
-                Some(t) if t.is("*") => Lit::Open,
-                _ => return fail("E_PARSE_URI", "not a call: an argument is a literal"),
+/// A call of a method of an object (16.3, 16.7): the object from its keys, or from its label's
+/// lookup; then the method's function read with the object's keys first. Returns the function's
+/// name, its descriptor and the cell's arguments.
+fn class_call(
+    r: &mut Resolving,
+    class: &str,
+    cd: &ClassDescriptor,
+    recv: &Recv,
+    m: &Method,
+) -> Result<(String, FunctionDescriptor, BTreeMap<String, Arg>), CallError> {
+    // The receiver's keys: bound and read first (5.8).
+    let keys: BTreeMap<String, Key> = match recv {
+        Recv::Args(args) => r.object_keys(class, args)?,
+        Recv::Label(val) => {
+            let Some(lookup) = cd.lookup.clone() else {
+                return fail("E_NAME_UNBOUND", format!("{class} has no lookup: the label is unbound"));
             };
-            i += 1;
-            args.push((label, lit));
-            match at(i) {
-                Some(t) if t.is(",") => i += 1,
-                Some(t) if t.is(")") => {
-                    i += 1;
-                    break;
+            let label = match val {
+                Val::Quoted(t) | Val::Bare(_, t) => t.clone(),
+                _ => return syntax("a label is a string"),
+            };
+            if let Some(f) = r.bound(&format!("{class}/{lookup}"))? {
+                if let Some(rule) = f.arg_extras.get("label").and_then(|x| x.key_normalisation) {
+                    if rule.check(&label).is_err() {
+                        return fail("E_KEY_NORMALISATION", format!("{label:?} is not canonical under {rule}"));
+                    }
                 }
-                _ => syntax("arguments are literals separated by commas")?,
             }
+            let Some(at) = r.instant()? else {
+                return fail("E_NAME_UNBOUND", format!("the label {label} has no asof to be read at"));
+            };
+            let Some(enc) = r.env.lookup(class, &label, &at).map_err(CallError::Env)? else {
+                return fail("E_NAME_UNBOUND", format!("the label {label} has no value as of {at}"));
+            };
+            r.resolutions.push(resolution(Resolution::lookup(&label, &enc, &at))?);
+            let obj = parse_object_key(&enc).map_err(|e| CallError::Code("E_KEY_ENCODING", e.to_string()))?;
+            obj.keys
+                .into_iter()
+                .map(|(k, v)| {
+                    let arg = match &v {
+                        KeyValue::Object(o) => Arg::Value(Scalar::String(format_object_key(o))),
+                        other => Arg::Value(match other {
+                            KeyValue::Scalar(s) => s.clone(),
+                            _ => Scalar::Boolean(false),
+                        }),
+                    };
+                    (k, (arg, v))
+                })
+                .collect()
         }
+    };
+    let name = m.name.clone();
+    let (fq, desc, k) = if m.qualified {
+        // An extension method: a function whose first arguments are the class's keys, in order.
+        let desc = r.bound(&name)?.ok_or_else(|| CallError::Code("E_NAME_UNBOUND", format!("{name} is not bound")))?;
+        let order = desc.order.clone().unwrap_or_default();
+        let k = cd.order.len();
+        if order.len() < k || order[..k] != cd.order[..] {
+            return fail("E_NAME_UNBOUND", format!("{name} does not take the keys of {class} first"));
+        }
+        (name.clone(), desc, k)
+    } else {
+        if cd.lookup.as_deref() == Some(name.as_str()) || !cd.methods.contains_key(&name) {
+            return fail("E_NAME_UNBOUND", format!("{class} has no method {name}"));
+        }
+        let fq = format!("{class}/{name}");
+        let desc = r.bound(&fq)?.ok_or_else(|| CallError::Code("E_NAME_UNBOUND", format!("{fq} is not bound")))?;
+        if desc.hash() != cd.methods[&name] {
+            return fail("E_NAME_UNBOUND", format!("{fq} is not bound to the method's hash"));
+        }
+        let order = desc.order.clone().unwrap_or_default();
+        let k = order.iter().zip(cd.order.iter()).take_while(|(a, b)| a == b).count();
+        (fq, desc, k)
+    };
+    let order = desc.order.clone().unwrap_or_default();
+    let mut pre = Vec::with_capacity(k);
+    for n in &order[..k] {
+        let (arg, _) =
+            keys.get(n).ok_or_else(|| CallError::Code("E_ARG_MISSING", format!("the object has no key {n}")))?;
+        pre.push((n.clone(), arg.clone()));
     }
-    if at(i).is_some() {
-        syntax("nothing but ?asof= follows the call")?;
-    }
-    Ok(((head.text.clone(), head.kind == Kind::Alias, pin), args))
+    r.resolutions.push(resolution(Resolution::new(&format!("{class}(...).{name}"), ResolutionKind::Method, &fq))?);
+    let args = r.bind(&fq, &desc, pre, &m.args)?;
+    Ok((fq, desc, args))
 }

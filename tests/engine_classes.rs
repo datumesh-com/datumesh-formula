@@ -44,7 +44,6 @@ fn the_methods_group_through_the_engine() {
 /// call its cell, as its function bindings give a plain call (5.8, 16.3); the store has no
 /// lookup hook (reading a cell is the mesh's), so a label is `E_NAME_UNBOUND`.
 #[test]
-#[ignore = "needs datumesh-store 0.4.1 (put_class, bind_class): todo!() stubs on the branch at the time of writing"]
 fn a_store_answers_class_calls() {
     let v = common::vector("formula-eval/class-forward.json");
     let mesh = engine::world_mesh(&v, true);

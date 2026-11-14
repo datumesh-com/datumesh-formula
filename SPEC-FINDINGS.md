@@ -292,3 +292,9 @@ H10. **15.6's "parse(print(ast)) = ast, without an environment" and the dispatch
 declaration of an argument or of a returned key in the signature, so without an environment the printed body cannot give the AST back.
 The sentence of 15.6 holds for every node of spec-0.4. Not tested (the round-trip test generates no dispatch). Proposal: say that a dispatch is the exception,
 or that the printer round-trips with the signature.
+
+## I. spec-0.5.0, classes, found while implementing requests (step 1.3b, commit 2)
+
+I1. **An `@alias` call and `resolved`.** 16.7 makes a *bare name* in the function position a short call, and `@alias` "as before". The vectors agree: `call/positional` (`@fx(...)`, valid, no `resolved`) and `call/pinned-alias` (`@fx@<hash>(...)`, no `resolved`) expect no `resolved`, and `call/class-short` (bare `fx_rate(...)`) expects an `alias` resolution. The implementation follows the vectors: only a bare name through the alias map is recorded. The test `classes_requests::bare_names_resolve_through_the_alias_map` asserts that `@fx_rate(...)` records an `@fx_rate` alias resolution, and H5 says the reference records `@name` for an `@alias`; that test assertion is left failing for this reason (a wrong test, or H5 is wrong). Proposal: say in 16.7 that only a bare name is a short call and an `@alias` never produces a `resolved` member.
+
+I2. **`from` of a method resolution.** The vectors give `from` as `<class>(...).<name>` (the class's full name, then `(...)`, then the method name as written, qualified for an extension). Not stated in 16.7; implemented as the vectors have it.
