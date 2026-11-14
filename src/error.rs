@@ -105,9 +105,20 @@ codes! {
 
 impl Code {
     /// Whether this is an evaluation fault a mesh reports in a `not_covered` envelope's `fault`
-    /// member (SPEC 5.5, 15.12): division by zero, domain, range, empty, absent, future.
+    /// member (SPEC 5.5, 15.12): division by zero, domain, range, empty, absent, future, and since
+    /// spec-0.5.0 the key and dispatch-key faults.
     pub const fn is_fault(self) -> bool {
-        matches!(self, Code::DivZero | Code::Domain | Code::Range | Code::Empty | Code::Absent | Code::Future)
+        matches!(
+            self,
+            Code::DivZero
+                | Code::Domain
+                | Code::Range
+                | Code::Empty
+                | Code::Absent
+                | Code::Future
+                | Code::Key
+                | Code::DispatchKey
+        )
     }
 
     /// Whether `otherwise` catches it (SPEC 15.12): `E_FORMULA_EMPTY` and `E_FORMULA_ABSENT`.

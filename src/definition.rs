@@ -188,6 +188,34 @@ pub fn define_function(
     callees: &dyn Callees,
     at: &str,
 ) -> Result<Definition, DefineError> {
+    define_in(name, source, signature, aliases, callees, at, None)
+}
+
+/// Define `source` as the formula function `name` of the class `class`'s method (16.3): as
+/// [`define_function`], with `this` the receiver of the class's methods (the class's keys are the
+/// method's own key arguments) and `super` as the environment's `method_of` gives it. `callees`
+/// answers for the class and for the methods' functions by name. Since spec-0.5.0.
+pub fn define_method(
+    class: &str,
+    name: &str,
+    source: &str,
+    signature: &Value,
+    aliases: &BTreeMap<String, String>,
+    callees: &dyn Callees,
+    at: &str,
+) -> Result<Definition, DefineError> {
+    define_in(name, source, signature, aliases, callees, at, Some(class))
+}
+
+fn define_in(
+    name: &str,
+    source: &str,
+    signature: &Value,
+    aliases: &BTreeMap<String, String>,
+    callees: &dyn Callees,
+    at: &str,
+    method_of: Option<&str>,
+) -> Result<Definition, DefineError> {
     // Section 7 first: the signature's shape and canonical form, in a descriptor.
     FunctionDescriptor::from_value(&descriptor_value("", &[], signature)).map_err(DefineError::Descriptor)?;
     let sig = Signature::from_value(signature).map_err(|e| Error::new(Code::Syntax, e.0))?;
@@ -196,10 +224,20 @@ pub fn define_function(
     }
     let mut env = Env::new(name, sig);
     env.aliases = aliases.clone();
+    env.method_of = method_of.map(str::to_string);
+    let names = crate::read_names(source, aliases, method_of)?;
+    if let Some(class) = method_of {
+        if let Some(c) = callees.bound_class(class, at).map_err(DefineError::Callees)? {
+            env.classes.insert(class, c.descriptor);
+        }
+    }
     let mut used = BTreeMap::new();
-    for callee in crate::read_names(source, aliases)? {
+    for callee in names {
         if callee == name {
             continue;
+        }
+        if let Some(c) = callees.bound_class(&callee, at).map_err(DefineError::Callees)? {
+            env.classes.insert(&callee, c.descriptor);
         }
         if let Some(c) = callees.callee(&callee, at).map_err(DefineError::Callees)? {
             env.add_function(&callee, &c.descriptor).map_err(|e| DefineError::Callees(e.0))?;
@@ -214,25 +252,6 @@ pub fn define_function(
     check_descriptor(name, &json::parse(&bytes).map_err(DefineError::Descriptor)?, &env)?;
     used.retain(|n, _| compiled.inputs.contains(n));
     Ok(Definition { name: name.to_string(), descriptor, bytes, fn_hash, compiled, callees: used })
-}
-
-/// Define a formula function that is a **method** of the class `class` (a class name, 16.3):
-/// as [`define_function`], with `this` and `super` meaning what 16.3 says (the environment's
-/// `method_of`) and a read pinned by `super` accepted in the body. `callees` also answers for
-/// the class (and its parent, found by the hash `parent` holds) and for the methods' functions.
-/// Since spec-0.5.0.
-#[allow(clippy::too_many_arguments)]
-pub fn define_method(
-    class: &str,
-    name: &str,
-    source: &str,
-    signature: &Value,
-    aliases: &BTreeMap<String, String>,
-    callees: &dyn Callees,
-    at: &str,
-) -> Result<Definition, DefineError> {
-    let _ = (class, name, source, signature, aliases, callees, at);
-    todo!("define_method (SPEC 16.3): this and super")
 }
 
 /// A defined class: its flattened descriptor (16.2) and class hash. Since spec-0.5.0.

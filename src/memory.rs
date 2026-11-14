@@ -150,6 +150,13 @@ impl MemoryWorld {
             let bound = f.get("bound").and_then(Value::as_str).ok_or_else(|| bad("function without bound"))?;
             w.bind(name, d, bound)?;
         }
+        if let Some(cs) = world.get("classes").and_then(Value::as_object) {
+            for (name, c) in cs {
+                let d = c.get("descriptor").ok_or_else(|| bad("class without descriptor"))?;
+                let bound = c.get("bound").and_then(Value::as_str).ok_or_else(|| bad("class without bound"))?;
+                w.bind_class(name, d, bound)?;
+            }
+        }
         if let Some(Value::Array(rs)) = world.get("receipts") {
             for r in rs {
                 w.add_receipt(r)?;
@@ -244,6 +251,10 @@ impl MemoryWorld {
         for (n, other) in &self.functions {
             env.functions.insert(n.clone(), (*other.function).clone());
         }
+        for (n, c) in &self.classes {
+            env.classes.insert(n, (*c.class).clone());
+        }
+        env.method_of = self.method_class(name, &f.hash);
         // Checked against the bindings as they are now: a callee rebound since define time is
         // checked again, with the same codes (15.8).
         let c = Arc::new(
@@ -251,6 +262,13 @@ impl MemoryWorld {
         );
         self.compiled.insert(name.to_string(), c.clone());
         Ok(c)
+    }
+
+    /// The class whose method `name` is (16.3): the prefix class bound to `name`'s method hash.
+    fn method_class(&self, name: &str, fn_hash: &str) -> Option<String> {
+        let (class, method) = name.rsplit_once('/')?;
+        let c = self.classes.get(class)?;
+        (c.class.methods.get(method).map(String::as_str) == Some(fn_hash)).then(|| class.to_string())
     }
 
     /// The version of a stored cell answering as of `at`: the latest `tx` among its receipts with

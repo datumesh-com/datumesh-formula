@@ -392,6 +392,7 @@ impl<'a, W: World + ?Sized> Eval<'a, W> {
             if s.ty() != decl.ty {
                 return Err(Code::Type.into());
             }
+            key_checked(decl.extras.key_normalisation, s)?;
             scope.push((name.clone(), from_scalar(s)?));
         }
         Ok(Eval {
@@ -433,6 +434,38 @@ type Group<T> = (Vec<V>, Vec<T>);
 struct SliceV {
     keys: Vec<KeyTy>,
     members: Vec<(Vec<V>, V)>,
+}
+
+/// A string argument's value under its `key_normalisation` (7, 16.4): a value that is not
+/// canonical is the fault `E_FORMULA_KEY` (15.12), which the cell memoizes like any fault.
+fn key_checked(rule: Option<datumesh_core::KeyNormalisation>, v: &impl KeyValueText) -> Result<(), Code> {
+    match (rule, v.text()) {
+        (Some(rule), Some(text)) if rule.check(text).is_err() => Err(Code::Key),
+        _ => Ok(()),
+    }
+}
+
+/// A scalar's string value, when it is one (for [`key_checked`]).
+trait KeyValueText {
+    fn text(&self) -> Option<&str>;
+}
+
+impl KeyValueText for Scalar {
+    fn text(&self) -> Option<&str> {
+        match self {
+            Scalar::String(s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
+impl KeyValueText for V {
+    fn text(&self) -> Option<&str> {
+        match self {
+            V::Str(s) => Some(s),
+            _ => None,
+        }
+    }
 }
 
 fn from_scalar(s: &Scalar) -> Result<V, Code> {
@@ -821,9 +854,14 @@ impl<W: World + ?Sized> Eval<'_, W> {
         let mut out = BTreeMap::new();
         for (name, a) in args {
             let ty = f.signature.args.get(name).map(|d| d.ty).ok_or(Stop::Code(Code::Unresolved))?;
+            let key = f.signature.args.get(name).and_then(|d| d.extras.key_normalisation);
             let p = match a {
                 ReadArg::Open => PatternArg::Open,
-                ReadArg::Expr(x) => PatternArg::Value(typed(&self.node(*x)?, ty)?),
+                ReadArg::Expr(x) => {
+                    let v = typed(&self.node(*x)?, ty)?;
+                    key_checked(key, &v)?;
+                    PatternArg::Value(v)
+                }
                 ReadArg::Range(lo, hi) => {
                     let lo = typed(&self.node(*lo)?, ty)?;
                     let hi = typed(&self.node(*hi)?, ty)?;

@@ -179,7 +179,29 @@ impl Signature {
             }
             _ => return Err(bad("returns shape")),
         };
-        Ok(Signature { args, order, returns, returns_unit, returns_classes: None })
+        // The members of spec-0.5.0 (`classes`, `default`, `key_normalisation`, a returned key's
+        // `classes`) are read by core's function descriptor, over the signature alone.
+        let wrapped = Value::Object(vec![
+            (
+                "code".to_string(),
+                Value::Object(vec![
+                    ("body".to_string(), Value::String(String::new())),
+                    ("lang".to_string(), Value::String("stored".to_string())),
+                ]),
+            ),
+            ("inputs".to_string(), Value::Array(Vec::new())),
+            ("signature".to_string(), v.clone()),
+        ]);
+        // An environment's signature is trusted as the caller gives it: one core would refuse
+        // (a descriptor's own checks are `define`'s) has the members absent.
+        let (extras, returns_classes) = match datumesh_core::FunctionDescriptor::from_value(&wrapped) {
+            Ok(fd) => (fd.arg_extras.clone(), fd.returns_classes.clone()),
+            Err(_) => (Default::default(), None),
+        };
+        for (name, decl) in args.iter_mut() {
+            decl.extras = extras.get(name).cloned().unwrap_or_default();
+        }
+        Ok(Signature { args, order, returns, returns_unit, returns_classes })
     }
 }
 
@@ -250,6 +272,12 @@ impl Env {
             for (n, d) in fs {
                 env.add_function(n, d)?;
             }
+        }
+        if let Some(cs) = v.get("classes") {
+            env.classes = Classes::from_value(cs).map_err(|e| bad(e.0))?;
+        }
+        if let Some(m) = v.get("method_of") {
+            env.method_of = Some(m.as_str().ok_or_else(|| bad("method_of is not a string"))?.to_string());
         }
         if let Some(al) = v.get("aliases").and_then(Value::as_object) {
             for (a, n) in al {

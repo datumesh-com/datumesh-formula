@@ -121,21 +121,49 @@ pub fn canonical_ast(source: &str, env: Option<&Env>) -> Result<Ast, Error> {
 }
 
 /// The fully qualified names `source` reads (aliases resolved through `aliases`; an unknown
-/// alias is left for resolution to report), after lexing and parsing it.
+/// alias is left for resolution to report), after lexing and parsing it. Since spec-0.5.0 a
+/// class name an object is written with, and the functions of its methods (`N/m`, 16.3), are
+/// names too; `this` is the class `method_of`. Class names are looked up as classes by the
+/// caller, functions as functions.
 pub(crate) fn read_names(
     source: &str,
     aliases: &std::collections::BTreeMap<String, String>,
+    method_of: Option<&str>,
 ) -> Result<std::collections::BTreeSet<String>, Error> {
     let tokens = lex::lex(source)?;
     let tree = deep(tokens.len(), || parse::parse(&tokens))?;
     let mut names = std::collections::BTreeSet::new();
     for node in &tree.nodes {
-        if let parse::PNode::Read { name, alias, .. } = node {
-            if !*alias {
-                names.insert(name.clone());
-            } else if let Some(n) = aliases.get(name) {
-                names.insert(n.clone());
+        match node {
+            parse::PNode::Read { name, alias, .. } => {
+                if !*alias {
+                    names.insert(name.clone());
+                } else if let Some(n) = aliases.get(name) {
+                    names.insert(n.clone());
+                }
             }
+            parse::PNode::Method { recv, name, qualified, .. } => {
+                if *qualified {
+                    names.insert(name.clone());
+                    continue;
+                }
+                let class = match tree.get(*recv) {
+                    parse::PNode::Read { name: c, alias, .. } => {
+                        if *alias {
+                            aliases.get(c).cloned()
+                        } else {
+                            Some(c.clone())
+                        }
+                    }
+                    parse::PNode::This => method_of.map(str::to_string),
+                    _ => None,
+                };
+                if let Some(c) = class {
+                    names.insert(format!("{c}/{name}"));
+                    names.insert(c);
+                }
+            }
+            _ => {}
         }
     }
     Ok(names)

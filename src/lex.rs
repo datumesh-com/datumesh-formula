@@ -17,6 +17,8 @@ pub(crate) enum Kind {
     /// `@` and 64 lowercase hex digits directly after a qualified name or alias (L4a, a pin).
     Pin,
     Number,
+    /// A period key (L5 with D, M or Y, 15.15): `1M`, `10Y`; a string in a key position.
+    Period,
     Str,
     Word,
     Punct,
@@ -203,7 +205,9 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, Error> {
                 && matches!(b.get(j), Some(b'D') | Some(b'M') | Some(b'Y'))
                 && !b.get(j + 1).is_some_and(|&c| is_word_char(c))
             {
-                return Err(err(Code::Reserved, i, format!("{} is reserved for period keys (1.3b)", &src[i..j + 1])));
+                out.push(Token { kind: Kind::Period, text: src[i..j + 1].to_string(), unit: None, pos: start });
+                i = j + 1;
+                continue;
             }
             let mut k = j;
             while k < b.len() && (b[k] == b' ' || b[k] == b'\t') {

@@ -118,6 +118,20 @@ pub(crate) enum PNode {
         args: Vec<PArg>,
     },
     Lambda(Vec<String>, Id),
+    /// A key literal (15.15): an uppercase word, or digits and `D`, `M` or `Y`; a string in a
+    /// `string` position of a read, and reserved elsewhere.
+    KeyLit(String),
+    /// `this` (16.3): the receiver of a method call in a method's body.
+    This,
+    /// `super` (16.3): the receiver of a pinned method call in a method's body.
+    Super,
+    /// A method call `recv.name(args)` (16.3); `qualified` for an extension method's qualified name.
+    Method {
+        recv: Id,
+        name: String,
+        qualified: bool,
+        args: Vec<PArg>,
+    },
 }
 
 /// The parse tree: an arena and its root.
@@ -589,13 +603,22 @@ impl<'a> Parser<'a> {
         Ok(self.push(PNode::Bin(BinOp::Pow, base, e)))
     }
 
+    /// `postfix = primary *( "." ( name / qualified-name ) "(" [ read-arg *( "," read-arg ) ] ")" )`
+    /// (16.3). A `.` not followed by a method call is `E_FORMULA_RESERVED`.
     fn postfix(&mut self) -> Result<Id, Error> {
-        let x = self.primary()?;
-        let t = self.peek();
-        if t.is(".") {
-            return Err(err(Code::Reserved, "'.' after an expression is reserved for methods (1.3b)"));
+        let mut x = self.primary()?;
+        while self.peek().is(".") {
+            let named = matches!(self.peek_at(1).kind, Kind::Word | Kind::Qualified) && self.peek_at(2).is("(");
+            if !named {
+                return Err(err(Code::Reserved, "'.' after an expression is reserved for methods (16.3)"));
+            }
+            self.bump();
+            let t = self.bump();
+            let qualified = t.kind == Kind::Qualified;
+            let args = self.args(true, "")?;
+            x = self.push(PNode::Method { recv: x, name: t.text.clone(), qualified, args });
         }
-        if t.is("(") {
+        if self.peek().is("(") {
             return Err(err(Code::DynamicName, "only a name can be called"));
         }
         Ok(x)
@@ -639,6 +662,10 @@ impl<'a> Parser<'a> {
                 Ok(self.push(PNode::Read { name: t.text.clone(), alias: t.kind == Kind::Alias, pin, args }))
             }
             Kind::Word => self.word(),
+            Kind::Period => {
+                self.bump();
+                Ok(self.push(PNode::KeyLit(t.text.clone())))
+            }
             Kind::Punct => match t.text.as_str() {
                 "(" => {
                     self.bump();
@@ -690,7 +717,15 @@ impl<'a> Parser<'a> {
             }
             "and" | "or" if called => return self.call(&lower),
             "then" | "else" | "in" | "and" | "or" => return Err(self.unexpected("an expression")),
-            "this" | "super" => return Err(err(Code::Reserved, format!("{} is reserved", t.text))),
+            "this" | "super" if called => return Err(err(Code::Reserved, format!("{} is reserved", t.text))),
+            "this" => {
+                self.bump();
+                return Ok(self.push(PNode::This));
+            }
+            "super" => {
+                self.bump();
+                return Ok(self.push(PNode::Super));
+            }
             _ => {}
         }
         if called {
@@ -711,6 +746,9 @@ impl<'a> Parser<'a> {
             ));
         }
         self.bump();
+        if t.text.bytes().any(|c| c.is_ascii_uppercase()) {
+            return Ok(self.push(PNode::KeyLit(t.text.clone())));
+        }
         Ok(self.push(PNode::Var(t.text.clone())))
     }
 
