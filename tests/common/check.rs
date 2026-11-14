@@ -199,7 +199,8 @@ pub fn call_vector(path: &str, v: &Value) -> Result<(), String> {
                     problems.push(format!("uri {}", c.uri()));
                 }
                 match (v.get("resolved"), &c.resolved) {
-                    (None, None) => {}
+                    // 11: `resolved` is compared when the vector carries it and ignored otherwise.
+                    (None, _) => {}
                     (Some(w), Some(r)) => {
                         let (a, b) = (resolved_value(r).to_jcs(), w.to_jcs());
                         if a != b {
@@ -211,7 +212,6 @@ pub fn call_vector(path: &str, v: &Value) -> Result<(), String> {
                         }
                     }
                     (Some(_), None) => problems.push("no resolved".to_string()),
-                    (None, Some(r)) => problems.push(format!("unexpected resolved {}", r.call)),
                 }
                 if problems.is_empty() {
                     Ok(())

@@ -836,15 +836,10 @@ pub fn parse_call(text: &str, env: &dyn CallEnv) -> Result<Call, CallError> {
     } else {
         match env.alias(&req.head.text).map_err(CallError::Env)? {
             Some(n) => {
-                // A bare name through the alias map is a short call (16.7) and is recorded. An `@alias`
-                // is recorded only where the environment has an alias snapshot (`aliases_tx`): the
-                // vectors without one (call/positional, call/pinned-alias) expect no `resolved`. A pinned
-                // callee is named by its hash, not an alias resolution.
-                let snapshot = env.aliases_tx().map_err(CallError::Env)?.is_some();
-                if req.pin.is_none() && (!req.head.alias || snapshot) {
-                    r.alias_used = true;
-                    r.resolutions.push(resolution(Resolution::new(&req.head.written, ResolutionKind::Alias, &n))?);
-                }
+                // Every name through the alias map is recorded as an alias resolution (16.7): a bare
+                // name or an `@alias`, as written, with or without an alias snapshot and pinned or not.
+                r.alias_used = true;
+                r.resolutions.push(resolution(Resolution::new(&req.head.written, ResolutionKind::Alias, &n))?);
                 n
             }
             None if req.head.alias => {
@@ -888,7 +883,8 @@ pub fn parse_call(text: &str, env: &dyn CallEnv) -> Result<Call, CallError> {
     } else {
         let mut parts: Vec<String> = cell_args.iter().map(|(k, a)| format!("{k}: {}", literal(a))).collect();
         parts.sort();
-        let mut call = format!("{call_name}({})", parts.join(", "));
+        let pin = req.pin.as_ref().map(|h| format!("@{h}")).unwrap_or_default();
+        let mut call = format!("{call_name}{pin}({})", parts.join(", "));
         if let Some(a) = &asof {
             call.push_str(&format!("?asof={a}"));
         }

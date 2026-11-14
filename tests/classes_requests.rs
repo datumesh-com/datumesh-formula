@@ -322,6 +322,32 @@ fn bare_names_resolve_through_the_alias_map() {
     assert!(c.resolved.is_none());
 }
 
+/// Every `@name` is an alias resolution (I1), with or without an alias snapshot and when pinned;
+/// `aliases_tx` only when the environment has one. The pinned call is `name@<hash>(...)?asof=`.
+#[test]
+fn every_alias_is_recorded() {
+    let v = json::parse(include_bytes!("../spec-vectors/call/pinned-alias.json")).unwrap();
+    let mut e = MapCallEnv::from_value(v.get("env").unwrap()).unwrap();
+    assert!(e.aliases_tx.is_none());
+    let input = v.get("input").and_then(|i| i.as_str()).unwrap().to_string();
+    let c = parse_call(&input, &e).unwrap();
+    assert_eq!(resolved(&c), [("alias".into(), "@fx".into(), "rates.example.org/fx_rate".into())]);
+    let r = c.resolved.as_ref().unwrap();
+    assert_eq!(r.aliases_tx, None);
+    assert_eq!(
+        r.call,
+        "rates.example.org/fx_rate@f041cf0f3eabaf4a611a6f57050dac8fb1f2e2cd5d6b6526913cff0847ef88df(base: \"EUR\", date: 2024-03-15, quote: \"USD\")?asof=2024-03-16T09:00:00.000000Z"
+    );
+    let c = parse_call("@fx(\"EUR\", \"USD\", 2024-03-15)", &e).unwrap();
+    assert_eq!(
+        c.resolved.as_ref().unwrap().call,
+        "rates.example.org/fx_rate(base: \"EUR\", date: 2024-03-15, quote: \"USD\")"
+    );
+    e.aliases_tx = Some("2026-01-01T00:00:00.000000Z".into());
+    let c = parse_call("@fx(\"EUR\", \"USD\", 2024-03-15)", &e).unwrap();
+    assert_eq!(c.resolved.as_ref().unwrap().aliases_tx.as_deref(), Some("2026-01-01T00:00:00.000000Z"));
+}
+
 /// An unbound argument whose declaration has `"default": "asof"` binds to the call's `asof`
 /// (`date_of` for a date), or to the mesh's now when the call has none; the cell URI carries the
 /// value and the resolution records it. A bound argument has no resolution.
