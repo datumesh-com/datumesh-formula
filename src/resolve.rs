@@ -61,7 +61,7 @@ pub(crate) fn check_variable(w: &str) -> Result<(), Error> {
 
 /// The signature of the environment's function with this hash (16.3).
 pub(crate) fn signature_by_hash<'e>(env: &'e Env, fn_hash: &str) -> Option<&'e Signature> {
-    env.functions.values().find(|f| f.hash == fn_hash).map(|f| &f.signature)
+    env.functions.values().find(|f| f.hash == fn_hash).or_else(|| env.pinned.get(fn_hash)).map(|f| &f.signature)
 }
 
 /// A method's own signature: its arguments and order without the first `keys` of its order (the

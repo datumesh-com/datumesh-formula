@@ -254,6 +254,9 @@ pub struct Env {
     /// (15.8). There a dispatch's method bound to another hash is not a define-time failure: the
     /// dispatch's read gives `E_FORMULA_DISPATCH` (16.6).
     pub(crate) evaluating: bool,
+    /// Since spec-0.5.0 (16.3): the functions a body pins its reads to (`super`), by function
+    /// hash, whatever name they are bound to now. The runtime adds the ones a body names.
+    pub(crate) pinned: BTreeMap<String, Function>,
 }
 
 impl Env {
@@ -268,6 +271,7 @@ impl Env {
             method_of: None,
             stored_body: false,
             evaluating: false,
+            pinned: BTreeMap::new(),
         }
     }
 

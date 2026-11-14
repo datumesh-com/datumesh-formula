@@ -7,7 +7,8 @@ All notable changes to `datumesh-formula`.
 For spec-0.5.0 (the commit `6d5633e` of [datumesh-spec](https://github.com/datumesh-com/datumesh-spec),
 on the branch `spec-0.5.0`, untagged): classes (SPEC 16) and the requests of 5.8 by the types of their
 positions. On `datumesh-core` 0.3.8 (was 0.3.6) and
-`datumesh-store` 0.4.1 (was 0.4.0); `datumesh-engine` stays 0.4.0. Breaking: a new variant of
+`datumesh-store` 0.4.1 (was 0.4.0); `datumesh-engine` 0.4.2 (was 0.4.0; the minimum, for
+`Inputs::read_pinned`). Breaking: a new variant of
 `Node`, new members of public structs, and the minimum versions of the dependencies
 (`API-CHANGES-0.3.0.md`).
 
@@ -29,8 +30,10 @@ positions. On `datumesh-core` 0.3.8 (was 0.3.6) and
 - Define of classes (16.2): `define_class` over `datumesh-core`'s `define_class` and
   `publish_class` (store 0.4.1's `put_class` and `bind_class`); `define_method`; the environment
   reads `classes` and `method_of`.
-- The formula runtime (feature `engine`) answers dispatch and classes from the store; `super` is
-  `E_FORMULA_UNSUPPORTED` through the engine until engine 0.4.2 reads by hash.
+- The formula runtime (feature `engine`) answers dispatch and classes from the store, and `super`
+  works through the engine with datumesh-engine 0.4.2: a pinned read is the engine's
+  `Inputs::read_pinned` of the function stored under the parent's hash (found through the callees,
+  whatever its name is bound to now), which relies on no binding (16.3, 8.2 rule 2).
 - Clarifications of spec-0.5.0 at `c8896ad` (SPEC-FINDINGS H and I; the tests of
   `tests/classes_clarifications.rs`, the vectors re-pinned to 1474, 656 run here): a dispatch whose
   `<class>/m` is bound to another hash is `E_FORMULA_DISPATCH` at evaluation, and an unbound method

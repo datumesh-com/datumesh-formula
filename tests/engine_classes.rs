@@ -104,7 +104,8 @@ fn the_local_class_vectors_through_the_engine() {
 fn super_through_the_engine() {
     let v = common::vector("formula-eval/class-super.json");
     let mesh = engine::world_mesh(&v, true);
-    mesh.clock.set("2026-06-01T00:00:00.000000Z");
+    // SPEC 11: `issued` is the later of the receipt's asof and 2020-01-01, so the clock is the vector's receipt_asof
+    mesh.clock.set(common::string(&v, "receipt_asof").unwrap());
     let (engine_, _rt) = mesh.engine();
     let cell = cell_ref(
         "calc.example.net/fx_ndf/rate",
@@ -144,7 +145,8 @@ fn super_relies_on_no_binding_through_the_engine() {
         .get("descriptor")
         .unwrap();
     mesh.bind("rates.example.org/fx_pair/rate", &other.to_jcs(), "2026-05-01T00:00:00.000000Z");
-    mesh.clock.set("2026-06-01T00:00:00.000000Z");
+    // SPEC 11: `issued` is the later of the receipt's asof and 2020-01-01, so the clock is the vector's receipt_asof
+    mesh.clock.set(common::string(&v, "receipt_asof").unwrap());
     let (engine_, _rt) = mesh.engine();
     let cell = cell_ref(
         "calc.example.net/fx_ndf/rate",

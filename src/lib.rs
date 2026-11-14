@@ -120,6 +120,22 @@ pub fn canonical_ast(source: &str, env: Option<&Env>) -> Result<Ast, Error> {
     })
 }
 
+/// The pinned reads (16.3, `super`) a body makes, as (function name, function hash), after lexing
+/// and parsing it.
+#[cfg(feature = "engine")]
+pub(crate) fn pinned_reads(source: &str) -> Result<Vec<(String, String)>, Error> {
+    let tokens = lex::lex(source)?;
+    let tree = deep(tokens.len(), || parse::parse(&tokens))?;
+    Ok(tree
+        .nodes
+        .iter()
+        .filter_map(|node| match node {
+            parse::PNode::Read { name, pin: Some(pin), .. } => Some((name.clone(), pin.clone())),
+            _ => None,
+        })
+        .collect())
+}
+
 /// The fully qualified names `source` reads (aliases resolved through `aliases`; an unknown
 /// alias is left for resolution to report), after lexing and parsing it. Since spec-0.5.0 a
 /// class name an object is written with, and the functions of its methods (`N/m`, 16.3), are

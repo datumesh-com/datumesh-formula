@@ -15,6 +15,8 @@
 //!   `latest`, whose functions are asof-dependent ([`Runtime::asof_dependent`] from the
 //!   checker's flag), and to order `E_FORMULA_FUTURE` before a failure of the cell's arguments
 //!   in `asof(c, T)` and `versions(c, from, to)`.
+//! - A pinned read (`super`, 16.3) is the engine's `read_pinned`, of the function stored under
+//!   the parent's hash (found through the callees), which relies on no binding.
 //! - A fault is [`EvalError::Fault`] with its code, so the engine answers
 //!   `NotCovered { fault }`; a computed input's fault comes back as the formula code, which
 //!   `otherwise` may catch (`E_FORMULA_EMPTY`, `E_FORMULA_ABSENT`). The engine's own errors
@@ -136,13 +138,36 @@ impl FormulaRuntime {
 
     /// The function of a descriptor, by function hash.
     fn function_of(&self, fn_hash: &str, d: &FunctionDescriptor) -> Result<Arc<Function>, EvalError> {
+        self.function_of_value(fn_hash, &d.to_value())
+    }
+
+    /// The function of a descriptor's JSON value, by function hash.
+    fn function_of_value(&self, fn_hash: &str, value: &datumesh_core::json::Value) -> Result<Arc<Function>, EvalError> {
         let mut fs = self.functions.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(f) = fs.get(fn_hash) {
             return Ok(f.clone());
         }
-        let f = Arc::new(Function::from_value(&d.to_value()).map_err(|e| EvalError::Runtime(e.to_string()))?);
+        let f = Arc::new(Function::from_value(value).map_err(|e| EvalError::Runtime(e.to_string()))?);
         fs.insert(fn_hash.to_string(), f.clone());
         Ok(f)
+    }
+
+    /// The functions a body pins its reads to (16.3, `super`), found by their hashes in the
+    /// callees whatever their names are bound to now: a pinned read relies on no binding. A
+    /// function not found is left for the checker to report (`E_FORMULA_UNRESOLVED`); a body that
+    /// does not parse is left for the checker too.
+    fn add_pinned(&self, body: &str, env: &mut Env) -> Result<(), DefineError> {
+        let Ok(reads) = crate::pinned_reads(body) else { return Ok(()) };
+        for (_, hash) in reads {
+            if env.pinned.contains_key(&hash) {
+                continue;
+            }
+            if let Some(v) = self.callees.function_descriptor(&hash).map_err(DefineError::Callees)? {
+                let f = Function::from_value(&v).map_err(|e| DefineError::Callees(e.0))?;
+                env.pinned.insert(hash, f);
+            }
+        }
+        Ok(())
     }
 
     /// The descriptor checked against its callees as bound now, compiled.
@@ -167,6 +192,7 @@ impl FormulaRuntime {
                 env.classes.insert(&class, c.descriptor);
             }
         }
+        self.add_pinned(&d.body, &mut env)?;
         env.method_of = method_class(&env, name, &function.hash);
         let compiled = Arc::new(check_descriptor(name, &value, &env)?);
         let p = Arc::new(Prepared { function, env, compiled });
@@ -205,6 +231,7 @@ impl FormulaRuntime {
                 env.classes.insert(&class, c.descriptor);
             }
         }
+        self.add_pinned(&d.body, &mut env).map_err(|e| EvalError::Runtime(e.to_string()))?;
         env.method_of = method_class(&env, name, &function.hash);
         env.evaluating = true;
         let key = (function.hash.clone(), hashes);
@@ -451,6 +478,23 @@ impl World for EngineWorld<'_> {
 
     fn no_value(error: &EvalError) -> bool {
         matches!(error, EvalError::InputNotCovered { .. })
+    }
+
+    /// The function stored under `fn_hash` (the callees' descriptor with that hash), for a
+    /// pinned read's signature (16.3 `super`). Its name is not resolved.
+    fn function_by_hash(&mut self, fn_hash: &str) -> Result<Option<Arc<Function>>, EvalError> {
+        let Some(value) = self.rt.callees.function_descriptor(fn_hash).map_err(EvalError::Runtime)? else {
+            return Ok(None);
+        };
+        self.rt.function_of_value(fn_hash, &value).map(Some)
+    }
+
+    /// The cell of `cell.name` at `fn_hash`, as of the evaluation asof, through the engine's
+    /// pinned read (`Inputs::read_pinned`, datumesh-engine 0.4.2): no name is resolved and no
+    /// binding is relied on (16.3, 8.2 rule 2).
+    fn read_pinned(&mut self, fn_hash: &str, cell: &CellKey) -> Result<Option<Version>, Stop<EvalError>> {
+        let args = core_args(&cell.args);
+        self.inputs.read_pinned(&cell.name, fn_hash, &args).map(|i| Some(version(i))).map_err(stop)
     }
 
     fn rebound(&mut self, name: &str, binding: &Binding) -> Result<Option<Arc<Compiled>>, Stop<EvalError>> {

@@ -16,7 +16,7 @@ bounded dispatch, `super`, and the definition of a class), and the
 ```toml
 [dependencies]
 datumesh-formula = "0.2.0"
-datumesh-engine = "0.4.0"
+datumesh-engine = "0.4.2"
 datumesh-store = "0.4.0"
 datumesh-core = { version = "0.3.6", features = ["sign"] }
 ```
@@ -263,7 +263,7 @@ vectors over a small class world, written by `tools/gen_class_vectors.py` with t
 Dependencies: `datumesh-core` 0.3.8 for strict JSON, JCS, SHA-256, the string rules of SPEC 3.5
 (Unicode 15.1 assigned code points, NFC), `FunctionDescriptor` and `Fault`; `unicode-normalization`
 (already a dependency of `datumesh-core`) to normalise computed strings to NFC; with feature
-`engine` (default), `datumesh-engine` 0.4.0 for `Runtime` and `datumesh-store` 0.4.1 (already a
+`engine` (default), `datumesh-engine` 0.4.2 for `Runtime` and `datumesh-store` 0.4.1 (already a
 dependency of the engine) for the callees and `publish`. Without the feature, the language alone.
 
 | Feature | Default | What |

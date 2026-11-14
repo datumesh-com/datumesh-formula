@@ -4,7 +4,7 @@ Generated with `cargo public-api -ss --color=never` (cargo-public-api 0.52.0, ni
 on the committed listing at 0.2.0 (`public-api.txt`, `public-api-no-engine.txt`), with the default
 features (`engine`) and with `--no-default-features`, built against `datumesh-core` 0.3.8 (commit
 `0d53fa8`, a local copy until it is on crates.io), `datumesh-store` 0.4.1 (branch
-`step-1.5-namespace-validation`, commit `db69efc`) and `datumesh-engine` 0.4.0. The release is
+`step-1.5-namespace-validation`, commit `db69efc`) and `datumesh-engine` 0.4.2 (the minimum). The release is
 **breaking**: it is 0.3.0 and not 0.2.1, for the reasons below. The listings are regenerated
 (`public-api.txt`, `public-api-no-engine.txt`). **No item is removed or changed in its signature**;
 everything that breaks a user is an addition to a type that does not declare `#[non_exhaustive]`.
@@ -41,7 +41,8 @@ everything that breaks a user is an addition to a type that does not declare `#[
   `ClassDefinition`; the trait `Callees` gains the provided methods `bound_class`,
   `class_descriptor`, `class_name` and `function_descriptor` (each answers "none" by default).
 - `eval`: `ClassBinding`; the trait `World` gains the provided methods `class` (none by default),
-  `function_by_hash` (none) and `read_pinned` (`E_FORMULA_UNSUPPORTED` by default).
+  `function_by_hash` (none) and `read_pinned` (`E_FORMULA_UNSUPPORTED` by default; the engine's
+  runtime overrides both, so `super` works through the engine since datumesh-engine 0.4.2).
 - `call`: the trait `CallEnv` gains the provided methods `bound_class`, `aliases_tx`, `now` and
   `lookup` (each answers none by default).
 - `memory::MemoryWorld`: `bind_class`, and the three `World` methods above.
