@@ -253,7 +253,8 @@ cargo in a container on the `datumesh` network next to a `datumesh-pg` container
 another implementation and compare them. `spec-vectors/` is a copy of the spec's vectors at `6d5633e` (the branch `spec-0.5.0` of
 [datumesh-spec](https://github.com/datumesh-com/datumesh-spec), untagged at the time of writing; 1,466, with `units.md`);
 this crate runs the kinds `formula`, `formula-eval`, `call`, `excel` and `decimal` (648) and skips the rest
-(818, the verifier's kinds, which `datumesh-core` runs).
+(818, the verifier's kinds, which `datumesh-core` runs). `tests/vectors-local/` holds a few more `formula-eval`
+vectors over a small class world, written by `tools/gen_class_vectors.py` with the reference tool's results.
 
 Dependencies: `datumesh-core` 0.3.6 for strict JSON, JCS, SHA-256, the string rules of SPEC 3.5
 (Unicode 15.1 assigned code points, NFC), `FunctionDescriptor` and `Fault`; `unicode-normalization`

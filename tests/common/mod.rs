@@ -92,3 +92,20 @@ pub fn is_class_vector(path: &str) -> bool {
 pub fn old_vectors_of_kind(kind: &str) -> Vec<(String, Value)> {
     vectors_of_kind(kind).into_iter().filter(|(p, _)| !is_class_vector(p)).collect()
 }
+
+/// The local vectors (`tests/vectors-local/`, written by `tools/gen_class_vectors.py`): `formula-eval`
+/// vectors of the shape of the spec's, whose expected results are the reference tool's.
+pub fn local_vectors() -> Vec<(String, Value)> {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("vectors-local");
+    let mut out: Vec<(String, Value)> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|e| e == "json"))
+        .map(|p| {
+            let v = json::parse(&std::fs::read(&p).unwrap()).unwrap_or_else(|e| panic!("{}: {e:?}", p.display()));
+            (format!("tests/vectors-local/{}", p.file_name().unwrap().to_string_lossy()), v)
+        })
+        .collect();
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out
+}

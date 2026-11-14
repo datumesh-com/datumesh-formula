@@ -1,0 +1,234 @@
+{
+ "asof": "2026-06-01T00:00:00.000000Z",
+ "cell": {
+  "args": {
+   "n": {
+    "type": "number",
+    "value": "1"
+   }
+  },
+  "fn": "calc.example.net/two_ahead"
+ },
+ "description": "The returned key is a number key not in its lexical form: the fault E_FORMULA_DISPATCH_KEY.",
+ "error": "E_FORMULA_DISPATCH_KEY",
+ "id": "local/class-seq-key-leading-zero",
+ "kind": "formula-eval",
+ "valid": false,
+ "world": {
+  "classes": {
+   "calc.example.net/seq": {
+    "bound": "2026-01-01T00:00:00.000000Z",
+    "descriptor": {
+     "keys": {
+      "n": {
+       "type": "number",
+       "unit": "1"
+      }
+     },
+     "methods": {
+      "next": "55d7f282491d5c79dd489dfcc1315d765bd4073d62c7b797cb20a867e0575a4c",
+      "val": "95b5402caa7e99b1c24b3748a6452b2400b0c2cef1538606b4f724141f26e603"
+     },
+     "order": [
+      "n"
+     ],
+     "steward": {
+      "namespace": "calc.example.net",
+      "process": "https://calc.example.net/classes/change"
+     }
+    }
+   }
+  },
+  "functions": {
+   "calc.example.net/seq/next": {
+    "bound": "2026-01-01T00:00:00.000000Z",
+    "descriptor": {
+     "code": {
+      "body": "",
+      "lang": "stored"
+     },
+     "inputs": [],
+     "signature": {
+      "args": {
+       "n": {
+        "type": "number",
+        "unit": "1",
+        "valid": false
+       }
+      },
+      "order": [
+       "n"
+      ],
+      "returns": {
+       "classes": [
+        "calc.example.net/seq"
+       ],
+       "type": "string"
+      }
+     }
+    }
+   },
+   "calc.example.net/seq/val": {
+    "bound": "2026-01-01T00:00:00.000000Z",
+    "descriptor": {
+     "code": {
+      "body": "",
+      "lang": "stored"
+     },
+     "inputs": [],
+     "signature": {
+      "args": {
+       "n": {
+        "type": "number",
+        "unit": "1",
+        "valid": false
+       }
+      },
+      "order": [
+       "n"
+      ],
+      "returns": {
+       "type": "number",
+       "unit": "1"
+      }
+     }
+    }
+   },
+   "calc.example.net/two_ahead": {
+    "bound": "2026-01-01T00:00:00.000000Z",
+    "descriptor": {
+     "code": {
+      "body": "calc.example.net/seq/next(n: n).val()\n",
+      "lang": "formula"
+     },
+     "inputs": [
+      "calc.example.net/seq/next",
+      "calc.example.net/seq/val"
+     ],
+     "signature": {
+      "args": {
+       "n": {
+        "type": "number",
+        "unit": "1",
+        "valid": false
+       }
+      },
+      "order": [
+       "n"
+      ],
+      "returns": {
+       "type": "number",
+       "unit": "1"
+      }
+     }
+    }
+   }
+  },
+  "receipts": [
+   {
+    "asof": "2026-03-16T16:00:00.000000Z",
+    "cell": {
+     "args": {
+      "n": {
+       "type": "number",
+       "value": "1"
+      }
+     },
+     "fn": "next",
+     "fn_hash": "55d7f282491d5c79dd489dfcc1315d765bd4073d62c7b797cb20a867e0575a4c",
+     "ns": "calc.example.net/seq"
+    },
+    "computed_by": "calc.example.net#0123456789abcdef",
+    "inputs": [],
+    "issued": "2026-03-16T16:00:00.000000Z",
+    "licence": "CC0-1.0",
+    "proto": "datumesh/1",
+    "publisher": "calc.example.net/seq",
+    "sig": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "summary": "A recorded value.",
+    "tx": "2026-03-16T16:00:00.000000Z",
+    "type": "string",
+    "valid": {},
+    "value": "calc.example.net/seq(n:02)"
+   },
+   {
+    "asof": "2026-03-16T16:00:00.000000Z",
+    "cell": {
+     "args": {
+      "n": {
+       "type": "number",
+       "value": "2"
+      }
+     },
+     "fn": "next",
+     "fn_hash": "55d7f282491d5c79dd489dfcc1315d765bd4073d62c7b797cb20a867e0575a4c",
+     "ns": "calc.example.net/seq"
+    },
+    "computed_by": "calc.example.net#0123456789abcdef",
+    "inputs": [],
+    "issued": "2026-03-16T16:00:00.000000Z",
+    "licence": "CC0-1.0",
+    "proto": "datumesh/1",
+    "publisher": "calc.example.net/seq",
+    "sig": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "summary": "A recorded value.",
+    "tx": "2026-03-16T16:00:00.000000Z",
+    "type": "string",
+    "valid": {},
+    "value": "calc.example.net/seq(n:3)"
+   },
+   {
+    "asof": "2026-03-16T16:00:00.000000Z",
+    "cell": {
+     "args": {
+      "n": {
+       "type": "number",
+       "value": "2"
+      }
+     },
+     "fn": "val",
+     "fn_hash": "95b5402caa7e99b1c24b3748a6452b2400b0c2cef1538606b4f724141f26e603",
+     "ns": "calc.example.net/seq"
+    },
+    "computed_by": "calc.example.net#0123456789abcdef",
+    "inputs": [],
+    "issued": "2026-03-16T16:00:00.000000Z",
+    "licence": "CC0-1.0",
+    "proto": "datumesh/1",
+    "publisher": "calc.example.net/seq",
+    "sig": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "summary": "A recorded value.",
+    "tx": "2026-03-16T16:00:00.000000Z",
+    "type": "number",
+    "valid": {},
+    "value": "42"
+   },
+   {
+    "asof": "2026-03-16T16:00:00.000000Z",
+    "cell": {
+     "args": {
+      "n": {
+       "type": "number",
+       "value": "3"
+      }
+     },
+     "fn": "val",
+     "fn_hash": "95b5402caa7e99b1c24b3748a6452b2400b0c2cef1538606b4f724141f26e603",
+     "ns": "calc.example.net/seq"
+    },
+    "computed_by": "calc.example.net#0123456789abcdef",
+    "inputs": [],
+    "issued": "2026-03-16T16:00:00.000000Z",
+    "licence": "CC0-1.0",
+    "proto": "datumesh/1",
+    "publisher": "calc.example.net/seq",
+    "sig": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "summary": "A recorded value.",
+    "tx": "2026-03-16T16:00:00.000000Z",
+    "type": "number",
+    "valid": {},
+    "value": "7"
+   }
+  ]
+ }
+}
