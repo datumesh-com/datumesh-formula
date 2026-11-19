@@ -35,11 +35,11 @@ fn code_of(src: &str, returns: &str) -> String {
 // ---------------------------------------------------------------------------------------------
 // The vectors.
 
-/// The vendored vectors are the 1569 of `941d9b5` (spec-0.6.0: the 1474 of `c8896ad` and 95 new
-/// ones, 11 of them `call` vectors); this library runs the five kinds it implements (667) and
-/// skips the others (902: the verifier kinds are `datumesh-core`'s).
+/// The vendored vectors are the 1711 of `f78773a` (spec-0.6.1: the 1569 of `941d9b5` and 142 new
+/// ones, 17 of them `formula` and 3 `formula-eval`); this library runs the five kinds it implements
+/// (687) and skips the others (1024: the verifier kinds are `datumesh-core`'s).
 #[test]
-fn the_vectors_are_those_of_spec_0_6_0() {
+fn the_vectors_are_those_of_spec_0_6_1() {
     let count = |kind: &str| common::vectors_of_kind(kind).len();
     let mut all = 0;
     let mut stack = vec![common::root()];
@@ -53,12 +53,12 @@ fn the_vectors_are_those_of_spec_0_6_0() {
             }
         }
     }
-    assert_eq!(all, 1569);
-    let run = [("formula", 331), ("formula-eval", 175), ("call", 62), ("excel", 79), ("decimal", 20)];
+    assert_eq!(all, 1711);
+    let run = [("formula", 348), ("formula-eval", 178), ("call", 62), ("excel", 79), ("decimal", 20)];
     for (kind, n) in run {
         assert_eq!(count(kind), n, "{kind}");
     }
-    assert_eq!(run.iter().map(|(_, n)| n).sum::<usize>(), 667);
+    assert_eq!(run.iter().map(|(_, n)| n).sum::<usize>(), 687);
     // The class vectors are the new ones of those kinds, each in one group of the three test
     // commits (`common::classes`).
     assert_eq!(class_vectors("formula").len(), 36);
