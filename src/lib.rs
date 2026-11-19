@@ -33,6 +33,7 @@ pub mod call;
 mod casing_table;
 mod check;
 pub mod classes;
+pub mod coverage;
 pub mod decimal;
 pub mod definition;
 mod env;

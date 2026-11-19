@@ -14,6 +14,7 @@ use std::sync::Arc;
 use datumesh_core::json::Value;
 use datumesh_core::{Scalar, Type};
 
+use crate::coverage::{EvalObserver, NoObserver};
 use crate::env::{Env, EnvError, Function};
 use crate::eval::{
     self, Args, Binding, CellKey, ClassBinding, Fuel, Outcome, SliceKey, Stop, Version, World, ZERO_INSTANT,
@@ -298,12 +299,32 @@ impl MemoryWorld {
     /// [`MemoryWorld::fuel`].
     pub fn compute(&mut self, cell: &CellKey, asof: &str) -> Result<Computed, Code> {
         let f = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.function.clone();
-        self.compute_with(&cell.name, f, cell, asof)
+        self.compute_with(&cell.name, f, cell, asof, &mut NoObserver)
+    }
+
+    /// [`MemoryWorld::compute`] with an observer, told each branch arm of the cell's own body as
+    /// it is taken (the callees' arms are not reported). Always evaluates the cell (no memo), so
+    /// the arms are those of this evaluation; the result is the same as `compute`'s.
+    pub fn compute_observed(
+        &mut self,
+        cell: &CellKey,
+        asof: &str,
+        observer: &mut dyn EvalObserver,
+    ) -> Result<Computed, Code> {
+        let f = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.function.clone();
+        self.compute_with(&cell.name, f, cell, asof, observer)
     }
 
     /// [`MemoryWorld::compute`] for the function `f` (the one named `name`, or one pinned to by its
-    /// hash).
-    fn compute_with(&mut self, name: &str, f: Arc<Function>, cell: &CellKey, asof: &str) -> Result<Computed, Code> {
+    /// hash), told of the arms of its own body by `observer`.
+    fn compute_with(
+        &mut self,
+        name: &str,
+        f: Arc<Function>,
+        cell: &CellKey,
+        asof: &str,
+        observer: &mut dyn EvalObserver,
+    ) -> Result<Computed, Code> {
         if self.stack.contains(cell) {
             return Err(Code::Cycle);
         }
@@ -313,7 +334,7 @@ impl MemoryWorld {
         let compiled = self.compiled_of(name, &f)?;
         let saved = std::mem::replace(&mut self.asof, asof.to_string());
         self.stack.push(cell.clone());
-        let r = eval::evaluate(&compiled, &f, &cell.args, asof, self);
+        let r = eval::evaluate_observed(&compiled, &f, &cell.args, asof, self, observer);
         self.stack.pop();
         self.asof = saved;
         let outcome = r.map_err(|s| match s {
@@ -349,7 +370,7 @@ impl MemoryWorld {
         if let Some(r) = self.memo.get(&key) {
             return r.clone();
         }
-        let r = self.compute_with(name, f, cell, at).map(|c| {
+        let r = self.compute_with(name, f, cell, at, &mut NoObserver).map(|c| {
             Some(Version {
                 value: c.outcome.value.clone(),
                 receipt_hash: c.receipt_hash.clone(),

@@ -297,6 +297,76 @@ pub fn datumesh_formula::classes::Classes::default() -> Self
 impl core::fmt::Debug for datumesh_formula::classes::Classes
 pub fn datumesh_formula::classes::Classes::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for datumesh_formula::classes::Classes
+pub mod datumesh_formula::coverage
+pub enum datumesh_formula::coverage::BranchKind
+pub datumesh_formula::coverage::BranchKind::If
+pub datumesh_formula::coverage::BranchKind::Otherwise
+impl core::clone::Clone for datumesh_formula::coverage::BranchKind
+pub fn datumesh_formula::coverage::BranchKind::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::coverage::BranchKind
+impl core::cmp::PartialEq for datumesh_formula::coverage::BranchKind
+pub fn datumesh_formula::coverage::BranchKind::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::coverage::BranchKind
+pub fn datumesh_formula::coverage::BranchKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for datumesh_formula::coverage::BranchKind
+impl core::marker::StructuralPartialEq for datumesh_formula::coverage::BranchKind
+pub struct datumesh_formula::coverage::BranchPoint
+pub datumesh_formula::coverage::BranchPoint::arms: usize
+pub datumesh_formula::coverage::BranchPoint::id: datumesh_formula::ast::NodeId
+pub datumesh_formula::coverage::BranchPoint::kind: datumesh_formula::coverage::BranchKind
+impl core::clone::Clone for datumesh_formula::coverage::BranchPoint
+pub fn datumesh_formula::coverage::BranchPoint::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::coverage::BranchPoint
+impl core::cmp::PartialEq for datumesh_formula::coverage::BranchPoint
+pub fn datumesh_formula::coverage::BranchPoint::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_formula::coverage::BranchPoint
+pub fn datumesh_formula::coverage::BranchPoint::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::coverage::BranchPoint
+pub struct datumesh_formula::coverage::Coverage
+impl datumesh_formula::coverage::Coverage
+pub fn datumesh_formula::coverage::Coverage::contains(&self, datumesh_formula::ast::NodeId, usize) -> bool
+pub fn datumesh_formula::coverage::Coverage::covered(&self, &[datumesh_formula::coverage::BranchPoint]) -> usize
+pub fn datumesh_formula::coverage::Coverage::missing(&self, &[datumesh_formula::coverage::BranchPoint]) -> alloc::vec::Vec<(datumesh_formula::ast::NodeId, usize)>
+pub fn datumesh_formula::coverage::Coverage::new() -> datumesh_formula::coverage::Coverage
+pub fn datumesh_formula::coverage::Coverage::taken(&self) -> alloc::vec::Vec<(datumesh_formula::ast::NodeId, usize)>
+pub fn datumesh_formula::coverage::Coverage::total(&[datumesh_formula::coverage::BranchPoint]) -> usize
+pub fn datumesh_formula::coverage::Coverage::union(&mut self, &datumesh_formula::coverage::Coverage)
+impl core::clone::Clone for datumesh_formula::coverage::Coverage
+pub fn datumesh_formula::coverage::Coverage::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::coverage::Coverage
+impl core::cmp::PartialEq for datumesh_formula::coverage::Coverage
+pub fn datumesh_formula::coverage::Coverage::eq(&self, &Self) -> bool
+impl core::default::Default for datumesh_formula::coverage::Coverage
+pub fn datumesh_formula::coverage::Coverage::default() -> Self
+impl core::fmt::Debug for datumesh_formula::coverage::Coverage
+pub fn datumesh_formula::coverage::Coverage::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::coverage::Coverage
+impl datumesh_formula::coverage::EvalObserver for datumesh_formula::coverage::Coverage
+pub fn datumesh_formula::coverage::Coverage::branch_taken(&mut self, datumesh_formula::ast::NodeId, usize)
+pub struct datumesh_formula::coverage::EdgeFacts
+pub datumesh_formula::coverage::EdgeFacts::cell_inputs: alloc::vec::Vec<alloc::string::String>
+pub datumesh_formula::coverage::EdgeFacts::date_args: alloc::vec::Vec<alloc::string::String>
+pub datumesh_formula::coverage::EdgeFacts::divisors: alloc::vec::Vec<alloc::string::String>
+pub datumesh_formula::coverage::EdgeFacts::extent_args: alloc::vec::Vec<(alloc::string::String, datumesh_formula::Extent)>
+pub datumesh_formula::coverage::EdgeFacts::instant_args: alloc::vec::Vec<alloc::string::String>
+pub datumesh_formula::coverage::EdgeFacts::number_args: alloc::vec::Vec<alloc::string::String>
+pub datumesh_formula::coverage::EdgeFacts::slice_inputs: alloc::vec::Vec<alloc::string::String>
+impl core::clone::Clone for datumesh_formula::coverage::EdgeFacts
+pub fn datumesh_formula::coverage::EdgeFacts::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_formula::coverage::EdgeFacts
+impl core::cmp::PartialEq for datumesh_formula::coverage::EdgeFacts
+pub fn datumesh_formula::coverage::EdgeFacts::eq(&self, &Self) -> bool
+impl core::default::Default for datumesh_formula::coverage::EdgeFacts
+pub fn datumesh_formula::coverage::EdgeFacts::default() -> Self
+impl core::fmt::Debug for datumesh_formula::coverage::EdgeFacts
+pub fn datumesh_formula::coverage::EdgeFacts::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_formula::coverage::EdgeFacts
+pub trait datumesh_formula::coverage::EvalObserver
+pub fn datumesh_formula::coverage::EvalObserver::branch_taken(&mut self, datumesh_formula::ast::NodeId, usize)
+impl datumesh_formula::coverage::EvalObserver for datumesh_formula::coverage::Coverage
+pub fn datumesh_formula::coverage::Coverage::branch_taken(&mut self, datumesh_formula::ast::NodeId, usize)
+pub fn datumesh_formula::coverage::branches(&datumesh_formula::ast::Ast) -> alloc::vec::Vec<datumesh_formula::coverage::BranchPoint>
+pub fn datumesh_formula::coverage::edge_facts(&datumesh_formula::Compiled, &datumesh_formula::Signature) -> datumesh_formula::coverage::EdgeFacts
 pub mod datumesh_formula::decimal
 pub enum datumesh_formula::decimal::RoundMode
 pub datumesh_formula::decimal::RoundMode::Down
@@ -608,6 +678,7 @@ pub fn datumesh_formula::memory::MemoryWorld::versions(&mut self, &datumesh_form
 pub fn datumesh_formula::eval::cell_object(&datumesh_formula::Function, &datumesh_formula::eval::CellKey) -> datumesh_core::json::Value
 pub fn datumesh_formula::eval::cmp_scalar(&datumesh_core::model::Scalar, &datumesh_core::model::Scalar) -> core::cmp::Ordering
 pub fn datumesh_formula::eval::evaluate<W: datumesh_formula::eval::World + ?core::marker::Sized>(&datumesh_formula::Compiled, &datumesh_formula::Function, &datumesh_formula::eval::Args, &str, &mut W) -> core::result::Result<datumesh_formula::eval::Outcome, datumesh_formula::eval::Stop<<W as datumesh_formula::eval::World>::Error>>
+pub fn datumesh_formula::eval::evaluate_observed<W: datumesh_formula::eval::World + ?core::marker::Sized>(&datumesh_formula::Compiled, &datumesh_formula::Function, &datumesh_formula::eval::Args, &str, &mut W, &mut dyn datumesh_formula::coverage::EvalObserver) -> core::result::Result<datumesh_formula::eval::Outcome, datumesh_formula::eval::Stop<<W as datumesh_formula::eval::World>::Error>>
 pub fn datumesh_formula::eval::evaluate_value<W: datumesh_formula::eval::World + ?core::marker::Sized>(&datumesh_formula::Compiled, &datumesh_formula::Function, &datumesh_formula::eval::Args, &mut W) -> core::result::Result<datumesh_core::model::Scalar, datumesh_formula::eval::Stop<<W as datumesh_formula::eval::World>::Error>>
 pub fn datumesh_formula::eval::extent_cells(&datumesh_formula::Function, &datumesh_formula::eval::SliceKey) -> core::result::Result<alloc::vec::Vec<datumesh_formula::eval::Args>, datumesh_formula::Code>
 pub fn datumesh_formula::eval::member_bytes(usize) -> usize
@@ -644,6 +715,7 @@ pub fn datumesh_formula::memory::MemoryWorld::add_receipt(&mut self, &datumesh_c
 pub fn datumesh_formula::memory::MemoryWorld::bind(&mut self, &str, &datumesh_core::json::Value, &str) -> core::result::Result<(), datumesh_formula::EnvError>
 pub fn datumesh_formula::memory::MemoryWorld::bind_class(&mut self, &str, &datumesh_core::json::Value, &str) -> core::result::Result<(), datumesh_formula::EnvError>
 pub fn datumesh_formula::memory::MemoryWorld::compute(&mut self, &datumesh_formula::eval::CellKey, &str) -> core::result::Result<datumesh_formula::memory::Computed, datumesh_formula::Code>
+pub fn datumesh_formula::memory::MemoryWorld::compute_observed(&mut self, &datumesh_formula::eval::CellKey, &str, &mut dyn datumesh_formula::coverage::EvalObserver) -> core::result::Result<datumesh_formula::memory::Computed, datumesh_formula::Code>
 pub fn datumesh_formula::memory::MemoryWorld::computed(&self, &str) -> core::option::Option<&datumesh_formula::memory::Computed>
 pub fn datumesh_formula::memory::MemoryWorld::evaluated(&self) -> alloc::vec::Vec<(datumesh_formula::eval::CellKey, alloc::string::String, datumesh_formula::eval::Version)>
 pub fn datumesh_formula::memory::MemoryWorld::from_value(&datumesh_core::json::Value, &str) -> core::result::Result<datumesh_formula::memory::MemoryWorld, datumesh_formula::EnvError>

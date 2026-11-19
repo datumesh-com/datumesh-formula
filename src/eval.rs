@@ -23,6 +23,7 @@ use crate::ast::{Node, NodeId, Op, ReadArg};
 use crate::builtins::AGGREGATES;
 use crate::calendar::{self, BusinessDays, Date, Micros, Roll, Weekend, DAY_MICROS};
 use crate::check::{self, ConvertKind, KeyTy, NumUnit, Ty};
+use crate::coverage::{EvalObserver, NoObserver};
 use crate::decimal::{self, Decimal, Mode, RoundMode};
 use crate::env::{Extent, Function};
 use crate::{text, Code, Compiled};
@@ -338,8 +339,21 @@ pub fn evaluate<W: World + ?Sized>(
     asof: &str,
     world: &mut W,
 ) -> Result<Outcome, Stop<W::Error>> {
+    evaluate_observed(compiled, function, args, asof, world, &mut NoObserver)
+}
+
+/// [`evaluate`] with an observer, told each branch arm of the function's own body as it is
+/// taken (the arms of the callees are not reported). The result is the same as [`evaluate`]'s.
+pub fn evaluate_observed<W: World + ?Sized>(
+    compiled: &Compiled,
+    function: &Function,
+    args: &Args,
+    asof: &str,
+    world: &mut W,
+    observer: &mut dyn EvalObserver,
+) -> Result<Outcome, Stop<W::Error>> {
     let a = calendar::parse_instant(asof).ok_or(Stop::Code(Code::Domain))?;
-    let mut ev = Eval::new(compiled, function, args, Some(a), true, world)?;
+    let mut ev = Eval::new(compiled, function, args, Some(a), true, world, observer)?;
     let v = ev.node(compiled.ast.root)?;
     let value = to_scalar(&v)?;
     let mut receipt_asof = ev.max_asof.clone();
@@ -372,7 +386,8 @@ pub fn evaluate_value<W: World + ?Sized>(
     args: &Args,
     world: &mut W,
 ) -> Result<Scalar, Stop<W::Error>> {
-    let mut ev = Eval::new(compiled, function, args, None, false, world)?;
+    let mut none = NoObserver;
+    let mut ev = Eval::new(compiled, function, args, None, false, world, &mut none)?;
     let v = ev.node(compiled.ast.root)?;
     Ok(to_scalar(&v)?)
 }
@@ -385,6 +400,7 @@ impl<'a, W: World + ?Sized> Eval<'a, W> {
         asof: Option<Micros>,
         track: bool,
         world: &'a mut W,
+        obs: &'a mut dyn EvalObserver,
     ) -> Result<Eval<'a, W>, Stop<W::Error>> {
         let mut scope = Vec::new();
         for (name, decl) in &function.signature.args {
@@ -407,6 +423,7 @@ impl<'a, W: World + ?Sized> Eval<'a, W> {
             max_tx: None,
             max_asof: None,
             bindings: BTreeMap::new(),
+            obs,
         })
     }
 }
@@ -602,6 +619,8 @@ struct Eval<'a, W: World + ?Sized> {
     max_tx: Option<String>,
     max_asof: Option<String>,
     bindings: BTreeMap<String, String>,
+    /// Told of each branch arm of this body that is taken.
+    obs: &'a mut dyn EvalObserver,
 }
 
 /// A narrowing of a lookup's slice read along its dimension (15.13).
@@ -617,6 +636,11 @@ type R<T, E> = Result<T, Stop<E>>;
 impl<W: World + ?Sized> Eval<'_, W> {
     fn charge(&mut self, n: u64) -> Result<(), Code> {
         self.world.charge(n)
+    }
+
+    /// Reports the arm `arm` of the branch point `id` of this body.
+    fn observe(&mut self, id: NodeId, arm: usize) {
+        self.obs.branch_taken(id, arm);
     }
 
     fn ty(&self, id: NodeId) -> Option<&Ty> {
@@ -730,8 +754,14 @@ impl<W: World + ?Sized> Eval<'_, W> {
                 _ => unreachable!("binary operators are evaluated as spines"),
             },
             Node::If { cond, then, els } => match self.node(*cond)? {
-                V::Bool(true) => self.node(*then),
-                V::Bool(false) => self.node(*els),
+                V::Bool(true) => {
+                    self.observe(id, 0);
+                    self.node(*then)
+                }
+                V::Bool(false) => {
+                    self.observe(id, 1);
+                    self.node(*els)
+                }
                 _ => Err(Code::Type.into()),
             },
             Node::Let { name, value, body } => {
@@ -1087,7 +1117,14 @@ impl<W: World + ?Sized> Eval<'_, W> {
     #[allow(unused_variables)]
     fn b_otherwise(&mut self, id: NodeId, f: &str, args: &[NodeId], named: &[(String, NodeId)]) -> R<V, W::Error> {
         match self.node(args[0]) {
-            Err(Stop::Code(c)) if c.is_catchable() => self.node(args[1]),
+            Ok(v) => {
+                self.observe(id, 0);
+                Ok(v)
+            }
+            Err(Stop::Code(c)) if c.is_catchable() => {
+                self.observe(id, 1);
+                self.node(args[1])
+            }
             r => r,
         }
     }

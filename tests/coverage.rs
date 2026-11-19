@@ -42,7 +42,9 @@ fn sig(args: &[(&str, &str)], returns: &str) -> String {
         .map(|(n, t)| match *t {
             "number" => format!(r#""{n}":{{"type":"number","valid":false,"unit":"1"}}"#),
             "date" | "instant" => format!(r#""{n}":{{"type":"{t}","valid":true}}"#),
-            "date-range" => format!(r#""{n}":{{"type":"date","valid":true,"extent":{{"lo":"2026-01-01","hi":"2026-12-31"}}}}"#),
+            "date-range" => {
+                format!(r#""{n}":{{"type":"date","valid":true,"extent":{{"lo":"2026-01-01","hi":"2026-12-31"}}}}"#)
+            }
             "number-extent" => {
                 format!(r#""{n}":{{"type":"number","valid":false,"unit":"1","extent":{{"lo":"0","hi":"9"}}}}"#)
             }
@@ -50,7 +52,8 @@ fn sig(args: &[(&str, &str)], returns: &str) -> String {
         })
         .collect();
     let order: Vec<String> = args.iter().map(|(n, _)| format!("\"{n}\"")).collect();
-    let ret = if returns == "number" { r#"{"type":"number","unit":"1"}"#.to_string() } else { format!("\"{returns}\"") };
+    let ret =
+        if returns == "number" { r#"{"type":"number","unit":"1"}"#.to_string() } else { format!("\"{returns}\"") };
     format!(r#"{{"args":{{{}}},"order":[{}],"returns":{ret}}}"#, decls.join(","), order.join(","))
 }
 
@@ -64,7 +67,18 @@ fn env_for(name: &str, signature: &str, callees: &[(&str, Value)]) -> Env {
     let b = base();
     let s = Signature::from_value(&json::parse(signature.as_bytes()).unwrap()).unwrap();
     let mut env = Env::new(name, s);
-    env.add_function("data.example.org/daily", b.get("world").unwrap().get("functions").unwrap().get("data.example.org/daily").unwrap().get("descriptor").unwrap()).unwrap();
+    env.add_function(
+        "data.example.org/daily",
+        b.get("world")
+            .unwrap()
+            .get("functions")
+            .unwrap()
+            .get("data.example.org/daily")
+            .unwrap()
+            .get("descriptor")
+            .unwrap(),
+    )
+    .unwrap();
     for (n, d) in callees {
         env.add_function(n, d).unwrap();
     }
@@ -349,7 +363,8 @@ fn evaluate_observed_is_the_same_hook_below_the_world() {
     let function = datumesh_formula::Function::from_value(&descriptor(&f.compiled, &s)).unwrap();
     let mut world = f.world.clone();
     let mut cov = Coverage::new();
-    let out = evaluate_observed(&f.compiled, &function, &args(&[("x", Type::Number, "-1")]), ASOF, &mut world, &mut cov);
+    let out =
+        evaluate_observed(&f.compiled, &function, &args(&[("x", Type::Number, "-1")]), ASOF, &mut world, &mut cov);
     match out {
         Ok(o) => assert_eq!(o.value, Scalar::Number("2".to_string())),
         Err(Stop::Code(c)) => panic!("{}", c.as_str()),
@@ -429,7 +444,10 @@ fn cell_reads_are_inputs_that_can_be_absent_and_slices_are_apart() {
     let f = edge_facts(&c, &sg);
     assert_eq!(names(&f.slice_inputs), ["data.example.org/daily"]);
     // Both kinds of the same function, and several reads of one function, once each.
-    let (c, sg) = compile("data.example.org/daily(date: d) + sum(data.example.org/daily(date: *)) + data.example.org/daily(date: d)", eur);
+    let (c, sg) = compile(
+        "data.example.org/daily(date: d) + sum(data.example.org/daily(date: *)) + data.example.org/daily(date: d)",
+        eur,
+    );
     let f = edge_facts(&c, &sg);
     assert_eq!(names(&f.cell_inputs), ["data.example.org/daily"]);
     assert_eq!(names(&f.slice_inputs), ["data.example.org/daily"]);
@@ -443,5 +461,5 @@ fn cell_reads_are_inputs_that_can_be_absent_and_slices_are_apart() {
 fn branch_points_are_a_plain_value() {
     let p = BranchPoint { id: 3, kind: BranchKind::If, arms: 2 };
     assert_eq!(p.clone(), p);
-    assert_eq!(format!("{p:?}").contains("arms"), true);
+    assert!(format!("{p:?}").contains("arms"));
 }

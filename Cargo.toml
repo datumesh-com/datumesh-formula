@@ -1,6 +1,6 @@
 [package]
 name = "datumesh-formula"
-version = "0.4.0"
+version = "0.4.1"
 description = "The Datumesh formula dialect: parser, resolver, type and unit checker, printer, canonical AST hash, exact decimal arithmetic and an evaluator with lineage and fuel."
 edition = "2021"
 rust-version = "1.97"

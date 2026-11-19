@@ -2,7 +2,28 @@
 
 All notable changes to `datumesh-formula`.
 
-## 0.4.0 (unreleased)
+## 0.4.1 (unreleased)
+
+Patch: additions only (no existing item changes). Build 2 Part 3, E5 (branch coverage), for the
+mesh's `E_TESTS_MISSING` (the contract's "Branch coverage", formula 0.4.1).
+
+- `coverage::branches(&Ast)`: the branch points of a body, ascending by id (the arena index of the
+  node): each `if` (two arms: then, else) and each `otherwise` (two arms: the first argument gave a
+  value, or it faulted with a catchable code and the fallback was taken). Unreachable nodes are not
+  points.
+- `coverage::EvalObserver` (`branch_taken(id, arm)`), `coverage::Coverage` (a set of taken
+  `(id, arm)`: `new`, `taken`, `contains`, `union`, `covered`, `total`, `missing`), and
+  `coverage::BranchPoint` / `BranchKind`. An arm is reported when taken, before it is evaluated, so
+  an arm that then faults is still recorded; the arms of callees are not reported.
+- `eval::evaluate_observed` and `MemoryWorld::compute_observed`: the evaluation with an observer.
+  `eval::evaluate` is `evaluate_observed` with a no-op observer; its results are unchanged.
+- `coverage::edge_facts(&Compiled, &Signature) -> EdgeFacts`: the derived edge-case facts of a body:
+  the `number` arguments in a divisor (the right operand of `/`, the second argument of `mod`), the
+  cell reads and the slice reads (by function name), the declared `number`, `date` and `instant`
+  arguments, and the `date`/`instant` arguments with a declared extent. Static: a divisor in an arm
+  no input reaches counts.
+
+## 0.4.0
 
 - 0.4.0: spec-0.6.0 request grammar — digit-led words such as 2Chr in string positions; previously E_PARSE_URI.
   A digit-led word (`2Chr`, `1Cor`, `1_kings`) in a call reads as the string it spells, labelled or positional,
