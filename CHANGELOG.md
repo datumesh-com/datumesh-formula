@@ -2,10 +2,13 @@
 
 All notable changes to `datumesh-formula`.
 
-## 0.4.1 (unreleased)
+## 0.5.0 (unreleased)
 
-Patch: additions only (no existing item changes). Build 2 Part 3, E5 (branch coverage), for the
-mesh's `E_TESTS_MISSING` (the contract's "Branch coverage", formula 0.4.1).
+- On datumesh-engine 0.5 and datumesh-store 0.5 (Build 2): the engine splits a deep recursion
+  itself, so `invalid/formula-eval-depth`, which the spec lists as evaluator-only, is no longer
+  run through the engine in the tests. The public API is unchanged by the move.
+
+Additions (Build 2 Part 3, E5: branch coverage, for the mesh's `E_TESTS_MISSING`):
 
 - `coverage::branches(&Ast)`: the branch points of a body, ascending by id (the arena index of the
   node): each `if` (two arms: then, else) and each `otherwise` (two arms: the first argument gave a
