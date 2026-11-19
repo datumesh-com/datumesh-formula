@@ -180,7 +180,7 @@ fn what_is_not_a_digit_led_word_is_as_before() {
     let v = verse_env();
     assert_eq!(code("datumesh.example.org/verse(bible, 2024-03-15x, 1, 1)", &v), "E_PARSE_URI");
     assert_eq!(code("datumesh.example.org/verse(bible, 2-Chr, 1, 1)", &v), "E_PARSE_URI");
-    assert_eq!(code("datumesh.example.org/verse(bible, 2.Chr, 1, 1)", &v), "E_PARSE_URI");
+    assert_eq!(code("datumesh.example.org/verse(bible, 2.Chr, 1, 1)", &v), "E_CANON_NUMBER"); // `2.` is a malformed number: its type's code (5.8), as before
     assert_eq!(code("datumesh.example.org/verse(bible, 2 Chr, 1, 1)", &v), "E_PARSE_URI");
     // A number the lexer accepts is a number in a number position and the string of its text in a string position.
     assert_eq!(
