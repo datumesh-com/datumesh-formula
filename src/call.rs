@@ -326,6 +326,8 @@ fn split_query(text: &str) -> (&str, Option<&str>) {
 enum Bare {
     Number,
     Word,
+    /// A digit-led word (spec-0.6.0, C3): a value only in a string position.
+    Digit,
     Date,
     Instant,
     Period,
@@ -459,6 +461,7 @@ impl Reader<'_> {
             Kind::Instant => Val::Bare(Bare::Instant, t.text.clone()),
             Kind::Period => Val::Bare(Bare::Period, t.text.clone()),
             Kind::Word => Val::Bare(Bare::Word, t.text.clone()),
+            Kind::DigitWord => Val::Bare(Bare::Digit, t.text.clone()),
             Kind::Qualified if self.is(1, "(") => {
                 let name = t.text.clone();
                 self.i += 1;
@@ -603,6 +606,10 @@ impl Resolving<'_> {
     fn scalar(ty: Type, val: &Val) -> Result<Arg, CallError> {
         let v = match (val, ty) {
             (Val::Open, _) => return Ok(Arg::Slice),
+            (Val::Bare(Bare::Digit, t), Type::String) => lexical_of(ty, t)?,
+            (Val::Bare(Bare::Digit, _), _) => {
+                return fail("E_CANON_TYPE", format!("a digit-led word in a {} position", ty.as_str()))
+            }
             (Val::Quoted(t) | Val::Bare(_, t), Type::String | Type::Blob) => lexical_of(ty, t)?,
             (Val::Bare(Bare::Number, t), Type::Number) => lexical_of(ty, t)?,
             (Val::Bare(Bare::Date, t), Type::Date) => lexical_of(ty, t)?,
@@ -830,7 +837,7 @@ impl Resolving<'_> {
 pub fn parse_call(text: &str, env: &dyn CallEnv) -> Result<Call, CallError> {
     let (read, query) = split_query(text);
     // 1. A read of literals.
-    let tokens = lex::lex(read).or_else(|e| {
+    let tokens = lex::lex_request(read).or_else(|e| {
         let code = match e.code {
             Code::Number => "E_CANON_NUMBER",
             Code::String => "E_CANON_STRING",

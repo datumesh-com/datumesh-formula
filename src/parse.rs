@@ -685,8 +685,9 @@ impl<'a> Parser<'a> {
                 "=" | "<>" | "<" | "<=" | ">" | ">=" => Err(err(Code::Chain, "comparisons do not chain: write and")),
                 _ => Err(self.unexpected("an expression")),
             },
-            // A pin is lexed only after a name or alias, and consumed with it.
-            Kind::End | Kind::Pin => Err(self.unexpected("an expression")),
+            // A pin is lexed only after a name or alias, and consumed with it. A digit-led word is
+            // lexed only in a request (C3), never in a body.
+            Kind::End | Kind::Pin | Kind::DigitWord => Err(self.unexpected("an expression")),
         }
     }
 

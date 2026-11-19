@@ -2,6 +2,13 @@
 
 All notable changes to `datumesh-formula`.
 
+## 0.4.0 (unreleased)
+
+- 0.4.0: spec-0.6.0 request grammar — digit-led words such as 2Chr in string positions; previously E_PARSE_URI.
+  A digit-led word (`2Chr`, `1Cor`, `1_kings`) in a call reads as the string it spells, labelled or positional,
+  in a class receiver's key or a method argument; anywhere else `E_CANON_TYPE`. `2D` stays a period token,
+  `2024-03-15x` is `E_PARSE_URI` (was `E_CANON_DATE`), and bodies are unchanged.
+
 ## 0.3.0 (unreleased)
 
 For spec-0.5.0 (the commit `6d5633e` of [datumesh-spec](https://github.com/datumesh-com/datumesh-spec),

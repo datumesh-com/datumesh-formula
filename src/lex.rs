@@ -17,6 +17,10 @@ pub(crate) enum Kind {
     /// `@` and 64 lowercase hex digits directly after a qualified name or alias (L4a, a pin).
     Pin,
     Number,
+    /// Since spec-0.6.0 (C3): a request's digit-led word, a run beginning with a digit, continuing
+    /// with letters, digits or `_` and holding a letter, that the number and period lexers do not
+    /// accept whole. Only in a request, and a value only in a string position.
+    DigitWord,
     /// A period key (L5 with D, M or Y, 15.15): `1M`, `10Y`; a string in a key position.
     Period,
     Str,
@@ -100,6 +104,16 @@ fn pin_after(src: &str, i: usize, out: &mut Vec<Token>) -> Result<usize, Error> 
 
 /// Lex the whole body.
 pub(crate) fn lex(src: &str) -> Result<Vec<Token>, Error> {
+    lex_with(src, false)
+}
+
+/// Lex a request (5.8, since spec-0.6.0 C3): as a body, except that a digit-led word is a
+/// [`Kind::DigitWord`] and a date followed directly by a letter, digit or `_` is `E_PARSE_URI`.
+pub(crate) fn lex_request(src: &str) -> Result<Vec<Token>, Error> {
+    lex_with(src, true)
+}
+
+fn lex_with(src: &str, request: bool) -> Result<Vec<Token>, Error> {
     if src.len() > MAX_BODY {
         return Err(Error::new(Code::Limit, "the body is over 1 MiB"));
     }
@@ -131,6 +145,9 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, Error> {
                 continue;
             }
             let text = &src[i..i + 10];
+            if request && b.get(i + 10).is_some_and(|&c| is_word_char(c)) {
+                return Err(err(Code::Syntax, i, format!("not a call: {text} is followed by a word character")));
+            }
             if b.get(i + 10).is_some_and(|&c| is_word_char(c)) || Date::parse(text).is_none() {
                 return Err(err(Code::Date, i, format!("not a date: {text}")));
             }
@@ -171,54 +188,17 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, Error> {
             i = pin_after(src, j, &mut out)?;
             continue;
         }
-        // L5, L6: a number and its unit suffix.
+        // L5, L6: a number and its unit suffix; in a request, possibly a digit-led word.
         if c.is_ascii_digit() || (c == b'.' && b.get(i + 1).is_some_and(u8::is_ascii_digit)) {
-            let mut j = i;
-            while j < b.len() && b[j].is_ascii_digit() {
-                j += 1;
-            }
-            let mut integer = true;
-            // The run: digits and points, stopping before "..".
-            while j < b.len() && b[j] == b'.' && b.get(j + 1) != Some(&b'.') {
-                integer = false;
-                j += 1;
-                while j < b.len() && b[j].is_ascii_digit() {
-                    j += 1;
+            if request && c.is_ascii_digit() {
+                if let Some(end) = digit_led_end(src, i) {
+                    out.push(Token { kind: Kind::DigitWord, text: src[i..end].to_string(), unit: None, pos: start });
+                    i = end;
+                    continue;
                 }
             }
-            if j < b.len() && (b[j] == b'e' || b[j] == b'E') {
-                let k = if matches!(b.get(j + 1), Some(b'+') | Some(b'-')) { j + 2 } else { j + 1 };
-                if b.get(k).is_some_and(u8::is_ascii_digit) {
-                    j = k;
-                    while j < b.len() && b[j].is_ascii_digit() {
-                        j += 1;
-                    }
-                    integer = false;
-                }
-            }
-            let text = &src[i..j];
-            if text.len() > MAX_CHARS || Decimal::parse(text).is_none() {
-                return Err(err(Code::Number, i, format!("not a canonical number: {text}")));
-            }
-            // Period keys: digits directly followed by D, M or Y.
-            if integer
-                && matches!(b.get(j), Some(b'D') | Some(b'M') | Some(b'Y'))
-                && !b.get(j + 1).is_some_and(|&c| is_word_char(c))
-            {
-                out.push(Token { kind: Kind::Period, text: src[i..j + 1].to_string(), unit: None, pos: start });
-                i = j + 1;
-                continue;
-            }
-            let mut k = j;
-            while k < b.len() && (b[k] == b' ' || b[k] == b'\t') {
-                k += 1;
-            }
-            let (unit, after) = unit_suffix(src, k)?;
-            let next = match unit {
-                Some(_) => after,
-                None => j,
-            };
-            out.push(Token { kind: Kind::Number, text: text.to_string(), unit, pos: start });
+            let (tok, next) = number_token(src, i)?;
+            out.push(tok);
             i = next;
             continue;
         }
@@ -277,6 +257,75 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, Error> {
     }
     out.push(Token { kind: Kind::End, text: String::new(), unit: None, pos: b.len() });
     Ok(out)
+}
+
+/// L5, L6 and the period keys (15.15): the number, period or number with unit token at `i`, and
+/// where it ends.
+fn number_token(src: &str, i: usize) -> Result<(Token, usize), Error> {
+    let b = src.as_bytes();
+    let mut j = i;
+    while j < b.len() && b[j].is_ascii_digit() {
+        j += 1;
+    }
+    let mut integer = true;
+    // The run: digits and points, stopping before "..".
+    while j < b.len() && b[j] == b'.' && b.get(j + 1) != Some(&b'.') {
+        integer = false;
+        j += 1;
+        while j < b.len() && b[j].is_ascii_digit() {
+            j += 1;
+        }
+    }
+    if j < b.len() && (b[j] == b'e' || b[j] == b'E') {
+        let k = if matches!(b.get(j + 1), Some(b'+') | Some(b'-')) { j + 2 } else { j + 1 };
+        if b.get(k).is_some_and(u8::is_ascii_digit) {
+            j = k;
+            while j < b.len() && b[j].is_ascii_digit() {
+                j += 1;
+            }
+            integer = false;
+        }
+    }
+    let text = &src[i..j];
+    if text.len() > MAX_CHARS || Decimal::parse(text).is_none() {
+        return Err(err(Code::Number, i, format!("not a canonical number: {text}")));
+    }
+    // Period keys: digits directly followed by D, M or Y.
+    if integer
+        && matches!(b.get(j), Some(b'D') | Some(b'M') | Some(b'Y'))
+        && !b.get(j + 1).is_some_and(|&c| is_word_char(c))
+    {
+        return Ok((Token { kind: Kind::Period, text: src[i..j + 1].to_string(), unit: None, pos: i }, j + 1));
+    }
+    let mut k = j;
+    while k < b.len() && (b[k] == b' ' || b[k] == b'\t') {
+        k += 1;
+    }
+    let (unit, after) = unit_suffix(src, k)?;
+    let next = match unit {
+        Some(_) => after,
+        None => j,
+    };
+    Ok((Token { kind: Kind::Number, text: text.to_string(), unit, pos: i }, next))
+}
+
+/// Since spec-0.6.0 (C3, 5.8): the end of the digit-led word at `i` in a request. The run of word
+/// characters there must hold a letter, and the number lexer must not accept it whole (as a
+/// number, a period, or a number with a unit covering the run). So `1e3`, which is not a canonical
+/// number, is a word; a run without a letter (`01`) is never one.
+fn digit_led_end(src: &str, i: usize) -> Option<usize> {
+    let b = src.as_bytes();
+    let mut j = i;
+    while j < b.len() && is_word_char(b[j]) {
+        j += 1;
+    }
+    if !b[i..j].iter().any(u8::is_ascii_alphabetic) {
+        return None;
+    }
+    match number_token(src, i) {
+        Ok((_, end)) if end >= j => None,
+        _ => Some(j),
+    }
 }
 
 /// `4DIGIT "-" 2DIGIT "-" 2DIGIT` at `i`, not preceded by a word character.

@@ -2,8 +2,8 @@
 
 The formula dialect of [Datumesh](https://datumesh.com): `code.lang = "formula"`, the default
 language of computed functions, an Excel-compatible expression language over cells. It implements
-section 15, the calls of 5.8 and the classes of section 16 of [spec-0.5.0](https://github.com/datumesh-com/datumesh-spec)
-(commit `c8896ad`, untagged): the lexer and PEG
+section 15, the calls of 5.8 and the classes of section 16 of [spec-0.6.0](https://github.com/datumesh-com/datumesh-spec)
+(commit `640898c`, untagged): the lexer and PEG
 grammar, resolution to the canonical AST and its hash, the printer that gives `code.body`, the type
 and unit checker that derives `inputs`, exact decimal arithmetic with the 40-digit transcendental
 algorithms, units, angles and haversine, an evaluator with normative fuel, faults and lineage, the
@@ -254,8 +254,8 @@ cargo in a container on the `datumesh` network next to a `datumesh-pg` container
 `tools/package_test.sh` is the packaging test, `tools/public_api.sh` checks `public-api.txt`,
 `tools/crosscheck.sh` the cross-language check, `tools/decimal_crosscheck.sh` the decimals. `tools/gen_cases.py`, `tools/reference_runner.py` and
 `tools/compare.py` run generated cases through this crate (`examples/formula_runner.rs`) and through
-another implementation and compare them. `spec-vectors/` is a copy of the spec's vectors at `c8896ad` (the branch `spec-0.5.0` of
-[datumesh-spec](https://github.com/datumesh-com/datumesh-spec), untagged at the time of writing; 1,474, with `units.md`);
+another implementation and compare them. `spec-vectors/` is a copy of the spec's vectors at `640898c` (the branch `spec-0.6.0` of
+[datumesh-spec](https://github.com/datumesh-com/datumesh-spec), untagged at the time of writing; 1,564, with `units.md`);
 this crate runs the kinds `formula`, `formula-eval`, `call`, `excel` and `decimal` (656) and skips the rest
 (818, the verifier's kinds, which `datumesh-core` runs). `tests/vectors-local/` holds a few more `formula-eval`
 vectors over a small class world, written by `tools/gen_class_vectors.py` with the reference tool's results.
