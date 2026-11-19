@@ -2,6 +2,30 @@
 
 All notable changes to `datumesh-formula`.
 
+## 0.5.1
+
+For spec-0.6.1 (the branch `spec-0.6.1` of [datumesh-spec](https://github.com/datumesh-com/datumesh-spec),
+unpushed at the time of writing; `spec-vectors/` is its vectors, commit `f78773a`). The formula
+rules of its section 15 and the names of section 2.3:
+
+- **DNS names in later segments** (15.2 L3, 15.3, 15.4, D109). A segment after the host may be a DNS
+  name (2.1), so `datumesh.com/relay/ecb.europa.eu/rate(d: d)` is a read. In a body, a run after a
+  `/` that contains `.` or `-` is a DNS segment only when a `/` follows it: `ecb.europa.eu/rate(d: d)-1`
+  is a read minus one, `…/rate(d: d)/…/yield(d: d)` divides two reads, and `.status()` after a call
+  is still a method call. The last segment is a name, as before, so a `.` or `-` after it ends the
+  name. A run followed by `/` that is neither a name nor a DNS name is `E_FORMULA_NAME`.
+- `names::is_function_name` takes a DNS name in a middle segment (at most 253 characters, the
+  segment rules of 2.1); the last segment is a name of at most 64 characters, and the whole name
+  keeps its 512.
+- Every vector of the previous revision keeps its result. The new vectors are `formula/dns-segment-*`
+  (8), `formula-eval/dns-segment-*` (3) and `invalid/formula-dns-segment-*` (9).
+- The host alone decides a name's authority and rootedness (2.5): nothing here changes that. A
+  DNS name in a later segment is a label only.
+
+Libraries before 0.5.1 refuse a dotted later segment with `E_FORMULA_NAME`. This release needs
+`datumesh-core` 0.3.10 (the DNS segments in its name checks), which is not released at the time of
+writing: see the `Cargo.toml` requirement.
+
 ## 0.5.0 (unreleased)
 
 - On datumesh-engine 0.5 and datumesh-store 0.5 (Build 2): the engine splits a deep recursion

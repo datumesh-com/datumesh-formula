@@ -44,7 +44,9 @@ pub fn is_dns_name(s: &str) -> bool {
     !labels[labels.len() - 1].bytes().all(|c| c.is_ascii_digit())
 }
 
-/// A fully qualified function name (2.3): `dns-name 1*( "/" name )`, at most 512 characters.
+/// A fully qualified function name (2.3, since `spec-0.6.1`): `dns-name *( "/" segment ) "/" name`,
+/// where a segment after the host is a name or a DNS name, and the last segment is a name. At
+/// most 512 characters.
 pub fn is_function_name(s: &str) -> bool {
     if s.len() > 512 {
         return false;
@@ -52,7 +54,10 @@ pub fn is_function_name(s: &str) -> bool {
     let mut parts = s.split('/');
     let host = parts.next().unwrap_or("");
     let rest: Vec<&str> = parts.collect();
-    is_dns_name(host) && !rest.is_empty() && rest.iter().all(|p| is_name(p))
+    let Some((last, middle)) = rest.split_last() else {
+        return false;
+    };
+    is_dns_name(host) && middle.iter().all(|p| is_name(p) || is_dns_name(p)) && is_name(last)
 }
 
 #[cfg(test)]
@@ -73,5 +78,19 @@ mod tests {
         assert!(!is_function_name("Rates.Example.org/fx_rate"));
         assert!(!is_function_name("rates.example.org/fx__rate"));
         assert!(!is_function_name("1.2/f"));
+        assert!(is_function_name("datumesh.com/relay/ecb.europa.eu/fx_reference"));
+        assert!(is_function_name("datumesh.com/relay/bank-x.example/rate"));
+        assert!(is_function_name("datumesh.com/relay/xn--bcher-kva.example/rate"));
+        assert!(is_function_name("datumesh.com/relay/ecb.europa.eu/v2.example/rate"));
+        assert!(!is_function_name("datumesh.com/relay/ECB.europa.eu/rate"));
+        assert!(!is_function_name("datumesh.com/relay/ecb.europa.eu./rate"));
+        assert!(!is_function_name("datumesh.com/relay/ecb_x.europa.eu/rate"));
+        assert!(!is_function_name("datumesh.com/relay/ecb..eu/rate"));
+        assert!(!is_function_name("datumesh.com/relay/-ecb.europa.eu/rate"));
+        assert!(!is_function_name("datumesh.com/relay/10.0.0.1/rate"));
+        assert!(!is_function_name("datumesh.com/relay/bank-x/rate"));
+        assert!(!is_function_name("datumesh.com/relay/ecb.europa.eu"));
+        assert!(!is_function_name("datumesh.com/relay/ecb.europa.eu/rate.x"));
+        assert!(!is_function_name("datumesh.com/relay/ecb.europa.eu/rate-x"));
     }
 }

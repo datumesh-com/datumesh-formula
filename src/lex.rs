@@ -339,7 +339,12 @@ fn date_shape(b: &[u8], i: usize) -> bool {
 }
 
 /// The end of a run shaped like a qualified name at `i`: host characters with at least one dot,
-/// the last label not all digits, then one or more `/segment`.
+/// the last label not all digits, then one or more `/segment` (SPEC 15.2 L3, since `spec-0.6.1`).
+///
+/// A segment after the host is read as a run of letters, digits, `_`, `.` and `-`. A run that
+/// contains `.` or `-` is a DNS segment only when a `/` follows it; otherwise it is the last
+/// segment, a name, read as the longest prefix of word characters, so a `.` or `-` after it ends
+/// the name. A run that is neither is left to `names::is_function_name`, which refuses it.
 fn qualified_shape(b: &[u8], i: usize) -> Option<usize> {
     let mut j = i;
     while j < b.len() && (b[j].is_ascii_alphanumeric() || b[j] == b'-' || b[j] == b'.') {
@@ -356,13 +361,30 @@ fn qualified_shape(b: &[u8], i: usize) -> Option<usize> {
     if last.is_empty() || last.iter().all(u8::is_ascii_digit) {
         return None;
     }
-    while j < b.len() && b[j] == b'/' {
-        j += 1;
-        while j < b.len() && is_word_char(b[j]) {
-            j += 1;
+    loop {
+        // b[j] is the `/` before the segment.
+        let start = j + 1;
+        let mut k = start;
+        while k < b.len() && (b[k].is_ascii_alphanumeric() || matches!(b[k], b'_' | b'.' | b'-')) {
+            k += 1;
         }
+        let dotted = b[start..k].iter().any(|&c| c == b'.' || c == b'-');
+        if dotted && b.get(k) == Some(&b'/') {
+            // A DNS segment: the whole run, checked by the caller.
+            j = k;
+            continue;
+        }
+        let mut e = start;
+        while e < b.len() && is_word_char(b[e]) {
+            e += 1;
+        }
+        if !dotted && b.get(e) == Some(&b'/') {
+            // A plain name segment, not the last one.
+            j = e;
+            continue;
+        }
+        return Some(e);
     }
-    Some(j)
 }
 
 /// The end of `index:<period>=<canonical number>` at `k`, the longest canonical match.
