@@ -1,5 +1,5 @@
-//! Loading the vendored spec vectors (`spec-vectors/`: every vector of datumesh-spec at `c8896ad`, the
-//! spec-0.5.0 branch, 1474 of them).
+//! Loading the vendored spec vectors (`spec-vectors/`: every vector of datumesh-spec at `640898c`, the
+//! build2-part1 branch, spec-0.6.0, 1564 of them).
 #![allow(dead_code)]
 
 pub mod check;

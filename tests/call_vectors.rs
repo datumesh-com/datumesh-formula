@@ -10,10 +10,11 @@ use datumesh_formula::call::{parse_call, CallEnv, MapCallEnv};
 
 #[test]
 fn every_call_vector() {
-    // The vectors of spec-0.4.2: the class vectors of spec-0.5.0 are `classes_requests.rs`'s.
+    // The vectors of spec-0.4.2 and the digit-led vectors of spec-0.6.0 (C3: 8 valid, 3 invalid): the
+    // class vectors of spec-0.5.0 are `classes_requests.rs`'s.
     let t = common::check::tally(common::old_vectors_of_kind("call"), common::check::call_vector);
     assert!(t.failures.is_empty(), "{}", t.failures.join("\n"));
-    assert_eq!((t.valid, t.invalid), (10, 17));
+    assert_eq!((t.valid, t.invalid), (18, 20));
 }
 
 /// The unpinned URI a call gives is the one URI of its cell reference (5.2): the core's parse
