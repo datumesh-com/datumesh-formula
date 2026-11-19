@@ -35,9 +35,9 @@ fn code_of(src: &str, returns: &str) -> String {
 // ---------------------------------------------------------------------------------------------
 // The vectors.
 
-/// The vendored vectors are the 1564 of `640898c` (spec-0.6.0: the 1474 of `c8896ad` and 90 new
+/// The vendored vectors are the 1569 of `941d9b5` (spec-0.6.0: the 1474 of `c8896ad` and 95 new
 /// ones, 11 of them `call` vectors); this library runs the five kinds it implements (667) and
-/// skips the others (897: the verifier kinds are `datumesh-core`'s).
+/// skips the others (902: the verifier kinds are `datumesh-core`'s).
 #[test]
 fn the_vectors_are_those_of_spec_0_6_0() {
     let count = |kind: &str| common::vectors_of_kind(kind).len();
@@ -53,7 +53,7 @@ fn the_vectors_are_those_of_spec_0_6_0() {
             }
         }
     }
-    assert_eq!(all, 1564);
+    assert_eq!(all, 1569);
     let run = [("formula", 331), ("formula-eval", 175), ("call", 62), ("excel", 79), ("decimal", 20)];
     for (kind, n) in run {
         assert_eq!(count(kind), n, "{kind}");
