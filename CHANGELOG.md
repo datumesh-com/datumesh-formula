@@ -22,11 +22,10 @@ rules of its section 15 and the names of section 2.3:
 - The host alone decides a name's authority and rootedness (2.5): nothing here changes that. A
   DNS name in a later segment is a label only.
 
-Libraries before 0.5.1 refuse a dotted later segment with `E_FORMULA_NAME`. This release needs
-`datumesh-core` 0.3.10 (the DNS segments in its name checks), which is not released at the time of
-writing: see the `Cargo.toml` requirement.
+Libraries before 0.5.1 refuse a dotted later segment with `E_FORMULA_NAME`. This release requires
+`datumesh-core` 0.3.10 (the DNS segments in its name checks).
 
-## 0.5.0 (unreleased)
+## 0.5.0 (2026-11-19)
 
 - On datumesh-engine 0.5 and datumesh-store 0.5 (Build 2): the engine splits a deep recursion
   itself, so `invalid/formula-eval-depth`, which the spec lists as evaluator-only, is no longer
