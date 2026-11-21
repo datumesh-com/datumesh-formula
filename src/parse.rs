@@ -161,6 +161,8 @@ pub const BUILTINS: &[&str] = &[
     "median",
     "stdev",
     "stdev_p",
+    "last_by",
+    "first_by",
     "at",
     "latest",
     "last_before",

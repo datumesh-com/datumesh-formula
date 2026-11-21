@@ -20,7 +20,7 @@ use datumesh_core::json::Value;
 use datumesh_core::{Scalar, Type};
 
 use crate::ast::{Node, NodeId, Op, ReadArg};
-use crate::builtins::AGGREGATES;
+use crate::builtins::{AGGREGATES, BY_SLICE};
 use crate::calendar::{self, BusinessDays, Date, Micros, Roll, Weekend, DAY_MICROS};
 use crate::check::{self, ConvertKind, KeyTy, NumUnit, Ty};
 use crate::coverage::{EvalObserver, NoObserver};
@@ -1071,6 +1071,9 @@ impl<W: World + ?Sized> Eval<'_, W> {
         if AGGREGATES.contains(&f) {
             return self.aggregate_call(f, args);
         }
+        if BY_SLICE.contains(&f) {
+            return self.by_slice(id, f, args);
+        }
         match f {
             "at" | "latest" | "last_before" | "first_after" | "nearest" | "within" | "interpolate" => {
                 self.lookup(id, f, args, named)
@@ -1445,6 +1448,70 @@ impl<W: World + ?Sized> Eval<'_, W> {
         }
         let elem_unit = num_unit(self.ty(args[0])).cloned();
         Ok(aggregate(f, &values, elem_unit.as_ref())?)
+    }
+
+    /// `last_by(slice, by)` and `first_by(slice, by)` (15.7, 15.13). Both slices are read, each
+    /// charged as a slice read (15.12, by the world, after the members are obtained). Each member of `slice`
+    /// joins the member of `by` with the same values for `by`'s open arguments (an inner join); per
+    /// group of the other keys, the candidate with the greatest (`last_by`) or least (`first_by`)
+    /// `by` value wins, a tie going to the later or earlier member in key order.
+    fn by_slice(&mut self, id: NodeId, f: &str, args: &[NodeId]) -> R<V, W::Error> {
+        let s = match self.node(args[0])? {
+            V::Slice(s) => s,
+            _ => return Err(Code::Type.into()),
+        };
+        let b = match self.node(args[1])? {
+            V::Slice(b) => b,
+            _ => return Err(Code::Type.into()),
+        };
+        // The positions of `by`'s open arguments in `slice` (both ascending by name), and the
+        // positions of the group keys.
+        let mut join_pos = Vec::with_capacity(b.keys.len());
+        for bk in &b.keys {
+            let p = s.keys.iter().position(|k| k.name == bk.name).ok_or(Stop::Code(Code::Join))?;
+            join_pos.push(p);
+        }
+        let group_pos: Vec<usize> = (0..s.keys.len()).filter(|i| !join_pos.contains(i)).collect();
+        // `by`'s members by their key tuples, for the lookup of each member of `slice`.
+        let mut index: Vec<(Vec<V>, V)> = b.members.clone();
+        index.sort_by(|x, y| cmp_keys(&x.0, &y.0));
+        // The candidates, in key order of `slice`: the group key, the `by` value and the value.
+        let mut cands: Vec<(Vec<V>, V, V)> = Vec::new();
+        for (key, val) in &s.members {
+            let join: Vec<V> = join_pos.iter().map(|&p| key[p].clone()).collect();
+            let Ok(at) = index.binary_search_by(|(k, _)| cmp_keys(k, &join)) else { continue };
+            let group: Vec<V> = group_pos.iter().map(|&p| key[p].clone()).collect();
+            cands.push((group, index[at].1.clone(), val.clone()));
+        }
+        // Groups in key order; within a group, the candidates stay in key order.
+        cands.sort_by(|x, y| cmp_keys(&x.0, &y.0));
+        let last = f == "last_by";
+        let mut results: Vec<(Vec<V>, V)> = Vec::new();
+        let mut i = 0;
+        while i < cands.len() {
+            let mut j = i;
+            while j < cands.len() && cmp_keys(&cands[j].0, &cands[i].0) == std::cmp::Ordering::Equal {
+                j += 1;
+            }
+            let mut best = i;
+            for k in i + 1..j {
+                let o = cmp_v(&cands[k].1, &cands[best].1);
+                let replace = if last { o != std::cmp::Ordering::Less } else { o == std::cmp::Ordering::Less };
+                if replace {
+                    best = k;
+                }
+            }
+            results.push((cands[best].0.clone(), cands[best].2.clone()));
+            i = j;
+        }
+        if group_pos.is_empty() {
+            return match results.into_iter().next() {
+                Some((_, v)) => Ok(v),
+                None => Err(Code::Absent.into()),
+            };
+        }
+        let keys = self.keys_of(id);
+        Ok(V::Slice(Rc::new(SliceV { keys, members: results })))
     }
 
     fn slice_of(&mut self, id: NodeId) -> R<Rc<SliceV>, W::Error> {

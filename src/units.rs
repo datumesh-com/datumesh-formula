@@ -29,7 +29,7 @@ pub const PHYSICAL: &[&str] = &[
 ];
 
 /// Ratios and counts (`units.md` 2.3).
-pub const RATIOS: &[&str] = &["percent", "permille", "bp", "1", "count"];
+pub const RATIOS: &[&str] = &["percent", "permille", "bp", "1", "count", "shares", "pure"];
 
 /// Whether `s` is a currency code of `units.md` 2.1.
 pub fn is_currency(s: &str) -> bool {

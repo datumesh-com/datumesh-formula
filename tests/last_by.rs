@@ -95,7 +95,12 @@ fn last_by_labelled_and_positional_star_print_positionally() {
 
 #[test]
 fn last_by_printer_round_trip() {
-    for src in [LAST, FIRST, &format!("{LAST} - {FIRST}"), &format!("sum(last_by(data.example.org/revenue(accession: *, period: *), data.example.org/filed(accession: *)))")] {
+    for src in [
+        LAST,
+        FIRST,
+        &format!("{LAST} - {FIRST}"),
+        "sum(last_by(data.example.org/revenue(accession: *, period: *), data.example.org/filed(accession: *)))",
+    ] {
         let a = define(src, &env()).unwrap();
         let b = define(&a.body, &env()).unwrap();
         assert_eq!(a.body, b.body, "{src}");
@@ -112,11 +117,8 @@ fn both_built_ins_in_one_body_list_each_input_once() {
 
 #[test]
 fn a_number_by_and_a_group_key_are_accepted() {
-    let c = define(
-        "last_by(data.example.org/fact(accession: *), data.example.org/rank(accession: *))",
-        &env(),
-    )
-    .unwrap();
+    let c =
+        define("last_by(data.example.org/fact(accession: *), data.example.org/rank(accession: *))", &env()).unwrap();
     assert_eq!(c.inputs, vec!["data.example.org/fact", "data.example.org/rank"]);
     // `period` is open in the slice and not in `by`: a slice over `period`, summed.
     define(
@@ -141,7 +143,9 @@ fn join_refusals_are_e_formula_join() {
     for f in ["last_by", "first_by"] {
         // `by` has an open argument that `slice` does not have.
         assert_eq!(
-            code(&format!("{f}(data.example.org/fact(accession: *), data.example.org/revenue(accession: *, period: *))")),
+            code(&format!(
+                "{f}(data.example.org/fact(accession: *), data.example.org/revenue(accession: *, period: *))"
+            )),
             "E_FORMULA_JOIN",
             "{f}"
         );
@@ -277,9 +281,11 @@ fn no_candidate_is_e_formula_absent() {
 #[test]
 fn fuel_of_last_by_is_charged_and_exhausts() {
     let with_fuel = |n: u64| {
-        let text = String::from_utf8(common::vector("formula-eval/last-by.json").to_jcs())
-            .unwrap()
-            .replacen('{', &format!("{{\"fuel\":{n},"), 1);
+        let text = String::from_utf8(common::vector("formula-eval/last-by.json").to_jcs()).unwrap().replacen(
+            '{',
+            &format!("{{\"fuel\":{n},"),
+            1,
+        );
         json::parse(text.as_bytes()).unwrap()
     };
     assert_eq!(run_vector(&with_fuel(11)).unwrap().unwrap().fuel_used, 11);
@@ -289,28 +295,62 @@ fn fuel_of_last_by_is_charged_and_exhausts() {
 // ---------------------------------------------------------------------------------------------
 // Unit suffixes (`units.md` 2.3).
 
+/// The environment of `formula/add` with a bare `number` result: the add vector declares EUR, and a
+/// body in another unit is then `E_FORMULA_RETURN_UNIT` (15.8), which is not what these tests probe.
+fn bare_env() -> datumesh_formula::Env {
+    let Value::Object(members) = common::vector("formula/add.json").get("env").unwrap().clone() else {
+        panic!("env is an object")
+    };
+    let members = members
+        .into_iter()
+        .map(|(k, v)| {
+            if k != "signature" {
+                return (k, v);
+            }
+            let Value::Object(sig) = v else { panic!("signature is an object") };
+            let sig = sig
+                .into_iter()
+                .map(|(k, v)| {
+                    if k == "returns" {
+                        (k, Value::Object(vec![("type".to_string(), Value::String("number".to_string()))]))
+                    } else {
+                        (k, v)
+                    }
+                })
+                .collect();
+            (k, Value::Object(sig))
+        })
+        .collect();
+    datumesh_formula::Env::from_value(&Value::Object(members)).unwrap()
+}
+
 fn returns_unit(src: &str) -> Value {
-    define(src, &common::formula_env()).unwrap_or_else(|e| panic!("{src}: {e}")).returns.to_value()
+    define(src, &bare_env()).unwrap_or_else(|e| panic!("{src}: {e}")).returns.to_value()
 }
 
 #[test]
 fn shares_and_pure_are_unit_suffixes() {
-    for (src, unit) in [("5 shares", "shares"), ("5 pure", "pure"), ("1 shares + 2 shares", "shares"), ("2 pure * 3 pure", "pure pure")] {
+    for (src, unit) in [
+        ("5 shares", "shares"),
+        ("5 pure", "pure"),
+        ("1 shares + 2 shares", "shares"),
+        ("2 pure * 3 pure", "pure pure"),
+    ] {
         let u = returns_unit(src);
         assert_eq!(u.get("type").and_then(|t| t.as_str()), Some("number"), "{src}");
         if !src.contains('*') {
             assert_eq!(u.get("unit").and_then(|t| t.as_str()), Some(unit), "{src}");
         }
     }
-    let c = define("5 shares", &common::formula_env()).unwrap();
+    let c = define("5 shares", &bare_env()).unwrap();
     assert_eq!(c.body, "5 shares\n");
-    let c = define("5 pure", &common::formula_env()).unwrap();
+    let c = define("5 pure", &bare_env()).unwrap();
     assert_eq!(c.body, "5 pure\n");
 }
 
 #[test]
 fn shares_and_pure_are_distinct_units() {
-    let env = common::formula_env();
+    let env = bare_env();
     for src in ["5 shares + 5 pure", "5 pure + 5 shares", "5 shares + 1 USD", "5 pure + 1 EUR"] {
         assert_eq!(define(src, &env).unwrap_err().code.as_str(), "E_FORMULA_UNIT_MISMATCH", "{src}");
     }

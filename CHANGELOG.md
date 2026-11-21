@@ -2,6 +2,25 @@
 
 All notable changes to `datumesh-formula`.
 
+## 0.5.2 (unreleased)
+
+For spec-0.6.2 (the branch `spec-0.6.2` of [datumesh-spec](https://github.com/datumesh-com/datumesh-spec),
+commit `39d6849`; `spec-vectors/` is its vectors, the 159 new ones included). Additive: every vector
+of the previous revision keeps its result.
+
+- **`last_by(slice, by)` and `first_by(slice, by)`** (15.7, 15.11, 15.13). Per group of the keys of
+  `slice` that `by` does not have, the member whose `by` value is the greatest (`last_by`) or least
+  (`first_by`). The open arguments of `by` are the ordering dimension and join `slice` as an inner
+  join: a member with no `by` member is no candidate, and a tie goes to the later (`last_by`) or
+  earlier (`first_by`) member in key order. A group with no candidate is left out of a slice result;
+  a scalar result with no candidate is `E_FORMULA_ABSENT`. Both slices are read, so each is an
+  `inputs` entry (the same slice twice is one entry), and fuel is that of the two reads. The printer
+  writes both arguments positionally. A `by` open argument that `slice` lacks, or has with another
+  key type, is `E_FORMULA_JOIN`; a `by` of booleans or blobs is `E_FORMULA_TYPE`; a unit that varies
+  by member is `E_FORMULA_UNIT_UNKNOWN`, as `max` gives.
+- **Unit suffixes `shares` and `pure`** (`units.md` 2.3): `5 shares` and `5 pure` are numbers in
+  those units, and the two do not mix (`E_FORMULA_UNIT_MISMATCH`).
+
 ## 0.5.1
 
 For spec-0.6.1 (the branch `spec-0.6.1` of [datumesh-spec](https://github.com/datumesh-com/datumesh-spec),

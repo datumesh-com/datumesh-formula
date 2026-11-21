@@ -14,6 +14,9 @@ pub(crate) enum Params {
 pub(crate) const AGGREGATES: &[&str] =
     &["sum", "count", "mean", "min", "max", "first", "last", "median", "stdev", "stdev_p"];
 
+/// The orderings of one slice by another (15.7, 15.13): `last_by(slice, by)` and `first_by`.
+pub(crate) const BY_SLICE: &[&str] = &["last_by", "first_by"];
+
 /// The lookups (15.13).
 pub(crate) const LOOKUPS: &[&str] = &["at", "latest", "last_before", "first_after", "nearest", "within", "interpolate"];
 
@@ -34,6 +37,7 @@ pub(crate) fn params(name: &str) -> Option<Params> {
         }
         "and" | "or" => Variadic(2),
         "asof" => Asof,
+        "last_by" | "first_by" => Fixed(&["slice", "by"], &[]),
         "at" => Fixed(&["slice", "key"], &["along"]),
         "latest" => Fixed(&["slice"], &["bound", "along"]),
         "last_before" | "first_after" | "nearest" => Fixed(&["slice", "x"], &["bound", "along"]),

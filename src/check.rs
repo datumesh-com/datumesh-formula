@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use datumesh_core::Type;
 
 use crate::ast::{Ast, Node, NodeId, Op, ReadArg};
-use crate::builtins::{AGGREGATES, LOOKUPS, METHODS, ROLLS, WEEKENDS};
+use crate::builtins::{AGGREGATES, BY_SLICE, LOOKUPS, METHODS, ROLLS, WEEKENDS};
 use crate::calendar::{self, CONVENTIONS};
 use crate::decimal::Decimal;
 use crate::env::{ArgDecl, Env, Extent, Signature, UnitDecl, UnitSide};
@@ -810,6 +810,9 @@ impl Checker<'_> {
         if LOOKUPS.contains(&f) {
             return self.lookup(id, f, args, named);
         }
+        if BY_SLICE.contains(&f) {
+            return self.t_by(f, args);
+        }
         match f {
             "map" | "filter" => self.map_filter(f, args),
             "scan" | "window" => self.t_scan(id, f, args, named),
@@ -1285,6 +1288,48 @@ impl Checker<'_> {
             Ty::Str | Ty::Date | Ty::Instant if matches!(f, "min" | "max" | "first" | "last") => Ok(elem.clone()),
             Ty::Bool | Ty::Blob if matches!(f, "first" | "last") => Ok(elem.clone()),
             _ => Err(e(Code::Type, format!("{f}() needs numbers"))),
+        }
+    }
+
+    /// `last_by(slice, by)` and `first_by(slice, by)` (15.13): the `by` open arguments are a
+    /// subset of the slice's, with the same types; the rest are the group keys.
+    fn t_by(&mut self, f: &str, args: &[NodeId]) -> Result<Ty, Error> {
+        let s = self.node(args[0])?;
+        let Ty::Slice(elem, keys) = &s else {
+            return Err(e(Code::Type, format!("{f}() takes a slice as its first argument")));
+        };
+        let b = self.node(args[1])?;
+        let Ty::Slice(belem, bkeys) = &b else {
+            return Err(e(Code::Type, format!("{f}() takes a slice as its second argument")));
+        };
+        for bk in bkeys {
+            match keys.iter().find(|k| k.name == bk.name) {
+                Some(k) if k.ty == bk.ty => {}
+                _ => {
+                    return Err(e(
+                        Code::Join,
+                        format!("{f}(): {} is not an open argument of the slice with the same type", bk.name),
+                    ));
+                }
+            }
+        }
+        match &**belem {
+            Ty::Bool | Ty::Blob => {
+                return Err(e(Code::Type, format!("{f}(): the by values are numbers, dates, instants or strings")));
+            }
+            Ty::Num(NumUnit::Varies) => {
+                return Err(e(Code::UnitUnknown, format!("{f}(): the unit of by varies by member")));
+            }
+            _ => {}
+        }
+        if let Ty::Num(NumUnit::Varies) = **elem {
+            return Err(e(Code::UnitUnknown, format!("{f}(): the unit varies by member")));
+        }
+        let rest: Vec<KeyTy> = keys.iter().filter(|k| !bkeys.iter().any(|b| b.name == k.name)).cloned().collect();
+        if rest.is_empty() {
+            Ok((**elem).clone())
+        } else {
+            Ok(Ty::Slice(elem.clone(), rest))
         }
     }
 
