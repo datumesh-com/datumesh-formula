@@ -5,7 +5,7 @@
 //! ends it. In a formula:
 //!
 //! - a stored input read alone, whose latest version as of the evaluation asof is a withdrawal, has
-//!   no value: `E_FORMULA_NOT_COVERED`, which `otherwise` catches (15.11);
+//!   no value: `E_FORMULA_NOT_COVERED`, which `otherwise` does not catch (15.11, 15.12);
 //! - `at(slice, d)` on a withdrawn member is `E_FORMULA_ABSENT` (not a member, so none qualifies),
 //!   which `otherwise` catches too;
 //! - a withdrawn cell is not a member of a slice: `count`, `sum` and the empty slice see 9 of 10.
@@ -171,10 +171,11 @@ fn withdrawn_input_read_alone_is_not_covered() {
 }
 
 #[test]
-fn withdrawn_input_read_alone_is_caught_by_otherwise() {
+fn withdrawn_input_read_alone_is_not_caught_by_otherwise() {
+    // A single-cell read with no value cannot be caught (15.12: a receipt cannot list an absence);
+    // `otherwise` catches only E_FORMULA_EMPTY and E_FORMULA_ABSENT.
     let mut w = bolt("otherwise(data.example.org/price(item: s), -1)");
-    let c = eval(&mut w, "s", s("bolt"), ASOF).unwrap();
-    assert_eq!(number(&c), "-1");
+    assert_eq!(eval(&mut w, "s", s("bolt"), ASOF).err().as_deref(), Some("E_FORMULA_NOT_COVERED"));
 }
 
 #[test]
