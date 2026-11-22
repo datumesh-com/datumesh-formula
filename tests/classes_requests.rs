@@ -166,7 +166,9 @@ fn what_is_not_one_token_is_quoted() {
         ("rates.example.org/deposit(EUR, 1M, abc)", "E_CANON_TYPE"),
         ("rates.example.org/deposit(EUR, 1M, 2026-03-16T00:00:00.000000Z)", "E_CANON_TYPE"),
         ("rates.example.org/deposit(EUR, 1M, 2026-02-30)", "E_CANON_DATE"),
-        ("rates.example.org/deposit(EUR, 01, 2026-03-16)", "E_CANON_NUMBER"),
+        // K11 (D119): "01" in a string position (deposit's tenor) is a string now; in a number
+        // position (the verse's chapter) it is still refused.
+        ("scripture.example.org/verse(quran, 2, 01, 255).text(uthmani)", "E_CANON_NUMBER"),
         ("rates.example.org/deposit(EUR, 1M, 2026-03-16)?asof=2026-06-01", "E_CANON_INSTANT"),
         ("rates.example.org/deposit(EUR, 1M, 2026-03-16)?foo=1", "E_PARSE_URI"),
     ] {
