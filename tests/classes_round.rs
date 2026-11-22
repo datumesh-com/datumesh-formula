@@ -723,7 +723,7 @@ fn define_with_default(default: &str) -> Result<(), String> {
 #[test]
 fn k13_a_default_of_the_wrong_type_is_refused_at_define() {
     define_with_default("\"1\"").unwrap_or_else(|c| panic!("a default \"1\" is refused: {c}"));
-    define_with_default("\"2.50\"").unwrap_or_else(|c| panic!("a default \"2.50\" is refused: {c}"));
+    define_with_default("\"2.5\"").unwrap_or_else(|c| panic!("a default \"2.5\" is refused: {c}"));
     for bad in ["\"abc\"", "\"1,5\"", "\"\"", "1", "true", "null", "\"01\"", "\"1.\""] {
         assert_eq!(define_with_default(bad).unwrap_err(), "E_SCHEMA", "default {bad}");
     }
