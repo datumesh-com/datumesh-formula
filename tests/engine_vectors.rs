@@ -23,11 +23,7 @@ mod pg;
 
 #[test]
 fn formula_eval_vectors_through_the_engine() {
-    let vectors = common::old_vectors_of_kind("formula-eval");
-    // engine path: enabled when store 0.6.0 stores withdrawals (CONTRACT-round-0.7 R1)
-    let skipped = vectors.iter().filter(|(_, v)| engine::has_withdrawal(v)).count();
-    assert_eq!(skipped, 9, "the withdrawn-* vectors are skipped on the engine path for now");
-    let n = engine::check_kind(vectors, false, "formula-eval");
+    let n = engine::check_kind(common::old_vectors_of_kind("formula-eval"), false, "formula-eval");
     eprintln!("formula-eval: {n} vectors through the engine");
 }
 

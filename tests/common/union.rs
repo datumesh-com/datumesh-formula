@@ -81,7 +81,6 @@ pub fn union_parts() -> (Vec<(String, Value, String)>, Vec<Value>, MemoryWorld) 
     let mut names = BTreeSet::new();
     let mut seen = BTreeSet::new();
     let mut receipts = Vec::new();
-    let mut withdrawals_skipped = 0;
     for (_, v) in super::vectors_of_kind("formula-eval") {
         let world = v.get("world").unwrap();
         for (n, f) in world.get("functions").unwrap().as_object().unwrap() {
@@ -94,18 +93,12 @@ pub fn union_parts() -> (Vec<(String, Value, String)>, Vec<Value>, MemoryWorld) 
             functions.push((n.clone(), d.clone(), bound));
         }
         for r in super::array(world.get("receipts").unwrap()) {
-            // engine path: enabled when store 0.6.0 stores withdrawals (CONTRACT-round-0.7 R1)
-            if r.get("withdrawn").is_some() {
-                withdrawals_skipped += 1;
-                continue;
-            }
             let p = datumesh_core::Receipt::from_json(&r.to_jcs()).unwrap();
             if seen.insert((p.cell().id(), p.tx().to_string())) {
                 receipts.push((p.cell().id(), p.tx().to_string(), r.clone()));
             }
         }
     }
-    assert_eq!(withdrawals_skipped, 9, "one withdrawal receipt in each of the 9 withdrawn vectors");
     receipts.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
     let receipts: Vec<Value> = receipts.into_iter().map(|(_, _, r)| r).collect();
     for r in &receipts {
