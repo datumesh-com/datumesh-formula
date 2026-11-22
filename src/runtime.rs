@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use datumesh_core::{Arg, Cell, Fault, FunctionDescriptor, Scalar};
+use datumesh_core::{Arg, Cell, ClassDescriptor, Fault, FunctionDescriptor, Scalar};
 use datumesh_engine::{Budget, EvalError, FnBinding, Inputs, Pattern, Runtime, SlicePattern};
 
 use crate::definition::{Callees, LATEST};
@@ -462,6 +462,10 @@ impl World for EngineWorld<'_> {
 
     /// A class as the store binds it (16.3, 9.7): the engine's inputs bind functions, and classes
     /// are the store's, through the callees.
+    fn class_descriptor(&mut self, class_hash: &str, _at: Option<&str>) -> Result<Option<ClassDescriptor>, EvalError> {
+        self.rt.callees.class_descriptor(class_hash).map_err(EvalError::Runtime)
+    }
+
     fn class_name(&mut self, class_hash: &str, _at: Option<&str>) -> Result<Option<String>, EvalError> {
         self.rt.callees.class_name(class_hash).map_err(EvalError::Runtime)
     }

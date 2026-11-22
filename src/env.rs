@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use datumesh_core::json::Value;
-use datumesh_core::{ArgExtras, Type};
+use datumesh_core::{ArgExtras, ClassDescriptor, Type};
 
 use crate::classes::Classes;
 
@@ -257,9 +257,20 @@ pub struct Env {
     /// Since spec-0.5.0 (16.3): the functions a body pins its reads to (`super`), by function
     /// hash, whatever name they are bound to now. The runtime adds the ones a body names.
     pub(crate) pinned: BTreeMap<String, Function>,
+    /// Since the classes round (K5): the flattened class descriptors held by hash only, with no name
+    /// bound (the env member `class_descriptors`). They decide whether a method is inherited.
+    pub held: Vec<ClassDescriptor>,
 }
 
 impl Env {
+    /// The flattened descriptor with this class hash: a named class, or one held by hash only (K5).
+    pub fn class_by_hash(&self, class_hash: &str) -> Option<ClassDescriptor> {
+        match self.classes.by_hash(class_hash) {
+            Some((_, d)) => Some(d.clone()),
+            None => self.held.iter().find(|d| d.hash() == class_hash).cloned(),
+        }
+    }
+
     /// An environment with no functions and no aliases.
     pub fn new(name: &str, signature: Signature) -> Env {
         Env {
@@ -272,6 +283,7 @@ impl Env {
             stored_body: false,
             evaluating: false,
             pinned: BTreeMap::new(),
+            held: Vec::new(),
         }
     }
 
@@ -288,6 +300,11 @@ impl Env {
         }
         if let Some(cs) = v.get("classes") {
             env.classes = Classes::from_value(cs).map_err(|e| bad(e.0))?;
+        }
+        if let Some(Value::Array(ds)) = v.get("class_descriptors") {
+            for d in ds {
+                env.held.push(ClassDescriptor::from_value(d).map_err(|e| bad(format!("class_descriptors: {e}")))?);
+            }
         }
         if let Some(m) = v.get("method_of") {
             env.method_of = Some(m.as_str().ok_or_else(|| bad("method_of is not a string"))?.to_string());

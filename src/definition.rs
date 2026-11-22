@@ -112,7 +112,7 @@ impl Callees for Env {
     }
 
     fn class_descriptor(&self, class_hash: &str) -> Result<Option<ClassDescriptor>, String> {
-        Ok(self.classes.by_hash(class_hash).map(|(_, d)| d.clone()))
+        Ok(self.class_by_hash(class_hash))
     }
 
     fn class_name(&self, class_hash: &str) -> Result<Option<String>, String> {
@@ -181,6 +181,9 @@ macro_rules! store_callees {
             fn class_descriptor(&self, class_hash: &str) -> Result<Option<ClassDescriptor>, String> {
                 store_class_descriptor(self, class_hash)
             }
+            fn class_name(&self, class_hash: &str) -> Result<Option<String>, String> {
+                crate::call::store_class_name_of(self, class_hash, None)
+            }
             fn function_descriptor(&self, fn_hash: &str) -> Result<Option<Value>, String> {
                 store_function_descriptor(self, fn_hash)
             }
@@ -217,10 +220,13 @@ fn load_class(env: &mut Env, class: &str, callees: &dyn Callees, at: &str) -> Re
     load_ancestors(env, &c.descriptor, callees)?;
     let mut fqs = Vec::new();
     for m in c.descriptor.methods.keys() {
-        let definer = definer(&c.descriptor, m, |ph| {
-            Ok::<_, std::convert::Infallible>(env.classes.by_hash(ph).map(|(n, d)| (n.to_string(), d.clone())))
-        });
-        match definer {
+        let found = definer(
+            &c.descriptor,
+            m,
+            |ph| Ok::<_, std::convert::Infallible>(env.class_by_hash(ph)),
+            |ph| Ok::<_, std::convert::Infallible>(env.classes.by_hash(ph).map(|(n, _)| n.to_string())),
+        );
+        match found {
             Ok(Some(d)) => fqs.push(format!("{d}/{m}")),
             Ok(None) => fqs.push(format!("{class}/{m}")),
             Err(_) => {}

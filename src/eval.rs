@@ -274,6 +274,14 @@ pub trait World {
         Ok(None)
     }
 
+    /// The flattened class descriptor with this class hash, bound to a name or not, as of `at` (`None`:
+    /// the evaluation asof). Whether an inherited method is an override is decided from it (K5). Free.
+    /// Since the classes round. Provided: `None`.
+    fn class_descriptor(&mut self, class_hash: &str, at: Option<&str>) -> Result<Option<ClassDescriptor>, Self::Error> {
+        let _ = (class_hash, at);
+        Ok(None)
+    }
+
     /// The function with this function hash, for a read pinned to it (`super`, 16.3): a pinned read
     /// relies on no binding, so the function is found by its hash and not through a name (the
     /// binding of `P/m` may be another function, or none, at the asof). Free. Since spec-0.5.0.
@@ -934,22 +942,22 @@ impl<W: World + ?Sized> Eval<'_, W> {
     fn method_fn_name(&mut self, class: &str, desc: &ClassDescriptor, method: &str) -> R<String, W::Error> {
         let Some(h) = desc.methods.get(method).cloned() else { return Ok(format!("{class}/{method}")) };
         let mut cur = desc.clone();
-        let mut definer: Option<String> = None;
+        let mut defining: Option<String> = None;
         while let Some(ph) = cur.parent.clone() {
-            let Some(pname) = self.world.class_name(&ph, None).map_err(Stop::World)? else {
+            let Some(pdesc) = self.world.class_descriptor(&ph, None).map_err(Stop::World)? else {
                 return Err(Stop::Code(Code::Unresolved));
             };
-            let Some(pb) = self.world.class(&pname, None).map_err(Stop::World)? else {
-                return Err(Stop::Code(Code::Unresolved));
-            };
-            let pdesc = pb.class.as_ref().clone();
             if pdesc.methods.get(method) != Some(&h) {
                 break;
             }
-            definer = Some(pname);
+            defining = Some(ph);
             cur = pdesc;
         }
-        Ok(format!("{}/{method}", definer.as_deref().unwrap_or(class)))
+        let Some(dh) = defining else { return Ok(format!("{class}/{method}")) };
+        let Some(dname) = self.world.class_name(&dh, None).map_err(Stop::World)? else {
+            return Err(Stop::Code(Code::Unresolved));
+        };
+        Ok(format!("{dname}/{method}"))
     }
 
     /// A dispatched method call (16.6): the key is decoded, and it must be the key of an object of

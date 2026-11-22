@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use datumesh_core::json::Value;
-use datumesh_core::{Scalar, Type};
+use datumesh_core::{ClassDescriptor, Scalar, Type};
 
 use crate::coverage::{EvalObserver, NoObserver};
 use crate::env::{Env, EnvError, Function};
@@ -513,6 +513,14 @@ impl World for MemoryWorld {
     fn class(&mut self, name: &str, at: Option<&str>) -> Result<Option<ClassBinding>, Self::Error> {
         let at = at.unwrap_or(&self.asof);
         Ok(self.classes.get(name).filter(|b| b.start.as_str() <= at).cloned())
+    }
+
+    fn class_descriptor(
+        &mut self,
+        class_hash: &str,
+        _at: Option<&str>,
+    ) -> Result<Option<ClassDescriptor>, Self::Error> {
+        Ok(self.classes.values().find(|b| b.class_hash == class_hash).map(|b| (*b.class).clone()))
     }
 
     fn class_name(&mut self, class_hash: &str, _at: Option<&str>) -> Result<Option<String>, Self::Error> {

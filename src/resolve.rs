@@ -29,9 +29,12 @@ use crate::{Code, Error};
 /// `E_FORMULA_UNRESOLVED`.
 pub(crate) fn method_name(env: &Env, class: &str, name: &str) -> Result<String, Error> {
     let desc = env.classes.get(class).ok_or_else(|| e(Code::Unresolved, format!("{class} is not bound")))?;
-    match definer(desc, name, |ph| {
-        Ok::<_, std::convert::Infallible>(env.classes.by_hash(ph).map(|(n, d)| (n.to_string(), d.clone())))
-    }) {
+    match definer(
+        desc,
+        name,
+        |ph| Ok::<_, std::convert::Infallible>(env.class_by_hash(ph)),
+        |ph| Ok::<_, std::convert::Infallible>(env.classes.by_hash(ph).map(|(n, _)| n.to_string())),
+    ) {
         Ok(Some(d)) => Ok(format!("{d}/{name}")),
         Ok(None) => Ok(format!("{class}/{name}")),
         Err(DefinerError::Unnamed(h)) => Err(e(

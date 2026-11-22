@@ -13,7 +13,9 @@ is now the submodule `spec/` (a gitlink, as datumesh-core has it); `spec-vectors
   16.6). For an object of class S, a method S inherits without overriding denotes `D/m`, where D is the
   nearest ancestor whose descriptor gave `m` the same function hash. This holds in a body, a request
   (`resolved` says `method` to `D/m`), a dispatch and `this`. An overridden method is still `S/m`. D is
-  found through the parent hashes, each named by the class name bound to it (`CallEnv::class_name_of`,
+  found through the parent hashes; an override needs only the parent's flattened descriptor, by hash (env
+  member `class_descriptors`), and an inherited method needs the defining class's name. Store-backed names
+  come from store 0.5.3's `class_names_bound_to`, the first in ascending order. Names come from (`CallEnv::class_name_of`,
   `World::class_name`, `Callees::class_name`); a parent with no name is `E_FORMULA_UNRESOLVED` in a body
   and `E_NAME_UNBOUND` in a request. Binding S binds only S's own methods (datumesh-store's `bind_class`
   is the store's change, not this crate's). Cost: a call or body that read `S/m` for an inherited `m` now

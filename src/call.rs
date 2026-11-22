@@ -85,6 +85,13 @@ pub trait CallEnv {
         Ok(None)
     }
 
+    /// The flattened class descriptor with this class hash, whether or not a name is bound to it
+    /// (K5, the classes round): whether a method is inherited is decided from it. Provided: none.
+    fn class_descriptor_of(&self, class_hash: &str, asof: Option<&str>) -> Result<Option<ClassDescriptor>, String> {
+        let _ = (class_hash, asof);
+        Ok(None)
+    }
+
     /// **The chain hook** (5.8, 16.6, K10, the classes round): the value of the cell `cell` as of
     /// `asof`, a key encoding of an object (`None`: the cell has no value as of `asof`). A chained
     /// call reads each link's cell through it, and the last method's on the key it holds. Provided:
@@ -115,6 +122,9 @@ pub struct MapCallEnv {
     /// Since spec-0.5.0: class name to `{label: key encoding}`, the cells of the class's `lookup`
     /// method (the class's alias table), read at any `asof`.
     pub lookups: BTreeMap<String, BTreeMap<String, String>>,
+    /// Since the classes round (K5): the flattened class descriptors held by hash only, with no name
+    /// bound (the member `class_descriptors`).
+    pub held: Vec<ClassDescriptor>,
     /// Since the classes round (K10): the values of the cells a chain reads, by their canonical call
     /// without `?asof=` (`fn(arg: literal, ...)`), each a key encoding; a cell with no value is absent.
     pub cells: BTreeMap<String, String>,
@@ -161,6 +171,11 @@ impl MapCallEnv {
                 env.lookups.insert(class.clone(), m);
             }
         }
+        if let Some(Value::Array(ds)) = v.get("class_descriptors") {
+            for d in ds {
+                env.held.push(ClassDescriptor::from_value(d)?);
+            }
+        }
         if let Some(cs) = v.get("cells").and_then(Value::as_object) {
             for (call, key) in cs {
                 if let Some(k) = key.as_str() {
@@ -199,6 +214,10 @@ impl CallEnv for MapCallEnv {
     }
     fn class_name_of(&self, class_hash: &str, _asof: Option<&str>) -> Result<Option<String>, String> {
         Ok(self.classes.iter().find(|(_, d)| d.hash() == class_hash).map(|(n, _)| n.clone()))
+    }
+    fn class_descriptor_of(&self, class_hash: &str, _asof: Option<&str>) -> Result<Option<ClassDescriptor>, String> {
+        let named = self.classes.values().find(|d| d.hash() == class_hash);
+        Ok(named.or_else(|| self.held.iter().find(|d| d.hash() == class_hash)).cloned())
     }
     fn chain(&self, cell: &CellRef, _asof: &str) -> Result<Option<String>, String> {
         Ok(self.cells.get(&canonical_cell(cell)).cloned())
@@ -251,12 +270,42 @@ fn store_class<S: datumesh_store::Store + ?Sized>(
     }
 }
 
+/// The first class name a store binds the class hash to as of `asof` (K5, ascending; 16.3).
+#[cfg(feature = "engine")]
+pub(crate) fn store_class_name_of<S: datumesh_store::Store + ?Sized>(
+    store: &S,
+    class_hash: &str,
+    asof: Option<&str>,
+) -> Result<Option<String>, String> {
+    let at = asof.unwrap_or(crate::definition::LATEST);
+    let names = store.class_names_bound_to(class_hash, at).map_err(|e| e.to_string())?;
+    Ok(names.into_iter().next())
+}
+
+/// The flattened class descriptor a store holds under this class hash, bound or not (K5).
+#[cfg(feature = "engine")]
+pub(crate) fn store_class_by_hash<S: datumesh_store::Store + ?Sized>(
+    store: &S,
+    class_hash: &str,
+) -> Result<Option<ClassDescriptor>, String> {
+    match store.class(class_hash).map_err(|e| e.to_string())? {
+        Some(bytes) => ClassDescriptor::from_json(&bytes).map(Some).map_err(|e| e.to_string()),
+        None => Ok(None),
+    }
+}
+
 /// A store as a [`CallEnv`]: bindings and descriptors from it, no aliases (a mesh's alias map is
 /// its own: wrap the store to add one). `None` as the asof is the latest binding.
 #[cfg(feature = "engine")]
 impl CallEnv for datumesh_store::PgStore {
     fn alias(&self, _alias: &str) -> Result<Option<String>, String> {
         Ok(None)
+    }
+    fn class_name_of(&self, class_hash: &str, asof: Option<&str>) -> Result<Option<String>, String> {
+        store_class_name_of(self, class_hash, asof)
+    }
+    fn class_descriptor_of(&self, class_hash: &str, _asof: Option<&str>) -> Result<Option<ClassDescriptor>, String> {
+        store_class_by_hash(self, class_hash)
     }
     fn bound(&self, name: &str, asof: Option<&str>) -> Result<Option<FunctionDescriptor>, String> {
         store_bound(self, name, asof)
@@ -273,6 +322,12 @@ impl CallEnv for datumesh_store::PgStore {
 impl CallEnv for dyn datumesh_store::Store + Send + Sync {
     fn alias(&self, _alias: &str) -> Result<Option<String>, String> {
         Ok(None)
+    }
+    fn class_name_of(&self, class_hash: &str, asof: Option<&str>) -> Result<Option<String>, String> {
+        store_class_name_of(self, class_hash, asof)
+    }
+    fn class_descriptor_of(&self, class_hash: &str, _asof: Option<&str>) -> Result<Option<ClassDescriptor>, String> {
+        store_class_by_hash(self, class_hash)
     }
     fn bound(&self, name: &str, asof: Option<&str>) -> Result<Option<FunctionDescriptor>, String> {
         store_bound(self, name, asof)
@@ -1082,10 +1137,12 @@ impl Resolving<'_> {
     /// it is inherited from D, else `class/m`. Its parent hashes are named as of the call's asof.
     fn method_fq(&self, class: &str, cd: &ClassDescriptor, m: &str) -> Result<String, CallError> {
         let at = self.asof.as_deref();
-        let found = definer(cd, m, |ph| {
-            let Some(pname) = self.env.class_name_of(ph, at).map_err(CallError::Env)? else { return Ok(None) };
-            Ok(self.bound_class(&pname)?.map(|pd| (pname, pd)))
-        });
+        let found = definer(
+            cd,
+            m,
+            |ph| self.env.class_descriptor_of(ph, at).map_err(CallError::Env),
+            |ph| self.env.class_name_of(ph, at).map_err(CallError::Env),
+        );
         match found {
             Ok(Some(d)) => Ok(format!("{d}/{m}")),
             Ok(None) => Ok(format!("{class}/{m}")),

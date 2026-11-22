@@ -228,6 +228,7 @@ pub datumesh_formula::call::MapCallEnv::cells: alloc::collections::btree::map::B
 pub datumesh_formula::call::MapCallEnv::classes: alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_core::class::ClassDescriptor>
 pub datumesh_formula::call::MapCallEnv::descriptors: alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_core::descriptor::FunctionDescriptor>
 pub datumesh_formula::call::MapCallEnv::functions: alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_core::descriptor::FunctionDescriptor>
+pub datumesh_formula::call::MapCallEnv::held: alloc::vec::Vec<datumesh_core::class::ClassDescriptor>
 pub datumesh_formula::call::MapCallEnv::lookups: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>>
 pub datumesh_formula::call::MapCallEnv::now: core::option::Option<alloc::string::String>
 impl datumesh_formula::call::MapCallEnv
@@ -244,6 +245,7 @@ pub fn datumesh_formula::call::MapCallEnv::aliases_tx(&self) -> core::result::Re
 pub fn datumesh_formula::call::MapCallEnv::bound(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::descriptor::FunctionDescriptor>, alloc::string::String>
 pub fn datumesh_formula::call::MapCallEnv::bound_class(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::class::ClassDescriptor>, alloc::string::String>
 pub fn datumesh_formula::call::MapCallEnv::chain(&self, &datumesh_core::model::CellRef, &str) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
+pub fn datumesh_formula::call::MapCallEnv::class_descriptor_of(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::class::ClassDescriptor>, alloc::string::String>
 pub fn datumesh_formula::call::MapCallEnv::class_name_of(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
 pub fn datumesh_formula::call::MapCallEnv::lookup(&self, &str, &str, &str) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
 pub fn datumesh_formula::call::MapCallEnv::now(&self) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
@@ -254,6 +256,7 @@ pub fn datumesh_formula::call::CallEnv::aliases_tx(&self) -> core::result::Resul
 pub fn datumesh_formula::call::CallEnv::bound(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::descriptor::FunctionDescriptor>, alloc::string::String>
 pub fn datumesh_formula::call::CallEnv::bound_class(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::class::ClassDescriptor>, alloc::string::String>
 pub fn datumesh_formula::call::CallEnv::chain(&self, &datumesh_core::model::CellRef, &str) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
+pub fn datumesh_formula::call::CallEnv::class_descriptor_of(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::class::ClassDescriptor>, alloc::string::String>
 pub fn datumesh_formula::call::CallEnv::class_name_of(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
 pub fn datumesh_formula::call::CallEnv::lookup(&self, &str, &str, &str) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
 pub fn datumesh_formula::call::CallEnv::now(&self) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
@@ -264,6 +267,7 @@ pub fn datumesh_formula::call::MapCallEnv::aliases_tx(&self) -> core::result::Re
 pub fn datumesh_formula::call::MapCallEnv::bound(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::descriptor::FunctionDescriptor>, alloc::string::String>
 pub fn datumesh_formula::call::MapCallEnv::bound_class(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::class::ClassDescriptor>, alloc::string::String>
 pub fn datumesh_formula::call::MapCallEnv::chain(&self, &datumesh_core::model::CellRef, &str) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
+pub fn datumesh_formula::call::MapCallEnv::class_descriptor_of(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::class::ClassDescriptor>, alloc::string::String>
 pub fn datumesh_formula::call::MapCallEnv::class_name_of(&self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
 pub fn datumesh_formula::call::MapCallEnv::lookup(&self, &str, &str, &str) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
 pub fn datumesh_formula::call::MapCallEnv::now(&self) -> core::result::Result<core::option::Option<alloc::string::String>, alloc::string::String>
@@ -636,6 +640,7 @@ pub fn datumesh_formula::eval::World::asof(&mut self) -> core::result::Result<al
 pub fn datumesh_formula::eval::World::blob(&mut self, &str, u64) -> core::result::Result<core::option::Option<alloc::vec::Vec<u8>>, datumesh_formula::eval::Stop<Self::Error>>
 pub fn datumesh_formula::eval::World::charge(&mut self, u64) -> core::result::Result<(), datumesh_formula::Code>
 pub fn datumesh_formula::eval::World::class(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::ClassBinding>, Self::Error>
+pub fn datumesh_formula::eval::World::class_descriptor(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::class::ClassDescriptor>, Self::Error>
 pub fn datumesh_formula::eval::World::class_name(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<alloc::string::String>, Self::Error>
 pub fn datumesh_formula::eval::World::function(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::Binding>, Self::Error>
 pub fn datumesh_formula::eval::World::function_by_hash(&mut self, &str) -> core::result::Result<core::option::Option<alloc::rcs::arc::Arc<datumesh_formula::Function>>, Self::Error>
@@ -651,6 +656,7 @@ pub fn datumesh_formula::memory::MemoryWorld::asof(&mut self) -> core::result::R
 pub fn datumesh_formula::memory::MemoryWorld::blob(&mut self, &str, u64) -> core::result::Result<core::option::Option<alloc::vec::Vec<u8>>, datumesh_formula::eval::Stop<Self::Error>>
 pub fn datumesh_formula::memory::MemoryWorld::charge(&mut self, u64) -> core::result::Result<(), datumesh_formula::Code>
 pub fn datumesh_formula::memory::MemoryWorld::class(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::ClassBinding>, Self::Error>
+pub fn datumesh_formula::memory::MemoryWorld::class_descriptor(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::class::ClassDescriptor>, Self::Error>
 pub fn datumesh_formula::memory::MemoryWorld::class_name(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<alloc::string::String>, Self::Error>
 pub fn datumesh_formula::memory::MemoryWorld::function(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::Binding>, Self::Error>
 pub fn datumesh_formula::memory::MemoryWorld::function_by_hash(&mut self, &str) -> core::result::Result<core::option::Option<alloc::rcs::arc::Arc<datumesh_formula::Function>>, Self::Error>
@@ -713,6 +719,7 @@ pub fn datumesh_formula::memory::MemoryWorld::asof(&mut self) -> core::result::R
 pub fn datumesh_formula::memory::MemoryWorld::blob(&mut self, &str, u64) -> core::result::Result<core::option::Option<alloc::vec::Vec<u8>>, datumesh_formula::eval::Stop<Self::Error>>
 pub fn datumesh_formula::memory::MemoryWorld::charge(&mut self, u64) -> core::result::Result<(), datumesh_formula::Code>
 pub fn datumesh_formula::memory::MemoryWorld::class(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::ClassBinding>, Self::Error>
+pub fn datumesh_formula::memory::MemoryWorld::class_descriptor(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_core::class::ClassDescriptor>, Self::Error>
 pub fn datumesh_formula::memory::MemoryWorld::class_name(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<alloc::string::String>, Self::Error>
 pub fn datumesh_formula::memory::MemoryWorld::function(&mut self, &str, core::option::Option<&str>) -> core::result::Result<core::option::Option<datumesh_formula::eval::Binding>, Self::Error>
 pub fn datumesh_formula::memory::MemoryWorld::function_by_hash(&mut self, &str) -> core::result::Result<core::option::Option<alloc::rcs::arc::Arc<datumesh_formula::Function>>, Self::Error>
@@ -1113,11 +1120,13 @@ pub struct datumesh_formula::Env
 pub datumesh_formula::Env::aliases: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
 pub datumesh_formula::Env::classes: datumesh_formula::classes::Classes
 pub datumesh_formula::Env::functions: alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_formula::Function>
+pub datumesh_formula::Env::held: alloc::vec::Vec<datumesh_core::class::ClassDescriptor>
 pub datumesh_formula::Env::method_of: core::option::Option<alloc::string::String>
 pub datumesh_formula::Env::name: alloc::string::String
 pub datumesh_formula::Env::signature: datumesh_formula::Signature
 impl datumesh_formula::Env
 pub fn datumesh_formula::Env::add_function(&mut self, &str, &datumesh_core::json::Value) -> core::result::Result<(), datumesh_formula::EnvError>
+pub fn datumesh_formula::Env::class_by_hash(&self, &str) -> core::option::Option<datumesh_core::class::ClassDescriptor>
 pub fn datumesh_formula::Env::from_value(&datumesh_core::json::Value) -> core::result::Result<datumesh_formula::Env, datumesh_formula::EnvError>
 pub fn datumesh_formula::Env::lang_of(&self, &str) -> core::option::Option<&str>
 pub fn datumesh_formula::Env::new(&str, datumesh_formula::Signature) -> datumesh_formula::Env

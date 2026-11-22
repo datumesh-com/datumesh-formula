@@ -76,28 +76,35 @@ pub(crate) enum DefinerError<E> {
     Failed(E),
 }
 
-/// The class a method `m` of `desc` is read from (16.3, K5, the classes round): `None` when `desc`
-/// writes `m` itself (or inherits it from a parent that does not carry the same function hash), else
-/// the name of the class that defines it: the top of the run of ancestors that carry `m` with `desc`'s
-/// hash, found through the parent hashes. `parent` gives an ancestor's name and flattened descriptor by
-/// its class hash, `None` when no class name is bound to that hash.
+/// The class a method `m` of `desc` is read from (16.3, K5): `None` when `desc` writes `m` itself, else the
+/// name of the class that defines it. Deciding whether `m` is inherited needs only the parent's flattened
+/// descriptor, found by its hash (`flat`, which holds the classes by name and the descriptors held by hash
+/// only): an override is the subclass's own and needs no name. An inherited `m` is defined by the top of
+/// the run of ancestors that carry it with the same function hash, and that class's name is `name`, the
+/// class name bound to its hash. A hash that is not held, or with no name where a name is needed, is
+/// `DefinerError::Unnamed`.
 pub(crate) fn definer<E>(
     desc: &ClassDescriptor,
     m: &str,
-    mut parent: impl FnMut(&str) -> Result<Option<(String, ClassDescriptor)>, E>,
+    mut flat: impl FnMut(&str) -> Result<Option<ClassDescriptor>, E>,
+    mut name: impl FnMut(&str) -> Result<Option<String>, E>,
 ) -> Result<Option<String>, DefinerError<E>> {
     let Some(h) = desc.methods.get(m) else { return Ok(None) };
     let mut cur = desc.clone();
-    let mut found = None;
+    let mut defining: Option<String> = None;
     while let Some(ph) = cur.parent.clone() {
-        let Some((pname, pdesc)) = parent(&ph).map_err(DefinerError::Failed)? else {
+        let Some(pdesc) = flat(&ph).map_err(DefinerError::Failed)? else {
             return Err(DefinerError::Unnamed(ph));
         };
         if pdesc.methods.get(m) != Some(h) {
             break;
         }
-        found = Some(pname);
+        defining = Some(ph);
         cur = pdesc;
     }
-    Ok(found)
+    let Some(dh) = defining else { return Ok(None) };
+    match name(&dh).map_err(DefinerError::Failed)? {
+        Some(n) => Ok(Some(n)),
+        None => Err(DefinerError::Unnamed(dh)),
+    }
 }
