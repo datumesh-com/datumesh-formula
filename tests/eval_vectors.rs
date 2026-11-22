@@ -16,7 +16,7 @@ fn check(kind: &str) -> common::check::Tally {
 fn formula_eval_vectors() {
     let t = check("formula-eval");
     let (valid, invalid) = t.report("formula-eval vectors");
-    assert_eq!((valid, invalid), (139, 42));
+    assert_eq!((valid, invalid), (146, 44));
     assert!(t.failures.is_empty());
 }
 
