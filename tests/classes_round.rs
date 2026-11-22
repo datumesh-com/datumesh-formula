@@ -397,7 +397,7 @@ fn fx_env(signature: &str) -> Env {
 }
 
 const FX_SIG: &str = r#"{"args": {"b": {"type": "string", "valid": false}, "d": {"type": "date", "valid": true}},
-    "order": ["b", "d"], "returns": {"type": "number", "unit": {"of": "USD", "per": "EUR"}}}"#;
+    "order": ["b", "d"], "returns": {"type": "number", "unit": {"of": "USD", "per": {"arg": "b"}}}}"#;
 
 /// `N(b, "USD").m(d)` with a variable key defines, and is the plain read with those expressions: the
 /// same AST, hash, body and inputs.
@@ -420,10 +420,14 @@ fn k7_a_variable_key_receiver_is_the_plain_read() {
 /// A computed key (an expression) is also a key expression, as the plain read takes it.
 #[test]
 fn k7_a_key_may_be_any_expression() {
-    let env = fx_env(FX_SIG);
+    // A unit-1 method, so that the plain read defines whatever the key expression is (rate's unit
+    // depends on its base argument, which an expression cannot supply statically).
+    let sig = r#"{"args": {"b": {"type": "string", "valid": false}, "d": {"type": "date", "valid": true}},
+        "order": ["b", "d"], "returns": {"type": "number", "unit": "1"}}"#;
+    let env = fx_env(sig);
     let (m, p) = (
-        body_ok("rates.example.org/fx_pair(lower(b), USD).rate(d)", &env),
-        body_ok("rates.example.org/fx_pair/rate(lower(b), USD, d)", &env),
+        body_ok("calc.example.net/bond(lower(b)).price(d)", &env),
+        body_ok("calc.example.net/bond/price(lower(b), d)", &env),
     );
     assert_eq!(m.ast, p.ast);
 }
