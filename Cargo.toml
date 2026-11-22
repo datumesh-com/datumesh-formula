@@ -25,7 +25,7 @@ sqlite = ["engine", "datumesh-engine/sqlite", "datumesh-store/sqlite"]
 [dependencies]
 # Strict JSON, JCS, SHA-256 and the string rules of SPEC 3.5 (Unicode 15.1 assigned, NFC);
 # FunctionDescriptor (section 7 with spec-0.4.0's order and extent) and Fault.
-datumesh-core = "0.3.12"
+datumesh-core = "0.3.13"
 # NFC normalisation of computed strings (SPEC 15.7). Already a dependency of datumesh-core.
 unicode-normalization = { version = "0.1.26", default-features = false }
 # The Runtime and Inputs the formula evaluator plugs into.
@@ -35,7 +35,7 @@ datumesh-engine = { version = "0.5.0", optional = true }
 datumesh-store = { version = "0.5.3", optional = true, default-features = false }
 
 [dev-dependencies]
-datumesh-core = { version = "0.3.12", features = ["sign"] }
+datumesh-core = { version = "0.3.13", features = ["sign"] }
 
 [profile.dev.package."*"]
 opt-level = 3

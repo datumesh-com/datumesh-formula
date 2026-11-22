@@ -1124,9 +1124,14 @@ impl Resolving<'_> {
             return fail("E_ARG_MISSING", format!("the label {written} needs an asof: the mesh has no now"));
         };
         let enc = match self.env.lookup(class, &label, &at).map_err(CallError::Env)? {
-            Some(enc) if !enc.is_empty() => enc,
-            // A withdrawn label (K8) is unknown, as is one with no value.
-            _ => return fail("E_NAME_UNBOUND", format!("the label {written} has no value as of {at}")),
+            // The lookup's return type does not allow "" (D116 as amended by spec-0.7.0, D123): an empty
+            // string is refused as any key is.
+            Some(enc) if enc.is_empty() => {
+                return fail("E_KEY_NORMALISATION", format!("the lookup of {written} returned an empty key"));
+            }
+            Some(enc) => enc,
+            // A label with no value (a withdrawn lookup cell, R1) is unknown.
+            None => return fail("E_NAME_UNBOUND", format!("the label {written} has no value as of {at}")),
         };
         self.resolutions.push(resolution(Resolution::lookup(&written, &enc, &at))?);
         let obj = parse_object_key(&enc).map_err(|e| CallError::Code("E_KEY_ENCODING", e.to_string()))?;

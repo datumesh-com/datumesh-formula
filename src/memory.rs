@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use datumesh_core::json::Value;
-use datumesh_core::{ClassDescriptor, Scalar, Type};
+use datumesh_core::{Arg, ClassDescriptor, Scalar, Type, Withdrawal};
 
 use crate::coverage::{EvalObserver, NoObserver};
 use crate::env::{Env, EnvError, Function};
@@ -50,11 +50,15 @@ impl Default for Conventions {
     }
 }
 
+/// A stored receipt, or a withdrawal (SPEC 8.1, R1): the null version of its cell, with no value.
 #[derive(Clone, Debug)]
 struct Stored {
     cell: CellKey,
     fn_hash: String,
-    version: Version,
+    tx: String,
+    asof: String,
+    /// `None` for a withdrawal.
+    version: Option<Version>,
 }
 
 /// A computed cell's evaluation: the outcome and its receipt.
@@ -203,8 +207,28 @@ impl MemoryWorld {
         self.blobs.insert(sha256.to_string(), content);
     }
 
-    /// Add a stored receipt.
+    /// Add a stored receipt, or a withdrawal (a receipt with `withdrawn` in place of `type` and
+    /// `value`, parsed by [`Withdrawal`]). A withdrawal is a version of its cell with no value.
     pub fn add_receipt(&mut self, r: &Value) -> Result<(), EnvError> {
+        if r.get("withdrawn").is_some() {
+            let w = Withdrawal::from_value(r).map_err(|e| bad(format!("withdrawal: {e}")))?;
+            let cell = w.cell();
+            let mut args = Args::new();
+            for (k, a) in &cell.args {
+                let Arg::Value(s) = a else {
+                    return Err(bad("withdrawal with an open argument"));
+                };
+                args.insert(k.clone(), s.clone());
+            }
+            self.stored.push(Stored {
+                cell: CellKey { name: format!("{}/{}", cell.ns, cell.fn_name), args },
+                fn_hash: cell.fn_hash.clone(),
+                tx: w.tx().to_string(),
+                asof: w.asof().to_string(),
+                version: None,
+            });
+            return Ok(());
+        }
         let cell = r.get("cell").ok_or_else(|| bad("receipt without cell"))?;
         let ns = cell.get("ns").and_then(Value::as_str).ok_or_else(|| bad("cell ns"))?;
         let f = cell.get("fn").and_then(Value::as_str).ok_or_else(|| bad("cell fn"))?;
@@ -216,7 +240,9 @@ impl MemoryWorld {
         self.stored.push(Stored {
             cell: CellKey { name: format!("{ns}/{f}"), args },
             fn_hash: fn_hash.to_string(),
-            version: Version { value, receipt_hash: receipt_hash(r), tx: tx.to_string(), asof: asof.to_string() },
+            tx: tx.to_string(),
+            asof: asof.to_string(),
+            version: Some(Version { value, receipt_hash: receipt_hash(r), tx: tx.to_string(), asof: asof.to_string() }),
         });
         Ok(())
     }
@@ -274,25 +300,23 @@ impl MemoryWorld {
         Ok(c)
     }
 
-    /// The version of a stored cell answering as of `at`: the latest `tx` among its receipts with
-    /// an `asof` at or before `at`.
+    /// The version of a stored cell answering as of `at`: the latest `tx` among its receipts and
+    /// withdrawals with an `asof` at or before `at`. A withdrawal as that latest version means the
+    /// cell has no value (`None`).
     fn stored_version(&self, cell: &CellKey, fn_hash: &str, at: &str) -> Option<Version> {
         let mut best: Option<&Stored> = None;
         for s in &self.stored {
-            if s.cell == *cell && s.fn_hash == fn_hash && s.version.asof.as_str() <= at {
+            if s.cell == *cell && s.fn_hash == fn_hash && s.asof.as_str() <= at {
                 let newer = match best {
                     None => true,
-                    Some(b) => {
-                        (s.version.tx.as_str(), s.version.asof.as_str())
-                            > (b.version.tx.as_str(), b.version.asof.as_str())
-                    }
+                    Some(b) => (s.tx.as_str(), s.asof.as_str()) > (b.tx.as_str(), b.asof.as_str()),
                 };
                 if newer {
                     best = Some(s);
                 }
             }
         }
-        best.map(|s| s.version.clone())
+        best.and_then(|s| s.version.clone())
     }
 
     /// Evaluate a computed cell as of `asof`, building its receipt; fuel is charged to
@@ -481,17 +505,19 @@ impl World for MemoryWorld {
 
     fn versions(&mut self, cell: &CellKey, from: &str, to: &str) -> Result<Vec<Version>, Stop<Self::Error>> {
         let b = self.functions.get(&cell.name).ok_or(Code::Unresolved)?.clone();
+        // Withdrawals are not listed: a version listing gives the values a cell has had (a
+        // withdrawal is the null version, and the cell's value before it is listed as its own).
         let mut out: Vec<Version> = self
             .stored
             .iter()
             .filter(|s| {
                 s.cell == *cell
                     && s.fn_hash == b.function.hash
-                    && s.version.tx.as_str() >= from
-                    && s.version.tx.as_str() <= to
-                    && s.version.asof.as_str() <= self.asof.as_str()
+                    && s.tx.as_str() >= from
+                    && s.tx.as_str() <= to
+                    && s.asof.as_str() <= self.asof.as_str()
             })
-            .map(|s| s.version.clone())
+            .filter_map(|s| s.version.clone())
             .collect();
         out.sort_by(|a, b| a.tx.cmp(&b.tx));
         self.charge(1 + out.len() as u64)?;

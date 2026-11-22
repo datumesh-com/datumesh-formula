@@ -4,11 +4,19 @@ All notable changes to `datumesh-formula`.
 
 ## 0.6.0 (unreleased)
 
-For the classes round (`CONTRACT-classes-round.md`, the branch `classes-round`), on datumesh-core 0.3.12
+For the classes round (`CONTRACT-classes-round.md`, the branch `classes-round`), on datumesh-core 0.3.13
 (unreleased; `[patch]` to the local core until it is published) and the spec at commit `4114360`, which
 is now the submodule `spec/` (a gitlink, as datumesh-core has it); `spec-vectors` is a symlink to
 `spec/vectors`. Every change is additive except the first, which is **BREAKING**.
 
+- **Withdrawn stored cells have no value** (CONTRACT-round-0.7 R1; spec-0.7.0, SPEC 8.1, 15.11-15.13;
+  datumesh-core 0.3.13's `Withdrawal`). A stored receipt with `withdrawn` in place of `type` and `value` is
+  a version of its cell with no value. `MemoryWorld::add_receipt` parses it with `Withdrawal::from_value`.
+  As of the evaluation asof, the latest version (by `tx`, then `asof`) decides: a withdrawal makes
+  `World::read` return `Ok(None)` (a read alone is `E_FORMULA_NOT_COVERED`, `at` is `E_FORMULA_ABSENT`), and
+  `World::members` leaves the cell out. A later valued version ends the withdrawal. `World::versions` lists
+  the values only: withdrawals are not listed. Cost: a stored receipt with `withdrawn` was refused
+  (`malformed input`) before.
 - **BREAKING: an inherited method reads the cells of the class that defines it** (K5; spec 16.2, 16.3,
   16.6). For an object of class S, a method S inherits without overriding denotes `D/m`, where D is the
   nearest ancestor whose descriptor gave `m` the same function hash. This holds in a body, a request
