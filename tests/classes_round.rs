@@ -355,8 +355,39 @@ fn k5_a_dispatch_to_an_inherited_method_passes_only_the_defining_class_s_keys() 
             .unwrap_or_else(|e| panic!("{m}: {e}"))
             .unwrap_or_else(|c| panic!("{m}: the dispatch failed with {c}"));
         assert_eq!(r.computed.outcome.value.lexical(), "5", "{m}");
-        assert_eq!(r.computed.outcome.lineage, [receipt_hash(&st_receipt)], "{m}: the one input is the parent's cell");
+        if m == "st" {
+            assert_eq!(
+                r.computed.outcome.lineage,
+                [receipt_hash(&st_receipt)],
+                "{m}: the one input is the parent's cell"
+            );
+            continue;
+        }
+        // Lineage is the receipt of the cell read (tests/classes_dispatch.rs, lineage_names_the_function_actually_called):
+        // for `co` it is the computed cell par/co, the defining class's cell and not sub/co, and st is an input of that
+        // cell's receipt.
+        let read: Vec<_> = r.evaluated.iter().filter(|(c, _, _)| c.name.ends_with("/co")).collect();
+        assert_eq!(read.len(), 1, "{m}: one computed cell read: {:?}", r.evaluated);
+        assert_eq!(read[0].0.name, format!("{PAR}/co"), "{m}: the defining class's cell, not {SUB}/co");
+        assert_eq!(r.computed.outcome.lineage, [read[0].2.receipt_hash.clone()], "{m}: the par/co receipt");
+        // That receipt: the cell par/co(k: 1, d) evaluated alone has the same hash, and its inputs are st's receipt.
+        let co = dispatch_world_cell(PAR, "co", vec![st_receipt.clone()]);
+        let c = run_vector(&co).unwrap().unwrap_or_else(|c| panic!("par/co: {c}"));
+        assert_eq!(c.computed.receipt_hash, read[0].2.receipt_hash, "{m}: the same receipt");
+        assert_eq!(c.computed.outcome.lineage, [receipt_hash(&st_receipt)], "{m}: st is the input of par/co's receipt");
     }
+}
+
+/// The vector that evaluates the cell `par/<m>(k: 1, d: 2026-03-16)` itself.
+fn dispatch_world_cell(class: &str, m: &str, receipts: Vec<Value>) -> Value {
+    let w = world();
+    vector(
+        &w.functions,
+        &[(PAR, &w.par), (SUB, &w.sub)],
+        receipts,
+        &format!("{class}/{m}"),
+        &format!(r#"{{"d": {{"type": "date", "value": "2026-03-16"}}, "k": {}}}"#, k_arg("1")),
+    )
 }
 
 /// In a request, a method call on a subclass's object is the cell of `D/m`, and `resolved` says
