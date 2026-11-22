@@ -82,8 +82,10 @@ fn vector(
         .iter()
         .map(|(n, d)| format!("\"{n}\": {{\"bound\": \"{ZERO}\", \"descriptor\": {}}}", text(d)))
         .collect();
-    let cs: Vec<String> =
-        classes.iter().map(|(n, d)| format!("\"{n}\": {{\"bound\": \"{ZERO}\", \"descriptor\": {}}}", text(d))).collect();
+    let cs: Vec<String> = classes
+        .iter()
+        .map(|(n, d)| format!("\"{n}\": {{\"bound\": \"{ZERO}\", \"descriptor\": {}}}", text(d)))
+        .collect();
     let rs: Vec<String> = receipts.iter().map(text).collect();
     v(&format!(
         r#"{{"asof": "{AT}", "kind": "formula-eval", "cell": {{"args": {cell_args}, "fn": "{cell_fn}"}},
@@ -161,7 +163,15 @@ fn k2_the_defined_dispatch_evaluates() {
     fs.insert("calc.example.net/two".to_string(), datumesh_core::json::parse(&d.bytes).unwrap());
     let st_hash = hash_of(&w.functions[&format!("{PAR}/st")]);
     let receipts = vec![
-        receipt("calc.example.net", "ref", &hash_of(&refd), &format!(r#"{{"k": {}}}"#, k_arg("1")), "{}", "string", "calc.example.net/par(k:1)"),
+        receipt(
+            "calc.example.net",
+            "ref",
+            &hash_of(&refd),
+            &format!(r#"{{"k": {}}}"#, k_arg("1")),
+            "{}",
+            "string",
+            "calc.example.net/par(k:1)",
+        ),
         receipt(
             PAR,
             "st",
@@ -225,7 +235,9 @@ fn k5_body_an_inherited_method_reads_the_defining_class() {
 #[test]
 fn k5_body_the_old_binding_of_the_inherited_name_is_not_read() {
     let env = world().env(&d_only(), true, true);
-    for (m, d) in [("st", "calc.example.net/par/st"), ("co", "calc.example.net/par/co"), ("a", "calc.example.net/par/a")] {
+    for (m, d) in
+        [("st", "calc.example.net/par/st"), ("co", "calc.example.net/par/co"), ("a", "calc.example.net/par/a")]
+    {
         let src = if m == "a" { format!("{SUB_OBJ}.a()") } else { format!("{SUB_OBJ}.{m}(d)") };
         assert_eq!(body_ok(&src, &env).inputs, [d], "{m}");
     }
@@ -324,7 +336,10 @@ fn k5_request_an_inherited_method_is_the_defining_classes_cell() {
 #[test]
 fn k5_request_the_old_binding_is_not_read() {
     let env = world().call_env(true, true);
-    assert_eq!(call_ok("calc.example.net/sub(1, x).st(2026-03-16)", &env).uri(), "cell://calc.example.net/par/st?d=2026-03-16&k=1");
+    assert_eq!(
+        call_ok("calc.example.net/sub(1, x).st(2026-03-16)", &env).uri(),
+        "cell://calc.example.net/par/st?d=2026-03-16&k=1"
+    );
 }
 
 /// D's hash bound to no name as of the request's asof is `E_NAME_UNBOUND`.
@@ -343,7 +358,11 @@ fn k5_request_a_defining_class_with_no_name_is_unbound() {
 fn k5_request_the_plain_read_of_an_inherited_method_is_unbound() {
     let env = world().call_env(false, true);
     for m in ["st", "co"] {
-        assert_eq!(call(&format!("calc.example.net/sub/{m}(1, x, 2026-03-16)"), &env).unwrap_err(), "E_NAME_UNBOUND", "{m}");
+        assert_eq!(
+            call(&format!("calc.example.net/sub/{m}(1, x, 2026-03-16)"), &env).unwrap_err(),
+            "E_NAME_UNBOUND",
+            "{m}"
+        );
     }
 }
 
@@ -382,7 +401,13 @@ fn k6_this_in_a_parent_method_is_not_virtual() {
         "20",
     );
     for cell in ["calc.example.net/par/a", "calc.example.net/sub/a"] {
-        let vec = vector(&fs, &[(PAR, &w.par), (SUB, &w.sub)], vec![r_par.clone(), r_sub.clone()], cell, &format!(r#"{{"k": {}}}"#, k_arg("1")));
+        let vec = vector(
+            &fs,
+            &[(PAR, &w.par), (SUB, &w.sub)],
+            vec![r_par.clone(), r_sub.clone()],
+            cell,
+            &format!(r#"{{"k": {}}}"#, k_arg("1")),
+        );
         let r = run_vector(&vec).unwrap().unwrap_or_else(|c| panic!("{cell}: {c}"));
         assert_eq!(r.computed.outcome.value.lexical(), "10", "{cell}");
         assert_eq!(r.computed.outcome.lineage, [receipt_hash(&r_par)], "{cell}");
@@ -407,7 +432,10 @@ fn k7_a_variable_key_receiver_is_the_plain_read() {
     for (method, plain) in [
         ("rates.example.org/fx_pair(b, USD).rate(d)", "rates.example.org/fx_pair/rate(b, USD, d)"),
         ("rates.example.org/fx_pair(b, \"USD\").rate(d)", "rates.example.org/fx_pair/rate(b, \"USD\", d)"),
-        ("rates.example.org/fx_pair(quote: \"USD\", base: b).rate(date: d)", "rates.example.org/fx_pair/rate(base: b, quote: \"USD\", date: d)"),
+        (
+            "rates.example.org/fx_pair(quote: \"USD\", base: b).rate(date: d)",
+            "rates.example.org/fx_pair/rate(base: b, quote: \"USD\", date: d)",
+        ),
     ] {
         let (m, p) = (body_ok(method, &env), body_ok(plain, &env));
         assert_eq!(m.ast, p.ast, "{method}");
@@ -448,7 +476,10 @@ fn k7_class_typed_positions_keep_the_literal_rule() {
         assert_eq!(body_code(src, &env), "E_FORMULA_PLACEMENT", "{src}");
     }
     // A bare variable where a key of a class is.
-    assert_eq!(body_code("rates.example.org/ccy_pair(c, iso.example.org/currency(USD)).rate(d)", &env), "E_FORMULA_PLACEMENT");
+    assert_eq!(
+        body_code("rates.example.org/ccy_pair(c, iso.example.org/currency(USD)).rate(d)", &env),
+        "E_FORMULA_PLACEMENT"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -533,7 +564,10 @@ fn k8_an_unknown_label_is_unbound_under_its_folded_form() {
 #[test]
 fn k8_keys_are_not_folded() {
     let env = company_env();
-    assert_eq!(call_ok("sec.example.org/company(\"  Ab C \").size()", &env).uri(), "cell://sec.example.org/company/size?cik=%20%20Ab%20C%20");
+    assert_eq!(
+        call_ok("sec.example.org/company(\"  Ab C \").size()", &env).uri(),
+        "cell://sec.example.org/company/size?cik=%20%20Ab%20C%20"
+    );
     // Case is kept in an upper_ascii key's rejection: it is not repaired.
     let fx = MapCallEnv::from_value(common::vector("call/class-lookup.json").get("env").unwrap()).unwrap();
     assert_eq!(call("rates.example.org/fx_pair(eur, USD).rate(2026-03-16)", &fx).unwrap_err(), "E_KEY_NORMALISATION");
@@ -645,7 +679,10 @@ fn k11_runs_with_letters_or_a_leading_hyphen_are_refused() {
 #[test]
 fn k11_a_date_is_still_a_date() {
     let env = company_env();
-    assert_eq!(call_ok("sec.example.org/company(2024-03-15).size()", &env).uri(), "cell://sec.example.org/company/size?cik=2024-03-15");
+    assert_eq!(
+        call_ok("sec.example.org/company(2024-03-15).size()", &env).uri(),
+        "cell://sec.example.org/company/size?cik=2024-03-15"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -685,7 +722,10 @@ fn k13_a_request_omitting_a_defaulted_argument_binds_it() {
 }
 
 fn default_env(default: &str) -> Env {
-    let mut env = Env::new("calc.example.net/e", Signature::from_value(&v(&format!(r#"{{"args": {{}}, "order": [], "returns": {NUM1}}}"#))).unwrap());
+    let mut env = Env::new(
+        "calc.example.net/e",
+        Signature::from_value(&v(&format!(r#"{{"args": {{}}, "order": [], "returns": {NUM1}}}"#))).unwrap(),
+    );
     env.add_function("calc.example.net/source", &default_function(default)).unwrap_or_else(|e| panic!("{e}"));
     env
 }
@@ -733,11 +773,15 @@ fn k13_a_default_of_the_wrong_type_is_refused_at_define() {
         assert_eq!(define_with_default(bad).unwrap_err(), "E_SCHEMA", "default {bad}");
     }
     // A date argument's default is a date, an instant argument's an instant.
-    let sig = v(r#"{"args": {"d": {"type": "date", "valid": true, "default": "2026-13-01"}}, "order": ["d"], "returns": {"type": "number", "unit": "1"}}"#);
+    let sig = v(
+        r#"{"args": {"d": {"type": "date", "valid": true, "default": "2026-13-01"}}, "order": ["d"], "returns": {"type": "number", "unit": "1"}}"#,
+    );
     let callees = Env::new("calc.example.net/none", Signature::from_value(&sig).unwrap());
     let e = define_function("calc.example.net/f", "1", &sig, &BTreeMap::new(), &callees, AT).unwrap_err();
     assert_eq!(e.code(), "E_SCHEMA");
-    let sig = v(r#"{"args": {"d": {"type": "date", "valid": true, "default": "2026-03-16"}}, "order": ["d"], "returns": {"type": "number", "unit": "1"}}"#);
+    let sig = v(
+        r#"{"args": {"d": {"type": "date", "valid": true, "default": "2026-03-16"}}, "order": ["d"], "returns": {"type": "number", "unit": "1"}}"#,
+    );
     let callees = Env::new("calc.example.net/none", Signature::from_value(&sig).unwrap());
     define_function("calc.example.net/f", "1", &sig, &BTreeMap::new(), &callees, AT).unwrap_or_else(|e| panic!("{e}"));
     // Part of the hash.
@@ -752,7 +796,9 @@ fn k13_a_default_of_the_wrong_type_is_refused_at_define() {
 /// The `asof` default of 16.7 is a different default, and keeps working beside it. (PASSES TODAY.)
 #[test]
 fn k13_the_asof_default_is_unchanged() {
-    let sig = v(r#"{"args": {"d": {"type": "date", "valid": true, "default": "asof"}}, "order": ["d"], "returns": {"type": "number", "unit": "1"}}"#);
+    let sig = v(
+        r#"{"args": {"d": {"type": "date", "valid": true, "default": "asof"}}, "order": ["d"], "returns": {"type": "number", "unit": "1"}}"#,
+    );
     let callees = Env::new("calc.example.net/none", Signature::from_value(&sig).unwrap());
     define_function("calc.example.net/f", "1", &sig, &BTreeMap::new(), &callees, AT).unwrap_or_else(|e| panic!("{e}"));
 }

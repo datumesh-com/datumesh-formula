@@ -48,7 +48,8 @@ fn n_sig() -> Value {
 
 fn define_n(src: &str, name: &str) -> Result<datumesh_formula::definition::Definition, datumesh_formula::DefineError> {
     // No callee is bound: the class `fresh` does not exist yet.
-    let callees = datumesh_formula::Env::new("calc.example.net/none", datumesh_formula::Signature::from_value(&n_sig()).unwrap());
+    let callees =
+        datumesh_formula::Env::new("calc.example.net/none", datumesh_formula::Signature::from_value(&n_sig()).unwrap());
     define_method_in_draft(NEW, &draft(), name, src, &n_sig(), &callees, AT)
 }
 

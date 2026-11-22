@@ -68,15 +68,13 @@ pub fn world() -> World {
         computed("calc.example.net/par/st(d: d, k: k)\n", &["calc.example.net/par/st"], &par_sig(NUM1)),
     );
     f.insert(format!("{PAR}/ov"), stored(&par_sig(NUM1)));
-    f.insert(
-        format!("{PAR}/a"),
-        computed("calc.example.net/par/b(k: k)\n", &["calc.example.net/par/b"], &key_sig),
-    );
+    f.insert(format!("{PAR}/a"), computed("calc.example.net/par/b(k: k)\n", &["calc.example.net/par/b"], &key_sig));
     f.insert(format!("{PAR}/b"), stored(&key_sig));
     f.insert(format!("{SUB}/ov"), stored(&sub_sig(NUM1)));
     f.insert(format!("{SUB}/b"), stored(&key2_sig));
     let h = |n: &str| hash_of(&f[&format!("{PAR}/{n}")]);
-    let steward = r#""steward": {"namespace": "calc.example.net", "process": "https://calc.example.net/classes/change"}"#;
+    let steward =
+        r#""steward": {"namespace": "calc.example.net", "process": "https://calc.example.net/classes/change"}"#;
     let par = v(&format!(
         r#"{{"keys": {{"k": {{"type": "number", "unit": "1"}}}}, "order": ["k"], {steward},
         "methods": {{"st": "{}", "co": "{}", "ov": "{}", "a": "{}", "b": "{}"}}}}"#,
@@ -170,14 +168,13 @@ pub fn sub_method_sig() -> String {
 /// with a lookup, a method returning a key and a function with string and number arguments.
 pub fn company_env() -> MapCallEnv {
     let company = "sec.example.org/company";
-    let named = stored(&sig(&[r#""label": {"type": "string", "valid": false, "key_normalisation": "label_fold"}"#], &["label"], &format!(
-        r#"{{"type": "string", "classes": ["{company}"]}}"#
-    )));
+    let named = stored(&sig(
+        &[r#""label": {"type": "string", "valid": false, "key_normalisation": "label_fold"}"#],
+        &["label"],
+        &format!(r#"{{"type": "string", "classes": ["{company}"]}}"#),
+    ));
     let fact = stored(&sig(
-        &[
-            r#""accession": {"type": "string", "valid": false}"#,
-            r#""cik": {"type": "string", "valid": false}"#,
-        ],
+        &[r#""accession": {"type": "string", "valid": false}"#, r#""cik": {"type": "string", "valid": false}"#],
         &["cik", "accession"],
         NUM1,
     ));
@@ -206,15 +203,11 @@ pub fn company_env() -> MapCallEnv {
         hash_of(&size)
     ));
     let mut e = MapCallEnv::default();
-    for (n, d) in [
-        ("fact", &fact),
-        ("named", &named),
-        ("owner", &owner),
-        ("size", &size),
-    ] {
+    for (n, d) in [("fact", &fact), ("named", &named), ("owner", &owner), ("size", &size)] {
         e.functions.insert(format!("{company}/{n}"), datumesh_core::FunctionDescriptor::from_value(d).unwrap());
     }
-    e.functions.insert("sec.example.org/filing".into(), datumesh_core::FunctionDescriptor::from_value(&filing).unwrap());
+    e.functions
+        .insert("sec.example.org/filing".into(), datumesh_core::FunctionDescriptor::from_value(&filing).unwrap());
     e.classes.insert(company.into(), datumesh_core::ClassDescriptor::from_value(&class).unwrap());
     e.now = Some("2026-07-01T00:00:00.000000Z".into());
     let enc = |cik: &str| format!("{company}(cik:\"{cik}\")");
