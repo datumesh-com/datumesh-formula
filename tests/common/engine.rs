@@ -379,9 +379,20 @@ fn inherited_licence(r: &Receipt, known: &std::collections::BTreeMap<String, Str
     datumesh_core::inherit_licence(ls, None, &name, r.issued(), pg::LICENCE).licence
 }
 
+/// Whether a vector's world stores a withdrawal receipt (`withdrawn`, SPEC 8.1).
+pub fn has_withdrawal(v: &Value) -> bool {
+    v.get("world")
+        .and_then(|w| w.get("receipts"))
+        .map(|rs| common::array(rs).iter().any(|r| r.get("withdrawn").is_some()))
+        .unwrap_or(false)
+}
+
 /// Every vector through the engine (four threads); the failures, with `what` naming the group.
 /// With `classes`, the vector's `world.classes` are put and bound in the store (datumesh-store 0.4.1).
+/// A vector with a withdrawal receipt is skipped: engine path: enabled when store 0.6.0 stores
+/// withdrawals (CONTRACT-round-0.7 R1). The callers assert how many are skipped ([`has_withdrawal`]).
 pub fn check_kind(vectors: Vec<(String, Value)>, classes: bool, what: &str) -> usize {
+    let vectors: Vec<(String, Value)> = vectors.into_iter().filter(|(_, v)| !has_withdrawal(v)).collect();
     let next = AtomicUsize::new(0);
     let failures = Mutex::new(Vec::new());
     std::thread::scope(|s| {
