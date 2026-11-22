@@ -941,7 +941,12 @@ impl<W: World + ?Sized> Eval<'_, W> {
     /// inherited method, found through the parent hashes; a parent no name is bound to is unresolved.
     /// Also the keys the method takes, in class order: D's (the leading keys of the object's class),
     /// or the object's own when the method is its own.
-    fn method_fn_name(&mut self, class: &str, desc: &ClassDescriptor, method: &str) -> R<(String, Vec<String>), W::Error> {
+    fn method_fn_name(
+        &mut self,
+        class: &str,
+        desc: &ClassDescriptor,
+        method: &str,
+    ) -> R<(String, Vec<String>), W::Error> {
         let Some(h) = desc.methods.get(method).cloned() else {
             return Ok((format!("{class}/{method}"), desc.order.clone()));
         };
