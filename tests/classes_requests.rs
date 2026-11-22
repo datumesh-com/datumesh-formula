@@ -59,14 +59,14 @@ fn resolved(c: &Call) -> Vec<(String, String, String)> {
 // ---------------------------------------------------------------------------------------------
 // The vectors.
 
-/// Every class `call` vector (10 valid, 14 invalid): the cell URI, or the code, and `resolved`
+/// Every class `call` vector (31 valid, 29 invalid): the cell URI, or the code, and `resolved`
 /// when the vector carries it (and none when it does not).
 #[test]
 fn class_call_vectors() {
     let t = common::check::tally(class_vectors("call"), common::check::call_vector);
     let counts = t.report("class call vectors");
     assert!(t.failures.is_empty(), "{}", t.failures.join("\n"));
-    assert_eq!(counts, (10, 14));
+    assert_eq!(counts, (31, 29));
 }
 
 /// `N(keys).m(args)` is the cell of the plain read `N/m(...)`: the same cell reference, URI and,

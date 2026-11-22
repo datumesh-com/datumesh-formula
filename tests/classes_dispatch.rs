@@ -490,7 +490,7 @@ fn a_class_with_interfaces_is_an_ordinary_class() {
 #[test]
 fn define_class_over_the_vectors() {
     let vectors = common::vectors_of_kind("class");
-    assert_eq!(vectors.len(), 50);
+    assert_eq!(vectors.len(), 52);
     let mut failures = Vec::new();
     let (mut valid, mut invalid) = (0, 0);
     for (path, v) in &vectors {
@@ -540,5 +540,5 @@ fn define_class_over_the_vectors() {
     }
     eprintln!("class vectors through define_class: {valid} valid, {invalid} invalid, {} failures", failures.len());
     assert!(failures.is_empty(), "{}", failures.join("\n"));
-    assert_eq!((valid, invalid), (14, 36));
+    assert_eq!((valid, invalid), (15, 37));
 }

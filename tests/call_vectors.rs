@@ -14,7 +14,7 @@ fn every_call_vector() {
     // class vectors of spec-0.5.0 are `classes_requests.rs`'s.
     let t = common::check::tally(common::old_vectors_of_kind("call"), common::check::call_vector);
     assert!(t.failures.is_empty(), "{}", t.failures.join("\n"));
-    assert_eq!((t.valid, t.invalid), (18, 20));
+    assert_eq!((t.valid, t.invalid), (23, 21));
 }
 
 /// The unpinned URI a call gives is the one URI of its cell reference (5.2): the core's parse

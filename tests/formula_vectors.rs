@@ -12,7 +12,7 @@ fn formula_vectors() {
     // The vectors of spec-0.4.2: the class vectors of spec-0.5.0 are `classes_*.rs`'s.
     let t = common::check::tally(common::old_vectors_of_kind("formula"), common::check::formula_vector);
     let (valid, invalid) = t.report("formula vectors");
-    assert_eq!((valid, invalid), (189, 144));
+    assert_eq!((valid, invalid), (195, 147));
     assert!(t.failures.is_empty());
 }
 
