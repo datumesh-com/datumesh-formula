@@ -93,9 +93,9 @@ pub fn union_parts() -> (Vec<(String, Value, String)>, Vec<Value>, MemoryWorld) 
             functions.push((n.clone(), d.clone(), bound));
         }
         for r in super::array(world.get("receipts").unwrap()) {
-            let p = datumesh_core::Receipt::from_json(&r.to_jcs()).unwrap();
-            if seen.insert((p.cell().id(), p.tx().to_string())) {
-                receipts.push((p.cell().id(), p.tx().to_string(), r.clone()));
+            let (id, tx) = super::cell_id_and_tx(r);
+            if seen.insert((id.clone(), tx.clone())) {
+                receipts.push((id, tx, r.clone()));
             }
         }
     }

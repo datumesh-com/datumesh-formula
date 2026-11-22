@@ -87,8 +87,8 @@ pub fn world_mesh(v: &Value, classes: bool) -> Mesh {
     let mut rs: Vec<(String, String, Value)> = receipts
         .into_iter()
         .map(|r| {
-            let parsed = Receipt::from_json(&r.to_jcs()).unwrap();
-            (parsed.cell().id(), parsed.tx().to_string(), r)
+            let (id, tx) = common::cell_id_and_tx(&r);
+            (id, tx, r)
         })
         .collect();
     rs.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
@@ -212,6 +212,10 @@ pub fn check_vector(path: &str, v: &Value, classes: bool) -> Result<(), String> 
     let mut names = std::collections::BTreeMap::new();
     let mut known = std::collections::BTreeMap::new();
     for r in common::array(v.get("world").unwrap().get("receipts").unwrap()) {
+        // A withdrawal is never an input of a computed receipt (8.1): it has no licence to inherit.
+        if r.get("withdrawn").is_some() {
+            continue;
+        }
         let r = Receipt::from_json(&r.to_jcs()).unwrap();
         known.insert(r.hash().to_string(), r.licence().to_string());
     }

@@ -308,9 +308,9 @@ impl Mesh {
     /// Put a whole receipt (a vector's JSON value) and, for a stored cell, its version.
     pub fn put_receipt_value(&self, r: &Value) -> String {
         let bytes = r.to_jcs();
-        let receipt = Receipt::from_json(&bytes).unwrap();
+        let (id, tx) = crate::common::cell_id_and_tx(r);
         let hash = self.store.put_receipt(&bytes).unwrap();
-        self.store.put_version(&receipt.cell().id(), receipt.tx(), &hash).unwrap();
+        self.store.put_version(&id, &tx, &hash).unwrap();
         hash
     }
 }

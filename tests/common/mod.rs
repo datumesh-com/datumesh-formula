@@ -110,3 +110,14 @@ pub fn local_vectors() -> Vec<(String, Value)> {
     out.sort_by(|a, b| a.0.cmp(&b.0));
     out
 }
+
+/// The cell id and `tx` of a stored receipt, a value or (since spec-0.7.0) a withdrawal.
+pub fn cell_id_and_tx(r: &Value) -> (String, String) {
+    if r.get("withdrawn").is_some() {
+        let w = datumesh_core::Withdrawal::from_json(&r.to_jcs()).unwrap();
+        (w.cell().id(), w.tx().to_string())
+    } else {
+        let p = datumesh_core::Receipt::from_json(&r.to_jcs()).unwrap();
+        (p.cell().id(), p.tx().to_string())
+    }
+}
