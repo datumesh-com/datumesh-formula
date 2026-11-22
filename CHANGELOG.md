@@ -17,6 +17,14 @@ is now the submodule `spec/` (a gitlink, as datumesh-core has it); `spec-vectors
   `World::members` leaves the cell out. A later valued version ends the withdrawal. `World::versions` lists
   the values only: withdrawals are not listed. Cost: a stored receipt with `withdrawn` was refused
   (`malformed input`) before.
+- **A withdrawal that left a slice member out counts for time** (SPEC 8.2, D123; `spec-0.7.0`). A stored
+  cell of a slice read whose latest version as of the asof is a withdrawal, and that matches the slice,
+  contributes its `tx` to the computed receipt's `tx` and its `asof` to the asof candidates, though it is
+  no input. A withdrawal outside the slice's range is no candidate. New `World::withdrawn_in_slice` (default:
+  none); `MemoryWorld` implements it. Free (no fuel). Engine worlds keep the default until the engine
+  reads it. Cost: the `formula-eval/withdrawn-slice-*` receipts change.
+- **K8 empty key**: a lookup that returns `""` is `E_KEY_NORMALISATION` (D116 as amended by D123); a label
+  with no value stays `E_NAME_UNBOUND`.
 - **BREAKING: an inherited method reads the cells of the class that defines it** (K5; spec 16.2, 16.3,
   16.6). For an object of class S, a method S inherits without overriding denotes `D/m`, where D is the
   nearest ancestor whose descriptor gave `m` the same function hash. This holds in a body, a request

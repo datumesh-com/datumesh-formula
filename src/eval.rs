@@ -215,6 +215,16 @@ pub trait World {
     /// `E_FORMULA_ABSENT` when one has no value. Costs 1 + members.
     fn members(&mut self, slice: &SliceKey) -> Result<Vec<(Args, Version)>, Stop<Self::Error>>;
 
+    /// The `(tx, asof)` of each stored cell matching the slice whose latest version as of the
+    /// evaluation asof is a withdrawal (SPEC 8.2, since `spec-0.7.0`, D123): such a withdrawal left a
+    /// member out of the read, so it counts for the receipt's time as an input does, though it is no
+    /// input. A withdrawal outside the slice's range is not given. Free (no fuel). Provided: none, for
+    /// a world with no withdrawals.
+    fn withdrawn_in_slice(&mut self, slice: &SliceKey) -> Result<Vec<(String, String)>, Stop<Self::Error>> {
+        let _ = slice;
+        Ok(Vec::new())
+    }
+
     /// The versions of a stored cell with `tx` in `[from, to]`, as known as of the evaluation
     /// asof, ascending by `tx`. Costs 1 + versions.
     fn versions(&mut self, cell: &CellKey, from: &str, to: &str) -> Result<Vec<Version>, Stop<Self::Error>>;
@@ -882,10 +892,15 @@ impl<W: World + ?Sized> Eval<'_, W> {
     }
 
     fn note_version(&mut self, v: &Version) {
-        if self.max_tx.as_deref().is_none_or(|t| v.tx.as_str() > t) {
-            self.max_tx = Some(v.tx.clone());
+        self.note_time(&v.tx, &v.asof);
+    }
+
+    /// A read of a version with this `tx` and `asof` (8.2): the receipt's `tx` and asof candidates.
+    fn note_time(&mut self, tx: &str, asof: &str) {
+        if self.max_tx.as_deref().is_none_or(|t| tx > t) {
+            self.max_tx = Some(tx.to_string());
         }
-        self.note_asof(&v.asof);
+        self.note_asof(asof);
     }
 
     fn note_asof(&mut self, a: &str) {
@@ -1094,6 +1109,10 @@ impl<W: World + ?Sized> Eval<'_, W> {
         }
         for (_, v) in &members {
             self.note_version(v);
+        }
+        // SPEC 8.2 (D123): a withdrawal that left a member out counts for time.
+        for (tx, asof) in self.world.withdrawn_in_slice(&slice)? {
+            self.note_time(&tx, &asof);
         }
         // The slice value: keys are the open and ranged arguments, ascending.
         let mut keys = Vec::new();

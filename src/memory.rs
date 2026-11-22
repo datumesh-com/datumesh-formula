@@ -304,6 +304,11 @@ impl MemoryWorld {
     /// withdrawals with an `asof` at or before `at`. A withdrawal as that latest version means the
     /// cell has no value (`None`).
     fn stored_version(&self, cell: &CellKey, fn_hash: &str, at: &str) -> Option<Version> {
+        self.stored_latest(cell, fn_hash, at).and_then(|s| s.version.clone())
+    }
+
+    /// The latest stored receipt or withdrawal of a cell as of `at` (see [`MemoryWorld::stored_version`]).
+    fn stored_latest(&self, cell: &CellKey, fn_hash: &str, at: &str) -> Option<&Stored> {
         let mut best: Option<&Stored> = None;
         for s in &self.stored {
             if s.cell == *cell && s.fn_hash == fn_hash && s.asof.as_str() <= at {
@@ -316,7 +321,7 @@ impl MemoryWorld {
                 }
             }
         }
-        best.and_then(|s| s.version.clone())
+        best
     }
 
     /// Evaluate a computed cell as of `asof`, building its receipt; fuel is charged to
@@ -500,6 +505,33 @@ impl World for MemoryWorld {
             std::cmp::Ordering::Equal
         });
         self.charge(1 + out.len() as u64)?;
+        Ok(out)
+    }
+
+    fn withdrawn_in_slice(&mut self, slice: &SliceKey) -> Result<Vec<(String, String)>, Stop<Self::Error>> {
+        let Some(b) = self.functions.get(&slice.name).cloned() else { return Ok(Vec::new()) };
+        if b.function.lang != "stored" {
+            return Ok(Vec::new());
+        }
+        let asof = self.asof.clone();
+        let mut cells: Vec<CellKey> = Vec::new();
+        for s in &self.stored {
+            if s.cell.name == slice.name
+                && s.fn_hash == b.function.hash
+                && slice.matches(&s.cell.args)
+                && !cells.contains(&s.cell)
+            {
+                cells.push(s.cell.clone());
+            }
+        }
+        let mut out = Vec::new();
+        for c in cells {
+            if let Some(s) = self.stored_latest(&c, &b.function.hash, &asof) {
+                if s.version.is_none() {
+                    out.push((s.tx.clone(), s.asof.clone()));
+                }
+            }
+        }
         Ok(out)
     }
 
