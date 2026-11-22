@@ -25,9 +25,9 @@
 mod common;
 
 use datumesh_core::json::{self, Value};
+use datumesh_core::Scalar;
 use datumesh_formula::eval::{Args, CellKey};
 use datumesh_formula::memory::{Computed, MemoryWorld};
-use datumesh_core::Scalar;
 
 const PRICE_HASH: &str = "4193e310f5c949998b3f339d2ad56567286ebd0828504b3f31a2c671e99c71a7";
 const DAILY_HASH: &str = "e18ab921761089909a83eacfd7e88b71a580da2d35610769557f035fdb2b8169";
@@ -44,8 +44,10 @@ const DAILY_DESCRIPTOR: &str = r#"{"code":{"body":"","lang":"stored"},"inputs":[
 /// `price(item)` and `daily(date)`, evaluating as of `asof`.
 fn world(body: &str, arg: &str, asof: &str) -> MemoryWorld {
     let (name, ty, valid) = if arg == "s" { ("s", "string", "false") } else { ("d", "date", "true") };
+    let inputs = if body.contains("price") { r#""data.example.org/price""# } else { r#""data.example.org/daily""# };
+    let unit = if body.starts_with("count") { "count" } else { "EUR" };
     let calc = format!(
-        r#"{{"code":{{"body":{},"lang":"formula"}},"inputs":["data.example.org/price","data.example.org/daily"],"signature":{{"args":{{"{name}":{{"type":"{ty}","valid":{valid}}}}},"order":["{name}"],"returns":{{"type":"number","unit":"EUR"}}}}}}"#,
+        r#"{{"code":{{"body":{},"lang":"formula"}},"inputs":[{inputs}],"signature":{{"args":{{"{name}":{{"type":"{ty}","valid":{valid}}}}},"order":["{name}"],"returns":{{"type":"number","unit":"{unit}"}}}}}}"#,
         String::from_utf8(Value::String(format!("{body}\n")).to_jcs()).unwrap()
     );
     let mut w = MemoryWorld::new(asof);
@@ -91,11 +93,13 @@ fn stored(
 ) {
     let outcome = match (value, withdrawn) {
         (Some(v), None) => format!(r#""type":"number","value":"{v}""#),
-        (None, Some(r)) => format!(r#""withdrawn":{}"#, String::from_utf8(Value::String(r.to_string()).to_jcs()).unwrap()),
+        (None, Some(r)) => {
+            format!(r#""withdrawn":{}"#, String::from_utf8(Value::String(r.to_string()).to_jcs()).unwrap())
+        }
         _ => unreachable!(),
     };
     let r = format!(
-        r#"{{"asof":"{at}","cell":{{"args":{{"{arg}":{{"type":"{ty}","value":"{key}"}}}},"fn":"{f}","fn_hash":"{fn_hash}","ns":"data.example.org"}},"computed_by":"data.example.org#efb20f82a7e15e96","inputs":[],"issued":"{at}","licence":"CC-BY-4.0","proto":"datumesh/1","publisher":"data.example.org","summary":"A version of {f}.","tx":"{at}",{outcome},"valid":{valid}}}"#
+        r#"{{"asof":"{at}","cell":{{"args":{{"{arg}":{{"type":"{ty}","value":"{key}"}}}},"fn":"{f}","fn_hash":"{fn_hash}","ns":"data.example.org"}},"computed_by":"data.example.org#efb20f82a7e15e96","inputs":[],"issued":"{at}","licence":"CC-BY-4.0","proto":"datumesh/1","publisher":"data.example.org","summary":"A version of {f}.","tx":"{at}",{outcome},"valid":{valid},"sig":"abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"}}"#
     );
     w.add_receipt(&parse(&r)).unwrap_or_else(|e| panic!("add_receipt: {e}: {r}"));
 }
@@ -128,7 +132,12 @@ fn bolt(body: &str) -> MemoryWorld {
     let mut w = world(body, "s", ASOF);
     price(&mut w, "bolt", "2.5", "2026-02-01T09:00:00.000000Z");
     price(&mut w, "bolt", "2.75", "2026-04-01T09:00:00.000000Z");
-    price_withdrawn(&mut w, "bolt", "The price was withdrawn: the item is no longer sold.", "2026-05-01T09:00:00.000000Z");
+    price_withdrawn(
+        &mut w,
+        "bolt",
+        "The price was withdrawn: the item is no longer sold.",
+        "2026-05-01T09:00:00.000000Z",
+    );
     w
 }
 
@@ -137,9 +146,19 @@ fn bolt(body: &str) -> MemoryWorld {
 fn readings(body: &str, arg: &str, asof: &str) -> MemoryWorld {
     let mut w = world(body, arg, asof);
     for (i, v) in [10, 12, 9, 15, 11, 13, 14, 8, 16, 10].iter().enumerate() {
-        daily(&mut w, &format!("2026-03-{:02}", i + 1), &v.to_string(), &format!("2026-03-{:02}T18:00:00.000000Z", i + 1));
+        daily(
+            &mut w,
+            &format!("2026-03-{:02}", i + 1),
+            &v.to_string(),
+            &format!("2026-03-{:02}T18:00:00.000000Z", i + 1),
+        );
     }
-    daily_withdrawn(&mut w, "2026-03-04", "The reading of 4 March was withdrawn as a sensor fault.", "2026-03-20T18:00:00.000000Z");
+    daily_withdrawn(
+        &mut w,
+        "2026-03-04",
+        "The reading of 4 March was withdrawn as a sensor fault.",
+        "2026-03-20T18:00:00.000000Z",
+    );
     w
 }
 

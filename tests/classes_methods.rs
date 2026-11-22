@@ -55,12 +55,12 @@ fn the_vectors_are_those_of_spec_0_6_2() {
             }
         }
     }
-    assert_eq!(all, 2060);
-    let run = [("formula", 388), ("formula-eval", 192), ("call", 104), ("excel", 79), ("decimal", 20)];
+    assert_eq!(all, 2134);
+    let run = [("formula", 388), ("formula-eval", 201), ("call", 104), ("excel", 79), ("decimal", 20)];
     for (kind, n) in run {
         assert_eq!(count(kind), n, "{kind}");
     }
-    assert_eq!(run.iter().map(|(_, n)| n).sum::<usize>(), 783);
+    assert_eq!(run.iter().map(|(_, n)| n).sum::<usize>(), 792);
     // The class vectors are the new ones of those kinds, each in one group of the three test
     // commits (`common::classes`).
     assert_eq!(class_vectors("formula").len(), 46);
