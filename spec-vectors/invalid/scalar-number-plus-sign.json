@@ -1,8 +1,0 @@
-{
-  "id": "invalid/scalar-number-plus-sign",
-  "kind": "scalar",
-  "description": "A leading plus sign is rejected.",
-  "valid": false,
-  "input": "{\n  \"value\": \"+1\",\n  \"type\": \"number\"\n}",
-  "error": "E_CANON_NUMBER"
-}

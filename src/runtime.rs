@@ -462,6 +462,10 @@ impl World for EngineWorld<'_> {
 
     /// A class as the store binds it (16.3, 9.7): the engine's inputs bind functions, and classes
     /// are the store's, through the callees.
+    fn class_name(&mut self, class_hash: &str, _at: Option<&str>) -> Result<Option<String>, EvalError> {
+        self.rt.callees.class_name(class_hash).map_err(EvalError::Runtime)
+    }
+
     fn class(&mut self, name: &str, at: Option<&str>) -> Result<Option<ClassBinding>, EvalError> {
         // The evaluator asks as of a method's binding start (the transaction that binds the class's
         // methods too), which does not make the receipt depend on the asof (`Inputs::asof` would).

@@ -515,6 +515,10 @@ impl World for MemoryWorld {
         Ok(self.classes.get(name).filter(|b| b.start.as_str() <= at).cloned())
     }
 
+    fn class_name(&mut self, class_hash: &str, _at: Option<&str>) -> Result<Option<String>, Self::Error> {
+        Ok(self.classes.iter().find(|(_, b)| b.class_hash == class_hash).map(|(n, _)| n.clone()))
+    }
+
     fn function_by_hash(&mut self, fn_hash: &str) -> Result<Option<Arc<Function>>, Self::Error> {
         Ok(self.functions.values().find(|b| b.function.hash == fn_hash).map(|b| b.function.clone()))
     }

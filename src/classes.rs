@@ -65,3 +65,39 @@ impl Classes {
         Ok(out)
     }
 }
+
+/// Why a method's definer is not found: a parent hash no class name is bound to (the hash), or the
+/// environment's own failure.
+#[derive(Debug)]
+pub(crate) enum DefinerError<E> {
+    /// No class name is bound to this parent hash.
+    Unnamed(String),
+    /// The environment failed.
+    Failed(E),
+}
+
+/// The class a method `m` of `desc` is read from (16.3, K5, the classes round): `None` when `desc`
+/// writes `m` itself (or inherits it from a parent that does not carry the same function hash), else
+/// the name of the class that defines it: the top of the run of ancestors that carry `m` with `desc`'s
+/// hash, found through the parent hashes. `parent` gives an ancestor's name and flattened descriptor by
+/// its class hash, `None` when no class name is bound to that hash.
+pub(crate) fn definer<E>(
+    desc: &ClassDescriptor,
+    m: &str,
+    mut parent: impl FnMut(&str) -> Result<Option<(String, ClassDescriptor)>, E>,
+) -> Result<Option<String>, DefinerError<E>> {
+    let Some(h) = desc.methods.get(m) else { return Ok(None) };
+    let mut cur = desc.clone();
+    let mut found = None;
+    while let Some(ph) = cur.parent.clone() {
+        let Some((pname, pdesc)) = parent(&ph).map_err(DefinerError::Failed)? else {
+            return Err(DefinerError::Unnamed(ph));
+        };
+        if pdesc.methods.get(m) != Some(h) {
+            break;
+        }
+        found = Some(pname);
+        cur = pdesc;
+    }
+    Ok(found)
+}

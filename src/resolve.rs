@@ -17,10 +17,30 @@ use datumesh_core::{
 
 use crate::ast::{Ast, Node, NodeId, Op, ReadArg};
 use crate::builtins::{params, Params, AGGREGATES};
-use crate::env::{ArgDecl, Env, Signature};
+use crate::classes::{definer, DefinerError};
+use crate::env::{ArgDecl, Env, Signature, UnitDecl, UnitSide};
 use crate::names::is_name;
 use crate::parse::{Id, PArg, PNode, PVal, Tree};
 use crate::{Code, Error};
+
+/// The function a method `name` of the class `class` reads (16.3, K5): `D/name`, where D is the class
+/// that defines it when it is inherited (the nearest ancestor whose own descriptor gave `name` the same
+/// function hash, found through the parent hashes), else `class/name`. An unnamed parent hash is
+/// `E_FORMULA_UNRESOLVED`.
+pub(crate) fn method_name(env: &Env, class: &str, name: &str) -> Result<String, Error> {
+    let desc = env.classes.get(class).ok_or_else(|| e(Code::Unresolved, format!("{class} is not bound")))?;
+    match definer(desc, name, |ph| {
+        Ok::<_, std::convert::Infallible>(env.classes.by_hash(ph).map(|(n, d)| (n.to_string(), d.clone())))
+    }) {
+        Ok(Some(d)) => Ok(format!("{d}/{name}")),
+        Ok(None) => Ok(format!("{class}/{name}")),
+        Err(DefinerError::Unnamed(h)) => Err(e(
+            Code::Unresolved,
+            format!("no class name is bound to the parent hash {h} of {class}: its method {name} is not known (16.3)"),
+        )),
+        Err(DefinerError::Failed(never)) => match never {},
+    }
+}
 
 /// The most nodes a canonical AST may have (15.3).
 pub const MAX_NODES: usize = 65_536;
@@ -83,7 +103,8 @@ fn own_signature(sig: &Signature, keys: usize) -> Signature {
 /// (16.5), absent for `this`'s keys, which are the method's own arguments.
 #[derive(Clone, Debug)]
 struct Key {
-    node: Node,
+    /// The key's node in the output (a literal, or an expression of a receiver, K7).
+    node: NodeId,
     value: Option<KeyValue>,
 }
 
@@ -392,7 +413,7 @@ impl Resolver<'_> {
         &mut self,
         fq: &str,
         sig: Option<&Signature>,
-        pre: Vec<(String, Node)>,
+        pre: Vec<(String, NodeId)>,
         args: &[PArg],
     ) -> Result<Vec<(String, ReadArg)>, Error> {
         let skip = pre.len();
@@ -414,8 +435,7 @@ impl Resolver<'_> {
             Vec::new()
         };
         let mut bound: Vec<(String, ReadArg)> = Vec::new();
-        for (name, node) in pre {
-            let id = self.push(node);
+        for (name, id) in pre {
             bound.push((name, ReadArg::Expr(id)));
         }
         let mut i = 0;
@@ -453,6 +473,9 @@ impl Resolver<'_> {
                 if d.extras.default_asof {
                     let id = self.default_asof(d.ty);
                     bound.push((n.clone(), ReadArg::Expr(id)));
+                } else if let Some(text) = &d.extras.default_literal {
+                    let id = self.literal_default(d, text)?;
+                    bound.push((n.clone(), ReadArg::Expr(id)));
                 } else {
                     return Err(e(Code::ArgMissing, format!("{fq} needs {n} (an open argument is written *)")));
                 }
@@ -460,6 +483,31 @@ impl Resolver<'_> {
         }
         bound.sort_by(|a, b| a.0.cmp(&b.0));
         Ok(bound)
+    }
+
+    /// A literal default (K13) as the literal written in the body (7, 16.7): the canonical AST holds it.
+    fn literal_default(&mut self, d: &ArgDecl, text: &str) -> Result<NodeId, Error> {
+        let node = match d.ty {
+            Type::String => Node::Str(text.to_string()),
+            Type::Boolean => Node::Bool(text == "true"),
+            Type::Date => Node::Date(text.to_string()),
+            Type::Instant => Node::Instant(text.to_string()),
+            Type::Number => {
+                let unit = match &d.unit {
+                    Some(UnitDecl::Simple(UnitSide::Literal(u))) if u != "1" => Some(u.clone()),
+                    _ => None,
+                };
+                match text.strip_prefix('-') {
+                    Some(rest) => {
+                        let inner = self.push(Node::Num { value: rest.to_string(), unit });
+                        return Ok(self.push(Node::Op { op: Op::Neg, args: vec![inner] }));
+                    }
+                    None => Node::Num { value: text.to_string(), unit },
+                }
+            }
+            _ => return Err(e(Code::Type, format!("a literal default of type {}", d.ty.as_str()))),
+        };
+        Ok(self.push(node))
     }
 
     /// `asof()` for an instant, `date_of(asof())` for a date (16.7): the default of an argument.
@@ -497,7 +545,7 @@ impl Resolver<'_> {
                     if !classes.contains(&class) {
                         return Err(e(Code::Type, format!("{class} is not one of the classes of this position")));
                     }
-                    let obj = self.object(&class, args)?;
+                    let obj = self.object(&class, args, false)?;
                     let text = self.encode_key(&obj)?;
                     return Ok(self.push(Node::Str(text)));
                 }
@@ -534,7 +582,7 @@ impl Resolver<'_> {
 
     /// An object `name(keys)` (16.3, 16.5): its keys bound positionally by the class's `order`
     /// or labelled, every key once, each checked against its declaration and normalisation.
-    fn object(&mut self, name: &str, args: &[PArg]) -> Result<Obj, Error> {
+    fn object(&mut self, name: &str, args: &[PArg], receiver: bool) -> Result<Obj, Error> {
         let env = self.env.ok_or_else(|| e(Code::Unresolved, format!("{name} is not bound")))?;
         let desc = env.classes.get(name).ok_or_else(|| e(Code::Unresolved, format!("{name} is not a class")))?;
         let mut keys: BTreeMap<String, Key> = BTreeMap::new();
@@ -562,7 +610,7 @@ impl Resolver<'_> {
                 return Err(e(Code::Placement, "an object has no * or range"));
             };
             let ck = desc.keys.get(&label).ok_or_else(|| e(Code::ArgUnknown, format!("{name} has no key {label}")))?;
-            let key = self.key_value(ck, *x)?;
+            let key = self.key_value(ck, *x, receiver)?;
             keys.insert(label, key);
         }
         for n in desc.keys.keys() {
@@ -574,10 +622,25 @@ impl Resolver<'_> {
     }
 
     /// The value of one key of an object, by the key's declaration (16.1, 16.5).
-    fn key_value(&mut self, ck: &ClassKey, x: Id) -> Result<Key, Error> {
+    fn key_value(&mut self, ck: &ClassKey, x: Id, receiver: bool) -> Result<Key, Error> {
         match ck {
             ClassKey::Scalar { ty, key_normalisation, .. } => {
                 let (ty, rule) = (*ty, *key_normalisation);
+                // A receiver's key may be any expression (K7, 16.3): the plain read's argument.
+                if receiver
+                    && !matches!(
+                        self.tree.get(x),
+                        PNode::Str(_)
+                            | PNode::KeyLit(_)
+                            | PNode::Num { .. }
+                            | PNode::Date(_)
+                            | PNode::Instant(_)
+                            | PNode::Bool(_)
+                    )
+                {
+                    let id = self.node(x)?;
+                    return Ok(Key { node: id, value: None });
+                }
                 let node = match self.tree.get(x) {
                     PNode::Str(s) | PNode::KeyLit(s) if ty == Type::String => Node::Str(s.clone()),
                     PNode::Num { text, unit } if ty == Type::Number => {
@@ -597,16 +660,18 @@ impl Resolver<'_> {
                 if let (Node::Str(s), Some(rule)) = (&node, rule) {
                     rule.check(s).map_err(|_| e(Code::Key, format!("{s:?} is not canonical under {rule}")))?;
                 }
-                Ok(Key { node, value: Some(KeyValue::Scalar(scalar)) })
+                let id = self.push(node);
+                Ok(Key { node: id, value: Some(KeyValue::Scalar(scalar)) })
             }
             ClassKey::Class(cname) => match self.tree.get(x) {
                 PNode::Read { name, alias, pin: None, args }
                     if self.class_named(name, *alias).as_deref() == Some(cname.as_str()) =>
                 {
-                    let obj = self.object(cname, args)?;
+                    let obj = self.object(cname, args, false)?;
                     let ok = object_key(&obj)?;
                     let text = format_object_key(&ok);
-                    Ok(Key { node: Node::Str(text), value: Some(KeyValue::Object(ok)) })
+                    let id = self.push(Node::Str(text));
+                    Ok(Key { node: id, value: Some(KeyValue::Object(ok)) })
                 }
                 PNode::Str(s) | PNode::KeyLit(s) => {
                     let ok = decode(s)?;
@@ -616,7 +681,8 @@ impl Resolver<'_> {
                     if let Some(env) = self.env {
                         check_encoding(env, &ok)?;
                     }
-                    Ok(Key { node: Node::Str(s.clone()), value: Some(KeyValue::Object(ok)) })
+                    let id = self.push(Node::Str(s.clone()));
+                    Ok(Key { node: id, value: Some(KeyValue::Object(ok)) })
                 }
                 PNode::Read { .. } => Err(e(Code::Type, format!("a key of class {cname}"))),
                 _ => Err(e(Code::Placement, "an object's key is a literal")),
@@ -640,13 +706,16 @@ impl Resolver<'_> {
                     e(Code::Reserved, "this is the receiver of a method call in a method's body only")
                 })?;
                 let desc = env.classes.get(cls).ok_or_else(|| e(Code::Unresolved, format!("{cls} is not bound")))?;
-                let keys =
-                    desc.keys.keys().map(|k| (k.clone(), Key { node: Node::Var(k.clone()), value: None })).collect();
+                let mut keys = BTreeMap::new();
+                for k in desc.keys.keys() {
+                    let id = self.push(Node::Var(k.clone()));
+                    keys.insert(k.clone(), Key { node: id, value: None });
+                }
                 Obj { class: cls.to_string(), keys }
             }
             PNode::Read { name: cname, alias, pin: None, args: oargs } if self.class_named(cname, *alias).is_some() => {
                 let class = self.class_named(cname, *alias).unwrap_or_default();
-                self.object(&class, oargs)?
+                self.object(&class, oargs, true)?
             }
             _ => return self.dispatch(recv, name, qualified, args),
         };
@@ -675,7 +744,12 @@ impl Resolver<'_> {
         if desc.lookup.as_deref() == Some(name) || !desc.methods.contains_key(name) {
             return Err(e(Code::Method, format!("{} has no method {name}", obj.class)));
         }
-        let fq = format!("{}/{}", obj.class, name);
+        let fq = method_name(env, &obj.class, name)?;
+        // A method reads itself only where its class is bound with its hash (a stored override); a
+        // method of a draft (K7) that reads its own name through `this` is a mutual read (16.3).
+        if fq == env.name && !env.functions.contains_key(&fq) {
+            return Err(e(Code::Cycle, format!("{fq} reads itself through its method call (16.3)")));
+        }
         let want = &desc.methods[name];
         let sig = env.signature_of(&fq).ok_or_else(|| e(Code::Unresolved, format!("{fq} has no binding")))?;
         if let Some(f) = env.functions.get(&fq) {
@@ -684,7 +758,12 @@ impl Resolver<'_> {
             }
         }
         let order = sig.order.clone().unwrap_or_default();
-        let k = order.iter().zip(desc.order.iter()).take_while(|(a, b)| a == b).count();
+        // The keys the method takes first: the leading keys of its class that its signature has (16.2
+        // step 6), which a subclass's override or an inherited method may lack the last of.
+        let k = desc.order.iter().take_while(|n| sig.args.contains_key(*n)).count();
+        if order.len() < k || order[..k] != desc.order[..k] {
+            return Err(e(Code::Method, format!("{fq} does not take the keys of {} first", obj.class)));
+        }
         let pre = self.pre_keys(&obj, &order[..k])?;
         let bound = self.bind(&fq, Some(sig), pre, args)?;
         Ok(self.push(Node::Read { fn_name: fq, fn_hash: None, args: bound }))
@@ -711,7 +790,8 @@ impl Resolver<'_> {
         let fq = format!("{pname}/{name}");
         let sig =
             signature_by_hash(env, &hash).ok_or_else(|| e(Code::Unresolved, format!("{fq}@{hash} is not known")))?;
-        let pre = pdesc.order.iter().map(|k| (k.clone(), Node::Var(k.clone()))).collect();
+        let pre: Vec<(String, NodeId)> =
+            pdesc.order.iter().map(|k| (k.clone(), self.push(Node::Var(k.clone())))).collect();
         let bound = self.bind(&fq, Some(sig), pre, args)?;
         Ok(self.push(Node::Read { fn_name: fq, fn_hash: Some(hash), args: bound }))
     }
@@ -745,14 +825,15 @@ impl Resolver<'_> {
             if desc.lookup.as_deref() == Some(name) || !desc.methods.contains_key(name) {
                 return Err(e(Code::Method, format!("{c} has no method {name}")));
             }
-            let fq = format!("{c}/{name}");
+            let fq = method_name(env, c, name)?;
             let f = env.functions.get(&fq).ok_or_else(|| e(Code::Unresolved, format!("{fq} has no binding")))?;
             if f.hash != desc.methods[name] && !env.evaluating {
                 return Err(e(Code::Method, format!("{fq} is not bound to the method's hash")));
             }
             let order = f.signature.order.clone().unwrap_or_default();
-            let k = desc.order.len();
-            if order.len() < k || order[..k] != desc.order[..] {
+            // The keys the function takes first: the leading keys of the class its signature has (K5).
+            let k = desc.order.iter().take_while(|n| f.signature.args.contains_key(*n)).count();
+            if order.len() < k || order[..k] != desc.order[..k] {
                 return Err(e(Code::Method, format!("{fq} does not take the keys of {c} first")));
             }
             let sig = own_signature(&f.signature, k);
@@ -788,20 +869,21 @@ impl Resolver<'_> {
             }
             Node::Dispatch { classes, method, .. } => classes
                 .first()
-                .and_then(|c| env.signature_of(&format!("{c}/{method}")))
+                .and_then(|c| method_name(env, c, method).ok())
+                .and_then(|fq| env.signature_of(&fq))
                 .and_then(|s| s.returns_classes.clone()),
             _ => None,
         }
     }
 
     /// The keys of an object named `names`, as the first arguments of a method's function.
-    fn pre_keys(&self, obj: &Obj, names: &[String]) -> Result<Vec<(String, Node)>, Error> {
+    fn pre_keys(&self, obj: &Obj, names: &[String]) -> Result<Vec<(String, NodeId)>, Error> {
         names
             .iter()
             .map(|n| {
                 obj.keys
                     .get(n)
-                    .map(|k| (n.clone(), k.node.clone()))
+                    .map(|k| (n.clone(), k.node))
                     .ok_or_else(|| e(Code::ArgMissing, format!("the object has no key {n}")))
             })
             .collect()

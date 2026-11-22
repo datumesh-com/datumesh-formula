@@ -719,9 +719,10 @@ impl Checker<'_> {
         }
         let env = self.env;
         for c in classes {
-            self.inputs.insert(format!("{c}/{method}"));
+            let fq = crate::resolve::method_name(env, c, method)?;
+            self.inputs.insert(fq);
         }
-        let first = format!("{}/{method}", classes[0]);
+        let first = crate::resolve::method_name(env, &classes[0], method)?;
         let sig = env.signature_of(&first).ok_or_else(|| e(Code::Unresolved, format!("{first} has no binding")))?;
         let varies = |_: &str| -> Result<NumUnit, Error> { Ok(NumUnit::Varies) };
         for (name, x) in args {

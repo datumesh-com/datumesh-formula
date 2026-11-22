@@ -689,7 +689,7 @@ impl<'a> Parser<'a> {
             },
             // A pin is lexed only after a name or alias, and consumed with it. A digit-led word is
             // lexed only in a request (C3), never in a body.
-            Kind::End | Kind::Pin | Kind::DigitWord => Err(self.unexpected("an expression")),
+            Kind::End | Kind::Pin | Kind::DigitWord | Kind::DigitRun => Err(self.unexpected("an expression")),
         }
     }
 

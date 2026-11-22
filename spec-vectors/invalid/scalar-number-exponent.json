@@ -1,8 +1,0 @@
-{
-  "id": "invalid/scalar-number-exponent",
-  "kind": "scalar",
-  "description": "Exponent notation is rejected.",
-  "valid": false,
-  "input": "{\n  \"value\": \"1e5\",\n  \"type\": \"number\"\n}",
-  "error": "E_CANON_NUMBER"
-}

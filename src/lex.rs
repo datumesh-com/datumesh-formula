@@ -21,6 +21,10 @@ pub(crate) enum Kind {
     /// with letters, digits or `_` and holding a letter, that the number and period lexers do not
     /// accept whole. Only in a request, and a value only in a string position.
     DigitWord,
+    /// Since the classes round (K11): a request's run of digits and hyphens that no number, date or
+    /// instant lexer takes whole, such as `0000320193` or `0000320193-24-000123`. A string in a string
+    /// position; another code elsewhere (`call::digit_run_code`). Only in a request.
+    DigitRun,
     /// A period key (L5 with D, M or Y, 15.15): `1M`, `10Y`; a string in a key position.
     Period,
     Str,
@@ -188,8 +192,21 @@ fn lex_with(src: &str, request: bool) -> Result<Vec<Token>, Error> {
             i = pin_after(src, j, &mut out)?;
             continue;
         }
-        // L5, L6: a number and its unit suffix; in a request, possibly a digit-led word.
+        // L5, L6: a number and its unit suffix; in a request, possibly a digit-led word or a digit run.
         if c.is_ascii_digit() || (c == b'.' && b.get(i + 1).is_some_and(u8::is_ascii_digit)) {
+            if request && c.is_ascii_digit() && !(i > 0 && b[i - 1] == b'-') {
+                let mut j = i;
+                while j < b.len() && (b[j].is_ascii_digit() || b[j] == b'-') {
+                    j += 1;
+                }
+                let delimited = j == b.len() || matches!(b[j], b' ' | b'\t' | b'\n' | b',' | b')' | b']');
+                let run = &src[i..j];
+                if delimited && Scalar::from_lexical(Type::Number, run).is_err() {
+                    out.push(Token { kind: Kind::DigitRun, text: run.to_string(), unit: None, pos: start });
+                    i = j;
+                    continue;
+                }
+            }
             if request && c.is_ascii_digit() {
                 if let Some(end) = digit_led_end(src, i) {
                     out.push(Token { kind: Kind::DigitWord, text: src[i..end].to_string(), unit: None, pos: start });

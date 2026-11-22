@@ -1,8 +1,0 @@
-{
-  "id": "invalid/scalar-number-nan",
-  "kind": "scalar",
-  "description": "NaN is not a number value.",
-  "valid": false,
-  "input": "{\n  \"value\": \"NaN\",\n  \"type\": \"number\"\n}",
-  "error": "E_CANON_NUMBER"
-}

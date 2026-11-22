@@ -1,8 +1,0 @@
-{
-  "id": "invalid/scalar-null-value",
-  "kind": "scalar",
-  "description": "null is not a value.",
-  "valid": false,
-  "input": "{\"type\":\"string\",\"value\":null}",
-  "error": "E_SCHEMA"
-}

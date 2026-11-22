@@ -28,6 +28,9 @@ use datumesh_core::{
     KeyNormalisation, KeyValue, ObjectKey, Reference, Resolution, ResolutionKind, Resolved, Scalar, Type,
 };
 
+pub use datumesh_core::fold_label;
+
+use crate::classes::{definer, DefinerError};
 use crate::lex::{self, Kind, Token};
 use crate::Code;
 
@@ -73,6 +76,23 @@ pub trait CallEnv {
         let _ = (class, label, asof);
         Ok(None)
     }
+
+    /// The name a class hash is bound to as of `asof` (`None`: now), when the environment knows it.
+    /// A method a subclass inherits is read from the class that defines it, found through the parent
+    /// hashes, each named by this (16.3, K5, the classes round). Provided: none.
+    fn class_name_of(&self, class_hash: &str, asof: Option<&str>) -> Result<Option<String>, String> {
+        let _ = (class_hash, asof);
+        Ok(None)
+    }
+
+    /// **The chain hook** (5.8, 16.6, K10, the classes round): the value of the cell `cell` as of
+    /// `asof`, a key encoding of an object (`None`: the cell has no value as of `asof`). A chained
+    /// call reads each link's cell through it, and the last method's on the key it holds. Provided:
+    /// never a value.
+    fn chain(&self, cell: &CellRef, asof: &str) -> Result<Option<String>, String> {
+        let _ = (cell, asof);
+        Ok(None)
+    }
 }
 
 /// A [`CallEnv`] in memory: functions bound by name (at every time), an alias map and
@@ -95,6 +115,9 @@ pub struct MapCallEnv {
     /// Since spec-0.5.0: class name to `{label: key encoding}`, the cells of the class's `lookup`
     /// method (the class's alias table), read at any `asof`.
     pub lookups: BTreeMap<String, BTreeMap<String, String>>,
+    /// Since the classes round (K10): the values of the cells a chain reads, by their canonical call
+    /// without `?asof=` (`fn(arg: literal, ...)`), each a key encoding; a cell with no value is absent.
+    pub cells: BTreeMap<String, String>,
 }
 
 impl MapCallEnv {
@@ -138,6 +161,13 @@ impl MapCallEnv {
                 env.lookups.insert(class.clone(), m);
             }
         }
+        if let Some(cs) = v.get("cells").and_then(Value::as_object) {
+            for (call, key) in cs {
+                if let Some(k) = key.as_str() {
+                    env.cells.insert(call.clone(), k.to_string());
+                }
+            }
+        }
         Ok(env)
     }
 }
@@ -167,6 +197,19 @@ impl CallEnv for MapCallEnv {
     fn lookup(&self, class: &str, label: &str, _asof: &str) -> Result<Option<String>, String> {
         Ok(self.lookups.get(class).and_then(|m| m.get(label)).cloned())
     }
+    fn class_name_of(&self, class_hash: &str, _asof: Option<&str>) -> Result<Option<String>, String> {
+        Ok(self.classes.iter().find(|(_, d)| d.hash() == class_hash).map(|(n, _)| n.clone()))
+    }
+    fn chain(&self, cell: &CellRef, _asof: &str) -> Result<Option<String>, String> {
+        Ok(self.cells.get(&canonical_cell(cell)).cloned())
+    }
+}
+
+/// A cell's canonical call without `?asof=`: its full name and its arguments, each labelled, in
+/// ascending order of names (16.7), as the `cells` of a call environment write it.
+fn canonical_cell(cell: &CellRef) -> String {
+    let parts: Vec<String> = cell.args.iter().map(|(k, a)| format!("{k}: {}", literal(a))).collect();
+    format!("{}/{}({})", cell.ns, cell.fn_name, parts.join(", "))
 }
 
 #[cfg(feature = "engine")]
@@ -331,6 +374,8 @@ enum Bare {
     Date,
     Instant,
     Period,
+    /// Since the classes round (K11): a run of digits and hyphens, a string in a string position.
+    DigitRun,
 }
 
 /// A value as written in a request (5.8): `*`, a quoted string, an unquoted token, or an object
@@ -383,7 +428,8 @@ struct Request {
     head: Head,
     pin: Option<String>,
     recv: Recv,
-    method: Option<Method>,
+    /// The methods called, in order: one, or a chain of them (K10, the classes round).
+    methods: Vec<Method>,
 }
 
 /// A recursive-descent reader of a request's tokens (the grammar of Appendix A, `call`).
@@ -462,6 +508,7 @@ impl Reader<'_> {
             Kind::Period => Val::Bare(Bare::Period, t.text.clone()),
             Kind::Word => Val::Bare(Bare::Word, t.text.clone()),
             Kind::DigitWord => Val::Bare(Bare::Digit, t.text.clone()),
+            Kind::DigitRun => Val::Bare(Bare::DigitRun, t.text.clone()),
             Kind::Qualified if self.is(1, "(") => {
                 let name = t.text.clone();
                 self.i += 1;
@@ -507,7 +554,8 @@ impl Reader<'_> {
         } else {
             Recv::Args(self.args()?)
         };
-        let method = if self.is(0, ".") {
+        let mut methods = Vec::new();
+        while self.is(0, ".") {
             let named = self.at(1).is_some_and(|t| matches!(t.kind, Kind::Word | Kind::Qualified)) && self.is(2, "(");
             if !named {
                 return syntax("a method is .name(arguments)");
@@ -515,17 +563,15 @@ impl Reader<'_> {
             let t = self.at(1).cloned().unwrap_or_else(|| self.t[self.i].clone());
             self.i += 2;
             let args = self.args()?;
-            Some(Method { name: t.text.clone(), qualified: t.kind == Kind::Qualified, args })
-        } else {
-            None
-        };
+            methods.push(Method { name: t.text.clone(), qualified: t.kind == Kind::Qualified, args });
+        }
         if self.at(0).is_some() {
             return syntax("nothing but ?asof= follows the call");
         }
-        if matches!(recv, Recv::Label(_)) && method.is_none() {
+        if matches!(recv, Recv::Label(_)) && methods.is_empty() {
             return syntax("a label is a receiver of a method");
         }
-        Ok(Request { head, pin, recv, method })
+        Ok(Request { head, pin, recv, methods })
     }
 }
 
@@ -573,6 +619,18 @@ fn literal(a: &Arg) -> String {
     }
 }
 
+/// The code of a digit-and-hyphen run that is no string here (K11, the classes round): the number
+/// lexer's code for a leading part that is no canonical number, else `E_PARSE_URI` (the run is no
+/// single token).
+fn digit_run_code(text: &str) -> &'static str {
+    let first = text.split('-').next().unwrap_or(text);
+    if lexical_of(Type::Number, first).is_err() {
+        "E_CANON_NUMBER"
+    } else {
+        "E_PARSE_URI"
+    }
+}
+
 /// The state of one call's resolution: its environment, the call's asof, what it resolved.
 struct Resolving<'a> {
     env: &'a dyn CallEnv,
@@ -609,6 +667,10 @@ impl Resolving<'_> {
             (Val::Bare(Bare::Digit, t), Type::String) => lexical_of(ty, t)?,
             (Val::Bare(Bare::Digit, _), _) => {
                 return fail("E_CANON_TYPE", format!("a digit-led word in a {} position", ty.as_str()))
+            }
+            (Val::Bare(Bare::DigitRun, t), Type::String | Type::Blob) => lexical_of(ty, t)?,
+            (Val::Bare(Bare::DigitRun, t), _) => {
+                return fail(digit_run_code(t), format!("{t:?} is not a {}", ty.as_str()))
             }
             (Val::Quoted(t) | Val::Bare(_, t), Type::String | Type::Blob) => lexical_of(ty, t)?,
             (Val::Bare(Bare::Number, t), Type::Number) => lexical_of(ty, t)?,
@@ -755,6 +817,8 @@ impl Resolving<'_> {
             Pre(Arg),
             Written(&'v Val),
             Default,
+            /// A literal default (K13, the classes round): its lexical value.
+            Literal(String),
         }
         let declared = &desc.signature.args;
         let extras = &desc.arg_extras;
@@ -792,6 +856,8 @@ impl Resolving<'_> {
             }
             if extras.get(k).is_some_and(|x| x.default_asof) {
                 bound.insert(k.clone(), Src::Default);
+            } else if let Some(text) = extras.get(k).and_then(|x| x.default_literal.clone()) {
+                bound.insert(k.clone(), Src::Literal(text));
             } else {
                 return fail("E_ARG_MISSING", format!("{k} is not bound"));
             }
@@ -812,6 +878,10 @@ impl Resolving<'_> {
                         arg
                     }
                 },
+                Src::Literal(text) => {
+                    self.resolutions.push(resolution(Resolution::new(&k, ResolutionKind::Default, &text))?);
+                    Arg::Value(lexical_of(decl.ty, &text)?)
+                }
                 Src::Default => {
                     let Some(at) = self.instant()? else {
                         return fail("E_ARG_MISSING", format!("{k} defaults to the asof, and the mesh has no now"));
@@ -890,8 +960,11 @@ pub fn parse_call(text: &str, env: &dyn CallEnv) -> Result<Call, CallError> {
     };
     let (call_name, cell_args) = match (pinned, r.bound_class(&fq)?) {
         (None, Some(cd)) => {
-            let Some(m) = &req.method else { return syntax("a call of a class names one method") };
-            let (name, _, args) = class_call(&mut r, &fq, &cd, &req.recv, m)?;
+            let (name, _, args) = match req.methods.as_slice() {
+                [] => return syntax("a call of a class names one method"),
+                [m] => class_call(&mut r, &fq, &cd, &req.recv, m)?,
+                _ => chain_call(&mut r, &fq, &cd, &req.recv, &req.methods)?,
+            };
             (name, args)
         }
         (pinned, _) => {
@@ -903,7 +976,7 @@ pub fn parse_call(text: &str, env: &dyn CallEnv) -> Result<Call, CallError> {
                 },
             };
             let Recv::Args(args) = &req.recv else { return syntax("a label is a receiver of a method") };
-            if req.method.is_some() {
+            if !req.methods.is_empty() {
                 return syntax("a method is called on an object");
             }
             let cell_args = r.bind(&fq, &desc, Vec::new(), args)?;
@@ -941,6 +1014,153 @@ fn resolved_of(call: &str, resolutions: Vec<Resolution>) -> Result<Resolved, Cal
     Resolved::new(call, resolutions).map_err(|e| CallError::Code(e.code_str(), e.to_string()))
 }
 
+/// A method's target: its name, its descriptor and the key arguments it takes first.
+type MethodTarget = (String, FunctionDescriptor, Vec<(String, Arg)>);
+
+/// The key of an object's key value, as a receiver's key: the cell argument and the key value.
+fn key_of(v: KeyValue) -> Key {
+    let arg = match &v {
+        KeyValue::Object(o) => Arg::Value(Scalar::String(format_object_key(o))),
+        KeyValue::Scalar(s) => Arg::Value(s.clone()),
+        _ => Arg::Value(Scalar::Boolean(false)),
+    };
+    (arg, v)
+}
+
+/// The keys of a receiver: the object's keys as written, or those of the object its label names
+/// (16.7, through the class's lookup).
+fn receiver_keys(
+    r: &mut Resolving,
+    class: &str,
+    cd: &ClassDescriptor,
+    recv: &Recv,
+) -> Result<BTreeMap<String, Key>, CallError> {
+    match recv {
+        Recv::Args(args) => r.object_keys(class, args),
+        Recv::Label(val) => r.label_keys(class, cd, val),
+    }
+}
+
+impl Resolving<'_> {
+    /// The object a label names, through the class's lookup (16.7). A label is folded before the
+    /// lookup is read when the lookup's `label` argument is `label_fold` (K8, 16.4); the resolution
+    /// records the label as written.
+    fn label_keys(&mut self, class: &str, cd: &ClassDescriptor, val: &Val) -> Result<BTreeMap<String, Key>, CallError> {
+        let Some(lookup) = cd.lookup.clone() else {
+            return fail("E_NAME_UNBOUND", format!("{class} has no lookup: the label is unbound"));
+        };
+        let written = match val {
+            Val::Quoted(t) | Val::Bare(_, t) => t.clone(),
+            _ => return syntax("a label is a string"),
+        };
+        let mut label = written.clone();
+        if let Some(f) = self.bound(&format!("{class}/{lookup}"))? {
+            match f.arg_extras.get("label").and_then(|x| x.key_normalisation) {
+                Some(KeyNormalisation::LabelFold) => label = fold_label(&written),
+                Some(rule) if rule.check(&label).is_err() => {
+                    return fail("E_KEY_NORMALISATION", format!("{label:?} is not canonical under {rule}"));
+                }
+                _ => {}
+            }
+        }
+        // A label is read at the call's asof or the mesh's now (16.7): with neither, the lookup is not
+        // reached.
+        let Some(at) = self.instant()? else {
+            return fail("E_ARG_MISSING", format!("the label {written} needs an asof: the mesh has no now"));
+        };
+        let enc = match self.env.lookup(class, &label, &at).map_err(CallError::Env)? {
+            Some(enc) if !enc.is_empty() => enc,
+            // A withdrawn label (K8) is unknown, as is one with no value.
+            _ => return fail("E_NAME_UNBOUND", format!("the label {written} has no value as of {at}")),
+        };
+        self.resolutions.push(resolution(Resolution::lookup(&written, &enc, &at))?);
+        let obj = parse_object_key(&enc).map_err(|e| CallError::Code("E_KEY_ENCODING", e.to_string()))?;
+        Ok(obj.keys.into_iter().map(|(k, v)| (k, key_of(v))).collect())
+    }
+
+    /// The name of the class that defines method `m` of an object of `class` (16.3, K5): `D/m` when
+    /// it is inherited from D, else `class/m`. Its parent hashes are named as of the call's asof.
+    fn method_fq(&self, class: &str, cd: &ClassDescriptor, m: &str) -> Result<String, CallError> {
+        let at = self.asof.as_deref();
+        let found = definer(cd, m, |ph| {
+            let Some(pname) = self.env.class_name_of(ph, at).map_err(CallError::Env)? else { return Ok(None) };
+            Ok(self.bound_class(&pname)?.map(|pd| (pname, pd)))
+        });
+        match found {
+            Ok(Some(d)) => Ok(format!("{d}/{m}")),
+            Ok(None) => Ok(format!("{class}/{m}")),
+            Err(DefinerError::Unnamed(h)) => fail(
+                "E_NAME_UNBOUND",
+                format!("no class name is bound to the parent hash {h} of {class}: its method {m} is not known"),
+            ),
+            Err(DefinerError::Failed(e)) => Err(e),
+        }
+    }
+
+    /// The function a method call of an object of `class`, with `keys`, reads (16.3, 16.7): its
+    /// name, its descriptor, and the key arguments it takes first (bound to the object's keys). Pushes
+    /// no resolution.
+    fn method_target(
+        &self,
+        class: &str,
+        cd: &ClassDescriptor,
+        keys: &BTreeMap<String, Key>,
+        m: &Method,
+    ) -> Result<MethodTarget, CallError> {
+        let name = m.name.clone();
+        let (fq, desc, k) = if m.qualified {
+            // An extension method: a function whose first arguments are the class's keys, in order.
+            let desc =
+                self.bound(&name)?.ok_or_else(|| CallError::Code("E_NAME_UNBOUND", format!("{name} is not bound")))?;
+            let order = desc.order.clone().unwrap_or_default();
+            let k = cd.order.len();
+            if order.len() < k || order[..k] != cd.order[..] {
+                return fail("E_ARG_UNKNOWN", format!("{name} does not take the keys of {class} first"));
+            }
+            (name.clone(), desc, k)
+        } else {
+            if cd.lookup.as_deref() == Some(name.as_str()) || !cd.methods.contains_key(&name) {
+                return fail("E_NAME_UNBOUND", format!("{class} has no method {name}"));
+            }
+            let fq = self.method_fq(class, cd, &name)?;
+            let desc =
+                self.bound(&fq)?.ok_or_else(|| CallError::Code("E_NAME_UNBOUND", format!("{fq} is not bound")))?;
+            if desc.hash() != cd.methods[&name] {
+                return fail("E_NAME_UNBOUND", format!("{fq} is not bound to the method's hash"));
+            }
+            let order = desc.order.clone().unwrap_or_default();
+            let k = order.iter().zip(cd.order.iter()).take_while(|(a, b)| a == b).count();
+            (fq, desc, k)
+        };
+        let order = desc.order.clone().unwrap_or_default();
+        let mut pre = Vec::with_capacity(k);
+        for n in &order[..k] {
+            let (arg, _) =
+                keys.get(n).ok_or_else(|| CallError::Code("E_ARG_MISSING", format!("the object has no key {n}")))?;
+            pre.push((n.clone(), arg.clone()));
+        }
+        Ok((fq, desc, pre))
+    }
+
+    /// The object a chain's cell holds (K10, 16.6): a key encoding of one of the `declared` classes,
+    /// with that class's keys, each of its type; else the fault `E_FORMULA_DISPATCH_KEY`.
+    fn chained_object(&self, value: &str, declared: &[String]) -> Result<(String, BTreeMap<String, Key>), CallError> {
+        let fault = |why: String| CallError::Code("E_FORMULA_DISPATCH_KEY", why);
+        let obj = parse_object_key(value).map_err(|e| fault(e.to_string()))?;
+        if !declared.contains(&obj.class) {
+            return Err(fault(format!("a key of {}, where {declared:?} is declared", obj.class)));
+        }
+        let Some(cd) = self.bound_class(&obj.class)? else {
+            return fail("E_NAME_UNBOUND", format!("{} is not a class of this mesh", obj.class));
+        };
+        if !obj.keys.keys().eq(cd.keys.keys()) {
+            return Err(fault(format!("the keys of {} are not its class's", obj.class)));
+        }
+        self.check_encoding(&obj).map_err(|e| fault(e.to_string()))?;
+        Ok((obj.class.clone(), obj.keys.into_iter().map(|(k, v)| (k, key_of(v))).collect()))
+    }
+}
+
 /// A call of a method of an object (16.3, 16.7): the object from its keys, or from its label's
 /// lookup; then the method's function read with the object's keys first. Returns the function's
 /// name, its descriptor and the cell's arguments.
@@ -951,80 +1171,58 @@ fn class_call(
     recv: &Recv,
     m: &Method,
 ) -> Result<(String, FunctionDescriptor, BTreeMap<String, Arg>), CallError> {
-    // The receiver's keys: bound and read first (5.8).
-    let keys: BTreeMap<String, Key> = match recv {
-        Recv::Args(args) => r.object_keys(class, args)?,
-        Recv::Label(val) => {
-            let Some(lookup) = cd.lookup.clone() else {
-                return fail("E_NAME_UNBOUND", format!("{class} has no lookup: the label is unbound"));
-            };
-            let label = match val {
-                Val::Quoted(t) | Val::Bare(_, t) => t.clone(),
-                _ => return syntax("a label is a string"),
-            };
-            if let Some(f) = r.bound(&format!("{class}/{lookup}"))? {
-                if let Some(rule) = f.arg_extras.get("label").and_then(|x| x.key_normalisation) {
-                    if rule.check(&label).is_err() {
-                        return fail("E_KEY_NORMALISATION", format!("{label:?} is not canonical under {rule}"));
-                    }
-                }
-            }
-            // A label is read at the call's asof or the mesh's now (16.7): with neither, the lookup
-            // is not reached.
-            let Some(at) = r.instant()? else {
-                return fail("E_ARG_MISSING", format!("the label {label} needs an asof: the mesh has no now"));
-            };
-            let Some(enc) = r.env.lookup(class, &label, &at).map_err(CallError::Env)? else {
-                return fail("E_NAME_UNBOUND", format!("the label {label} has no value as of {at}"));
-            };
-            r.resolutions.push(resolution(Resolution::lookup(&label, &enc, &at))?);
-            let obj = parse_object_key(&enc).map_err(|e| CallError::Code("E_KEY_ENCODING", e.to_string()))?;
-            obj.keys
-                .into_iter()
-                .map(|(k, v)| {
-                    let arg = match &v {
-                        KeyValue::Object(o) => Arg::Value(Scalar::String(format_object_key(o))),
-                        other => Arg::Value(match other {
-                            KeyValue::Scalar(s) => s.clone(),
-                            _ => Scalar::Boolean(false),
-                        }),
-                    };
-                    (k, (arg, v))
-                })
-                .collect()
-        }
-    };
-    let name = m.name.clone();
-    let (fq, desc, k) = if m.qualified {
-        // An extension method: a function whose first arguments are the class's keys, in order.
-        let desc = r.bound(&name)?.ok_or_else(|| CallError::Code("E_NAME_UNBOUND", format!("{name} is not bound")))?;
-        let order = desc.order.clone().unwrap_or_default();
-        let k = cd.order.len();
-        if order.len() < k || order[..k] != cd.order[..] {
-            return fail("E_ARG_UNKNOWN", format!("{name} does not take the keys of {class} first"));
-        }
-        (name.clone(), desc, k)
-    } else {
-        if cd.lookup.as_deref() == Some(name.as_str()) || !cd.methods.contains_key(&name) {
-            return fail("E_NAME_UNBOUND", format!("{class} has no method {name}"));
-        }
-        let fq = format!("{class}/{name}");
-        let desc = r.bound(&fq)?.ok_or_else(|| CallError::Code("E_NAME_UNBOUND", format!("{fq} is not bound")))?;
-        if desc.hash() != cd.methods[&name] {
-            return fail("E_NAME_UNBOUND", format!("{fq} is not bound to the method's hash"));
-        }
-        let order = desc.order.clone().unwrap_or_default();
-        let k = order.iter().zip(cd.order.iter()).take_while(|(a, b)| a == b).count();
-        (fq, desc, k)
-    };
-    let order = desc.order.clone().unwrap_or_default();
-    let mut pre = Vec::with_capacity(k);
-    for n in &order[..k] {
-        let (arg, _) =
-            keys.get(n).ok_or_else(|| CallError::Code("E_ARG_MISSING", format!("the object has no key {n}")))?;
-        pre.push((n.clone(), arg.clone()));
-    }
-    r.resolutions.push(resolution(Resolution::new(&format!("{class}(...).{name}"), ResolutionKind::Method, &fq))?);
+    let keys = receiver_keys(r, class, cd, recv)?;
+    let (fq, desc, pre) = r.method_target(class, cd, &keys, m)?;
+    r.resolutions.push(resolution(Resolution::new(&format!("{class}(...).{}", m.name), ResolutionKind::Method, &fq))?);
     let args = r.bind(&fq, &desc, pre, &m.args)?;
+    Ok((fq, desc, args))
+}
+
+/// A chain of methods (K10, 5.8): each link is a method called on the key the one before it returns,
+/// read as of the call's asof (or the mesh's now); the last method is the call. Returns the last
+/// method's name, descriptor and the cell's arguments.
+fn chain_call(
+    r: &mut Resolving,
+    class: &str,
+    cd: &ClassDescriptor,
+    recv: &Recv,
+    methods: &[Method],
+) -> Result<(String, FunctionDescriptor, BTreeMap<String, Arg>), CallError> {
+    let Some((last, links)) = methods.split_last() else { return syntax("a call of a class names one method") };
+    let mut here = class.to_string();
+    let mut here_desc = cd.clone();
+    let mut keys = receiver_keys(r, class, cd, recv)?;
+    for m in links {
+        let (fq, desc, pre) = r.method_target(&here, &here_desc, &keys, m)?;
+        let Some(declared) = desc.returns_classes.clone() else {
+            return fail("E_PARSE_URI", format!("{fq} returns no key, so no method can follow it in a chain (K10)"));
+        };
+        let args = r.bind(&fq, &desc, pre, &m.args)?;
+        let (ns, fn_name) = fq.rsplit_once('/').unwrap_or(("", fq.as_str()));
+        let cell = CellRef { ns: ns.to_string(), fn_name: fn_name.to_string(), args, asof: None };
+        let Some(at) = r.instant()? else {
+            return fail(
+                "E_ARG_MISSING",
+                format!("a chained call of {fq} is read as of the call's asof, or the mesh's now"),
+            );
+        };
+        // A link whose cell has no value is that cell's outcome (not_covered, E_NAME_UNBOUND).
+        let Some(value) = r.env.chain(&cell, &at).map_err(CallError::Env)? else {
+            return fail("E_NAME_UNBOUND", format!("{fq} has no value as of {at}"));
+        };
+        let (next, next_keys) = r.chained_object(&value, &declared)?;
+        r.resolutions.push(resolution(Resolution::chain(&m.name, &value, &at))?);
+        here_desc =
+            r.bound_class(&next)?.ok_or_else(|| CallError::Code("E_NAME_UNBOUND", format!("{next} is not bound")))?;
+        here = next;
+        keys = next_keys;
+    }
+    let (fq, desc, pre) = r.method_target(&here, &here_desc, &keys, last)?;
+    r.resolutions.push(resolution(Resolution::new(
+        &format!("{here}(...).{}", last.name),
+        ResolutionKind::Method,
+        &fq,
+    ))?);
+    let args = r.bind(&fq, &desc, pre, &last.args)?;
     Ok((fq, desc, args))
 }

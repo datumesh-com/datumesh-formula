@@ -1,8 +1,0 @@
-{
-  "id": "normalisation/hebrew-consonantal",
-  "kind": "normalisation",
-  "description": "spec-0.5.0: hebrew_consonantal, canonical.",
-  "valid": true,
-  "rule": "hebrew_consonantal",
-  "text": "בראשית ברא אלהים את השמים ואת הארץ"
-}

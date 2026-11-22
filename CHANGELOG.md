@@ -2,6 +2,56 @@
 
 All notable changes to `datumesh-formula`.
 
+## 0.6.0 (unreleased)
+
+For the classes round (`CONTRACT-classes-round.md`, the branch `classes-round`), on datumesh-core 0.3.12
+(unreleased; `[patch]` to the local core until it is published) and the spec at commit `4114360`, which
+is now the submodule `spec/` (a gitlink, as datumesh-core has it); `spec-vectors` is a symlink to
+`spec/vectors`. Every change is additive except the first, which is **BREAKING**.
+
+- **BREAKING: an inherited method reads the cells of the class that defines it** (K5; spec 16.2, 16.3,
+  16.6). For an object of class S, a method S inherits without overriding denotes `D/m`, where D is the
+  nearest ancestor whose descriptor gave `m` the same function hash. This holds in a body, a request
+  (`resolved` says `method` to `D/m`), a dispatch and `this`. An overridden method is still `S/m`. D is
+  found through the parent hashes, each named by the class name bound to it (`CallEnv::class_name_of`,
+  `World::class_name`, `Callees::class_name`); a parent with no name is `E_FORMULA_UNRESOLVED` in a body
+  and `E_NAME_UNBOUND` in a request. Binding S binds only S's own methods (datumesh-store's `bind_class`
+  is the store's change, not this crate's). Cost: a call or body that read `S/m` for an inherited `m` now
+  reads `D/m`; the vectors `formula/class-inherited` and `formula/class-inherited-plain` change to
+  `rates.example.org/fx_pair/cross` (their AST, hash, body and inputs). The plain read `S/m` of an
+  inherited method is now `E_FORMULA_UNRESOLVED` (body) or `E_NAME_UNBOUND` (request). Libraries
+  compiled against 0.5.x resolve the old way until they are recompiled.
+- **`this` and a dispatch in a draft** (K7): `definition::ClassDraft` and `define_method_in_draft`
+  define a method whose `this` is a class not yet bound; `this.m` is checked against the draft's keys
+  and signatures and reads `N/m` (or `D/m`, for an inherited method of the draft's parent). A method
+  reads the leading keys its signature has, so an override lacking a trailing key is accepted. Cost: a
+  method that does not take its class's keys first is refused as a method read (`E_FORMULA_METHOD`).
+- **Variable-key receivers** (K7, 16.3): `N(b, USD).m(d)` in a body is the plain read
+  `N/m(b, USD, d)`, with the same canonical AST. The literal rule stays in class-typed positions.
+  Cost: `E_FORMULA_PLACEMENT` for a non-literal key is kept only there.
+- **Returned classes are loaded at define** (K2): a dispatch on a callee's returned key defines
+  without the class being named in the body. Cost: one more class loaded per such callee.
+- **Request chains** (K10, 5.8, 16.6): `N(k).m(a).n(b)` calls each method on the key the one before
+  returns, read as of the call's asof (or the mesh's now) through the new `CallEnv::chain` hook;
+  `resolved` gains one `chain` entry per link. A link after a non-key method is `E_PARSE_URI`; a
+  link with no value is `E_NAME_UNBOUND`; an undeclared key is `E_FORMULA_DISPATCH_KEY`. Cost: a
+  request with more than one method was `E_PARSE_URI`; `MapCallEnv` reads links from a new `cells`
+  member.
+- **Folded labels** (K8, 16.4): `fold_label` (re-exported from datumesh-core) folds a label before its
+  lookup when the lookup's `label` argument is `label_fold`; the resolution records the label as
+  written; a withdrawn label (`""`) is `E_NAME_UNBOUND`. Cost: one folding per labelled call.
+- **Digit and hyphen runs are strings in string positions** (K11, 5.8): an unquoted run such as
+  `0000320193` or `0000320193-24-000123` is a string where a string is expected; elsewhere the codes are
+  today's (`E_CANON_NUMBER` or `E_PARSE_URI`). Cost: a call that was refused for such a run in a
+  string position is now accepted; runs with letters are unchanged.
+- **Literal defaults** (K13, 7, 16.7): an argument may declare `"default": <lexical value>`, bound in a
+  request (`resolved` records a `default`) and in a body (the canonical AST holds the literal). Cost:
+  a hashed descriptor member, for new functions only; a default of the wrong type is `E_SCHEMA` at
+  define.
+- Inherited methods are loaded with their ancestors at define (K5), and a method of the class being
+  defined is no longer bound by its own name when it is a draft (K7). Cost: a define loads the
+  ancestors of each class it reads.
+
 ## 0.5.2 (unreleased)
 
 For spec-0.6.2 (the branch `spec-0.6.2` of [datumesh-spec](https://github.com/datumesh-com/datumesh-spec),

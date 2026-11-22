@@ -17,7 +17,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use datumesh_core::json::Value;
-use datumesh_core::{Scalar, Type};
+use datumesh_core::{ClassDescriptor, Scalar, Type};
 
 use crate::ast::{Node, NodeId, Op, ReadArg};
 use crate::builtins::{AGGREGATES, BY_SLICE};
@@ -263,6 +263,14 @@ pub trait World {
     /// `None` (a world without classes).
     fn class(&mut self, name: &str, at: Option<&str>) -> Result<Option<ClassBinding>, Self::Error> {
         let _ = (name, at);
+        Ok(None)
+    }
+
+    /// The name a class hash is bound to, as of the evaluation asof (`None`) or the transaction time `at`,
+    /// when the world knows it: a dispatch on an inherited method finds the class that defines it through
+    /// the parent hashes, each named by this (16.3, K5). Free. Since the classes round. Provided: `None`.
+    fn class_name(&mut self, class_hash: &str, at: Option<&str>) -> Result<Option<String>, Self::Error> {
+        let _ = (class_hash, at);
         Ok(None)
     }
 
@@ -921,6 +929,29 @@ impl<W: World + ?Sized> Eval<'_, W> {
         self.read_pattern(fn_name, b.function.clone(), pattern, narrow, None)
     }
 
+    /// The function `class/method` reads (16.3, K5): `D/method`, where D is the class that defines an
+    /// inherited method, found through the parent hashes; a parent no name is bound to is unresolved.
+    fn method_fn_name(&mut self, class: &str, desc: &ClassDescriptor, method: &str) -> R<String, W::Error> {
+        let Some(h) = desc.methods.get(method).cloned() else { return Ok(format!("{class}/{method}")) };
+        let mut cur = desc.clone();
+        let mut definer: Option<String> = None;
+        while let Some(ph) = cur.parent.clone() {
+            let Some(pname) = self.world.class_name(&ph, None).map_err(Stop::World)? else {
+                return Err(Stop::Code(Code::Unresolved));
+            };
+            let Some(pb) = self.world.class(&pname, None).map_err(Stop::World)? else {
+                return Err(Stop::Code(Code::Unresolved));
+            };
+            let pdesc = pb.class.as_ref().clone();
+            if pdesc.methods.get(method) != Some(&h) {
+                break;
+            }
+            definer = Some(pname);
+            cur = pdesc;
+        }
+        Ok(format!("{}/{method}", definer.as_deref().unwrap_or(class)))
+    }
+
     /// A dispatched method call (16.6): the key is decoded, and it must be the key of an object of
     /// one of the classes, with exactly the class's keys, else the fault `E_FORMULA_DISPATCH_KEY`
     /// (15.12). Then `<class>/m` must be the function bound to the class's method hash, else the
@@ -937,9 +968,9 @@ impl<W: World + ?Sized> Eval<'_, W> {
         // to the class's hash is the mesh's failure (15.8, 15.12).
         // The class is read as of the evaluation asof, not as of the method's binding: its start is
         // no `asof` candidate (16.6, 8.2), the method's binding is the only one relied on.
-        let fq = format!("{}/{}", obj.class, method);
-        let bound = self.world.function(&fq, None).map_err(Stop::World)?.ok_or(Stop::Code(Code::Unresolved))?;
         let class = self.world.class(&obj.class, None).map_err(Stop::World)?.ok_or(Stop::Code(Code::Unresolved))?;
+        let fq = self.method_fn_name(&obj.class, &class.class, method)?;
+        let bound = self.world.function(&fq, None).map_err(Stop::World)?.ok_or(Stop::Code(Code::Unresolved))?;
         if class.class.methods.get(method) != Some(&bound.function.hash) {
             return Err(Code::Dispatch.into());
         }

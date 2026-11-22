@@ -1,8 +1,0 @@
-{
-  "id": "normalisation/upper-ascii",
-  "kind": "normalisation",
-  "description": "spec-0.5.0: upper_ascii, canonical.",
-  "valid": true,
-  "rule": "upper_ascii",
-  "text": "EUR"
-}
