@@ -116,7 +116,7 @@ impl World {
     }
 
     /// A definition environment for a body with this signature (a JSON text). `classes` are the
-    /// classes bound: `par` and `sub`, or fewer.
+    /// classes bound: `par` and `sub`, or (without `par`) `par` held by hash only.
     pub fn env(&self, signature: &str, legacy: bool, with_par: bool) -> Env {
         let mut env = Env::new("calc.example.net/e", Signature::from_value(&v(signature)).unwrap());
         for (n, d) in self.bound(legacy) {
@@ -124,6 +124,9 @@ impl World {
         }
         if with_par {
             env.classes.insert(PAR, datumesh_core::ClassDescriptor::from_value(&self.par).unwrap());
+        } else {
+            // Held by hash only (class_descriptors), its name unbound.
+            env.held.push(datumesh_core::ClassDescriptor::from_value(&self.par).unwrap());
         }
         env.classes.insert(SUB, datumesh_core::ClassDescriptor::from_value(&self.sub).unwrap());
         env
@@ -137,6 +140,9 @@ impl World {
         }
         if with_par {
             e.classes.insert(PAR.into(), datumesh_core::ClassDescriptor::from_value(&self.par).unwrap());
+        } else {
+            // Held by hash only (class_descriptors), its name unbound.
+            e.held.push(datumesh_core::ClassDescriptor::from_value(&self.par).unwrap());
         }
         e.classes.insert(SUB.into(), datumesh_core::ClassDescriptor::from_value(&self.sub).unwrap());
         e.now = Some("2026-07-01T00:00:00.000000Z".into());
