@@ -939,8 +939,12 @@ impl<W: World + ?Sized> Eval<'_, W> {
 
     /// The function `class/method` reads (16.3, K5): `D/method`, where D is the class that defines an
     /// inherited method, found through the parent hashes; a parent no name is bound to is unresolved.
-    fn method_fn_name(&mut self, class: &str, desc: &ClassDescriptor, method: &str) -> R<String, W::Error> {
-        let Some(h) = desc.methods.get(method).cloned() else { return Ok(format!("{class}/{method}")) };
+    /// Also the keys the method takes, in class order: D's (the leading keys of the object's class),
+    /// or the object's own when the method is its own.
+    fn method_fn_name(&mut self, class: &str, desc: &ClassDescriptor, method: &str) -> R<(String, Vec<String>), W::Error> {
+        let Some(h) = desc.methods.get(method).cloned() else {
+            return Ok((format!("{class}/{method}"), desc.order.clone()));
+        };
         let mut cur = desc.clone();
         let mut defining: Option<String> = None;
         while let Some(ph) = cur.parent.clone() {
@@ -953,11 +957,12 @@ impl<W: World + ?Sized> Eval<'_, W> {
             defining = Some(ph);
             cur = pdesc;
         }
-        let Some(dh) = defining else { return Ok(format!("{class}/{method}")) };
+        let Some(dh) = defining else { return Ok((format!("{class}/{method}"), desc.order.clone())) };
         let Some(dname) = self.world.class_name(&dh, None).map_err(Stop::World)? else {
             return Err(Stop::Code(Code::Unresolved));
         };
-        Ok(format!("{dname}/{method}"))
+        // `cur` is the defining class's descriptor: the loop moves to it only while it gives `h`.
+        Ok((format!("{dname}/{method}"), cur.order.clone()))
     }
 
     /// A dispatched method call (16.6): the key is decoded, and it must be the key of an object of
@@ -977,7 +982,7 @@ impl<W: World + ?Sized> Eval<'_, W> {
         // The class is read as of the evaluation asof, not as of the method's binding: its start is
         // no `asof` candidate (16.6, 8.2), the method's binding is the only one relied on.
         let class = self.world.class(&obj.class, None).map_err(Stop::World)?.ok_or(Stop::Code(Code::Unresolved))?;
-        let fq = self.method_fn_name(&obj.class, &class.class, method)?;
+        let (fq, takes) = self.method_fn_name(&obj.class, &class.class, method)?;
         let bound = self.world.function(&fq, None).map_err(Stop::World)?.ok_or(Stop::Code(Code::Unresolved))?;
         if class.class.methods.get(method) != Some(&bound.function.hash) {
             return Err(Code::Dispatch.into());
@@ -1000,7 +1005,9 @@ impl<W: World + ?Sized> Eval<'_, W> {
         }
         let b = self.binding(&fq, None)?;
         let mut pattern = BTreeMap::new();
-        for (k, v) in &obj.keys {
+        // K5: the method takes the keys of the class that defines it (the leading keys); the object's
+        // other keys are not its arguments, as the request path does not pass them.
+        for (k, v) in obj.keys.iter().filter(|(k, _)| takes.contains(k)) {
             let value = match v {
                 datumesh_core::KeyValue::Scalar(sc) => from_scalar(sc)?,
                 datumesh_core::KeyValue::Object(o) => V::Str(datumesh_core::format_object_key(o)),

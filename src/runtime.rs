@@ -96,6 +96,11 @@ impl Callees for StoreCallees {
     fn class_descriptor(&self, class_hash: &str) -> Result<Option<datumesh_core::ClassDescriptor>, String> {
         (*self.0).class_descriptor(class_hash)
     }
+    /// The first class name the store binds the hash to, as of the latest (K5): a dispatch to an
+    /// inherited method names its defining class through it.
+    fn class_name(&self, class_hash: &str) -> Result<Option<String>, String> {
+        crate::call::store_class_name_of(&*self.0, class_hash, None)
+    }
     fn function_descriptor(&self, fn_hash: &str) -> Result<Option<datumesh_core::json::Value>, String> {
         (*self.0).function_descriptor(fn_hash)
     }

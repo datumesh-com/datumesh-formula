@@ -53,6 +53,12 @@ is now the submodule `spec/` (a gitlink, as datumesh-core has it); `spec-vectors
 - Inherited methods are loaded with their ancestors at define (K5), and a method of the class being
   defined is no longer bound by its own name when it is a draft (K7). Cost: a define loads the
   ancestors of each class it reads.
+- A dispatch to an inherited method passes only the defining class's keys, the leading keys, as the
+  request path does (K5). A subclass object's extra keys are not arguments of the parent's method.
+  Cost: a dispatch that passed every key of the object now passes the defining class's keys only.
+- `FormulaRuntime::new` over a store names the defining class of a dispatch: `StoreCallees` forwards
+  `Callees::class_name` to the store's `class_names_bound_to` (K5), so `E_FORMULA_UNRESOLVED` is no
+  longer returned for a store with a bound parent.
 
 ## 0.5.2 (unreleased)
 
