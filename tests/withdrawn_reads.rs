@@ -348,6 +348,6 @@ fn the_withdrawn_formula_eval_vectors() {
             failures.push(e);
         }
     }
-    assert_eq!(seen, 9, "7 valid and 2 invalid withdrawn vectors");
+    assert_eq!(seen, 11, "9 valid and 2 invalid withdrawn vectors (withdrawn-slice-asof-candidate and withdrawn-outside-range-not-candidate are new at 6d0a5c5)");
     assert!(failures.is_empty(), "{failures:#?}");
 }
