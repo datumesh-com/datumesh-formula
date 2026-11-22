@@ -5,6 +5,7 @@
 pub mod check;
 pub mod classes;
 pub mod generate;
+pub mod round;
 pub mod union;
 
 use std::path::{Path, PathBuf};
