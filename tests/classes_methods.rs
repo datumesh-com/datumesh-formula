@@ -92,14 +92,21 @@ fn class_formula_eval_vectors() {
 // Item 1: a method call is the plain read (16.3).
 
 /// `N(k1, k2).m(a)` resolves to the same canonical AST as the plain read `N/m(k1: ..., a: ...)`,
-/// so the same hash, body and inputs (so the same cell and cell id): the 11 pairs of vectors.
+/// so the same hash, body and inputs (so the same cell and cell id): the 10 pairs of vectors (11 before K5).
 #[test]
 fn a_method_call_is_the_plain_read() {
     let all = class_vectors("formula");
     let mut pairs = 0;
     for (path, plain) in all.iter().filter(|(p, _)| p.ends_with("-plain.json")) {
         let method_path = path.replace("-plain.json", ".json");
-        let method = &all.iter().find(|(p, _)| *p == method_path).unwrap_or_else(|| panic!("{method_path}")).1;
+        // A plain vector with no method partner is skipped: formula/class-inherited-defining-plain is
+        // the plain read of D/m (K5) and its call-form partner is formula/class-inherited, under
+        // the subclass's name. formula/class-inherited-plain is now E_FORMULA_UNRESOLVED (K5, D115):
+        // an invalid vector has no AST to compare.
+        let Some(method) = all.iter().find(|(p, _)| *p == method_path).map(|(_, v)| v) else { continue };
+        if matches!(plain.get("valid"), Some(Value::Bool(false))) {
+            continue;
+        }
         let compile = |v: &Value| {
             let env = datumesh_formula::Env::from_value(v.get("env").unwrap()).unwrap();
             define(common::string(v, "input").unwrap(), &env).unwrap_or_else(|e| panic!("{path}: {e}"))
@@ -113,7 +120,7 @@ fn a_method_call_is_the_plain_read() {
         assert_eq!(a.returns, b.returns, "{path}");
         pairs += 1;
     }
-    assert_eq!(pairs, 11);
+    assert_eq!(pairs, 10);
 }
 
 /// Objects bind their keys positionally by the class `order` or labelled, every key once; the
