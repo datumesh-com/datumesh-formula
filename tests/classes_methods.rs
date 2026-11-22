@@ -204,12 +204,13 @@ fn extension_methods() {
 }
 
 /// An inherited method is read through the subclass's name, with the keys the parent had (the
-/// parent's, a prefix of the subclass's order): `fx_ndf(EUR, USD, "F1").cross("GBP", date)`.
+/// parent's, a prefix of the subclass's order): `fx_ndf(EUR, USD, "F1").cross("GBP", date)`. The
+/// body reads the cell of the defining class, fx_pair/cross (K5, D115, BREAKING; it was fx_ndf/cross).
 #[test]
 fn inherited_methods_take_the_parents_keys() {
     assert_eq!(
         body_of("calc.example.net/fx_ndf(EUR, USD, \"F1\").cross(\"GBP\", 2026-03-16)", FX),
-        "calc.example.net/fx_ndf/cross(base: \"EUR\", date: 2026-03-16, quote: \"USD\", via: \"GBP\")\n"
+        "rates.example.org/fx_pair/cross(base: \"EUR\", date: 2026-03-16, quote: \"USD\", via: \"GBP\")\n"
     );
     // The subclass's own method takes the keys the subclass declared.
     assert_eq!(code_of("calc.example.net/fx_ndf(EUR, USD).rate(2026-03-16)", FX), "E_FORMULA_ARG_MISSING");

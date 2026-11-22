@@ -92,8 +92,9 @@ fn a_method_call_is_the_cell_of_its_plain_read() {
         ),
         (
             "calc.example.net/fx_ndf(EUR, USD, F1).cross(GBP, 2026-03-16)",
-            "calc.example.net/fx_ndf/cross(EUR, USD, GBP, 2026-03-16)",
-            "calc.example.net/fx_ndf/cross",
+            // K5 (D115, BREAKING): an inherited method is the cell of the class that defines it.
+            "rates.example.org/fx_pair/cross(EUR, USD, GBP, 2026-03-16)",
+            "rates.example.org/fx_pair/cross",
         ),
     ] {
         let (a, b) = (parse(method, &env).unwrap_or_else(|e| panic!("{method}: {e}")), parse(plain, &env).unwrap());
@@ -217,10 +218,11 @@ fn objects_in_calls() {
         uri("rates.example.org/fx_pair(EUR, USD).cross(GBP, 2026-03-16)"),
         "cell://rates.example.org/fx_pair/cross?base=EUR&date=2026-03-16&quote=USD&via=GBP"
     );
-    // An inherited method through the subclass's name, with the parent's keys.
+    // An inherited method through the subclass's name, with the parent's keys: the cell of the
+    // defining class (K5, D115, BREAKING; it was fx_ndf/forward).
     assert_eq!(
         uri("calc.example.net/fx_ndf(EUR, USD, F1).forward(1M, 2026-03-16)"),
-        "cell://calc.example.net/fx_ndf/forward?base=EUR&date=2026-03-16&quote=USD&tenor=1M"
+        "cell://rates.example.org/fx_pair/forward?base=EUR&date=2026-03-16&quote=USD&tenor=1M"
     );
     for (src, want) in [
         ("rates.example.org/fx_pair(EUR, USD)", "E_PARSE_URI"),
