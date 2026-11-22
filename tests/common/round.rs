@@ -170,7 +170,7 @@ pub fn sub_method_sig() -> String {
 /// with a lookup, a method returning a key and a function with string and number arguments.
 pub fn company_env() -> MapCallEnv {
     let company = "sec.example.org/company";
-    let named = stored(&sig(&[r#""label": {"type": "string", "valid": false}"#], &["label"], &format!(
+    let named = stored(&sig(&[r#""label": {"type": "string", "valid": false, "key_normalisation": "label_fold"}"#], &["label"], &format!(
         r#"{{"type": "string", "classes": ["{company}"]}}"#
     )));
     let fact = stored(&sig(

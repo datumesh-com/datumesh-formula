@@ -506,7 +506,8 @@ fn k8_quoted_labels_with_spaces_are_folded() {
     for (label, folded, cik) in [
         ("\"New   York\"", "new york", "0000789019"),
         ("\"  NEW YORK  \"", "new york", "0000789019"),
-        ("\"new\tyork\"", "new york", "0000789019"),
+        // (A tab cannot be written in a quoted label: strings have no controls and no escapes, 3.5, L7.
+        // fold_label of a tab is covered in classes_round_api.)
         ("\"New\u{a0} York\"", "new york", "0000789019"),
         ("\"Stra\u{df}e\"", "strasse", "0001018724"),
         ("\"STRASSE\"", "strasse", "0001018724"),
