@@ -310,6 +310,55 @@ fn k5_dispatch_an_inherited_method_reads_the_defining_class() {
     assert_eq!(body_code("i.st(d)", &none), "E_FORMULA_UNRESOLVED");
 }
 
+/// The eval world of the dispatch tests: `i.m(d)` over `[sub]`, `sub` being `par` plus the key `j`.
+fn dispatch_world(fname: &str, body: &str, receipts: Vec<Value>, key: &str) -> Value {
+    let w = world();
+    let sig = v(&dispatch_sig(&[SUB]));
+    let env = w.env(&dispatch_sig(&[SUB]), false, true);
+    let d = define_function(fname, body, &sig, &BTreeMap::new(), &env, AT).unwrap_or_else(|e| panic!("{e}"));
+    let mut fs = w.functions.clone();
+    fs.insert(fname.to_string(), datumesh_core::json::parse(&d.bytes).unwrap());
+    vector(
+        &fs,
+        &[(PAR, &w.par), (SUB, &w.sub)],
+        receipts,
+        fname,
+        &format!(
+            r#"{{"d": {{"type": "date", "value": "2026-03-16"}}, "i": {{"type": "string", "value": {}}}}}"#,
+            text(&Value::String(key.to_string()))
+        ),
+    )
+}
+
+/// K5: a dispatch to an inherited method of an object of a subclass with an extra key (`sub` = `par` + `j`)
+/// passes only the defining class's keys (`par`'s `k`) to the method, stored or computed: it does not bind
+/// `j` as an argument of `par/st` (a method of D takes D's keys, the leading keys, as the request path does).
+/// Fails today with `E_FORMULA_DISPATCH`: the dispatch binds every key of the subclass's object.
+#[test]
+fn k5_a_dispatch_to_an_inherited_method_passes_only_the_defining_class_s_keys() {
+    let w = world();
+    let st_hash = hash_of(&w.functions[&format!("{PAR}/st")]);
+    let st_receipt = receipt(
+        PAR,
+        "st",
+        &st_hash,
+        &format!(r#"{{"d": {{"type": "date", "value": "2026-03-16"}}, "k": {}}}"#, k_arg("1")),
+        r#"{"d": {"type": "date", "value": "2026-03-16"}}"#,
+        "number",
+        "5",
+    );
+    for (m, f) in [("st", "calc.example.net/two_st"), ("co", "calc.example.net/two_co")] {
+        // The sub object's keys, sorted by name (j, k).
+        let vec =
+            dispatch_world(f, &format!("i.{m}(d)"), vec![st_receipt.clone()], "calc.example.net/sub(j:\"x\",k:1)");
+        let r = run_vector(&vec)
+            .unwrap_or_else(|e| panic!("{m}: {e}"))
+            .unwrap_or_else(|c| panic!("{m}: the dispatch failed with {c}"));
+        assert_eq!(r.computed.outcome.value.lexical(), "5", "{m}");
+        assert_eq!(r.computed.outcome.lineage, [receipt_hash(&st_receipt)], "{m}: the one input is the parent's cell");
+    }
+}
+
 /// In a request, a method call on a subclass's object is the cell of `D/m`, and `resolved` says
 /// `method` to `D/m`; an override is `S/m`.
 #[test]
