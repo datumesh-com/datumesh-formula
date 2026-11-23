@@ -55,7 +55,7 @@ fn the_vectors_are_those_of_spec_0_6_2() {
             }
         }
     }
-    assert_eq!(all, 2138); // datumesh-spec-cr 6d0a5c5: 4 more than 8ca67ea (2 receipt, 2 formula-eval)
+    assert_eq!(all, 2139); // spec-0.7.0 (8be69cc): one more than 6d0a5c5 (receipt/withdrawn-with-resolver)
     let run = [("formula", 388), ("formula-eval", 203), ("call", 104), ("excel", 79), ("decimal", 20)];
     for (kind, n) in run {
         assert_eq!(count(kind), n, "{kind}");
