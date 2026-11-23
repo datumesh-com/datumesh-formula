@@ -2,7 +2,7 @@
 
 All notable changes to `datumesh-formula`.
 
-## 0.6.0 (unreleased)
+## 0.6.0
 
 For the classes round (`CONTRACT-classes-round.md`, the branch `classes-round`), on datumesh-core 0.3.13
 (unreleased; `[patch]` to the local core until it is published) and the spec at commit `4114360`, which
