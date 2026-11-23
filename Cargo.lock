@@ -179,7 +179,7 @@ dependencies = [
 
 [[package]]
 name = "datumesh-formula"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "datumesh-core",
  "datumesh-engine",

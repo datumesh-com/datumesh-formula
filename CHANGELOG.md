@@ -2,7 +2,11 @@
 
 All notable changes to `datumesh-formula`.
 
-## 0.6.0
+## 0.6.1
+
+The content of 0.6.0, which never reached crates.io: its tag's workflow could not read the vectors (the branch had replaced the vendored `spec-vectors/` with a submodule link that CI does not check out). `spec-vectors/` is vendored again, at spec-0.7.0. The tag `v0.6.0` stays.
+
+## 0.6.0 (tagged, not published)
 
 For the classes round (`CONTRACT-classes-round.md`, the branch `classes-round`), on datumesh-core 0.3.13
 (unreleased; `[patch]` to the local core until it is published) and the spec at commit `4114360`, which
