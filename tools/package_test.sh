@@ -1,7 +1,7 @@
 #!/bin/sh
 # Packaging test: `cargo package`, unpack the .crate in a fresh directory, build a new
-# project that depends on the packaged datumesh-formula and on datumesh-engine 0.5.0,
-# datumesh-store 0.5.0 and datumesh-core 0.3.6 from crates.io, and run the README example
+# project that depends on the packaged datumesh-formula and on datumesh-engine 0.6.0,
+# datumesh-store 0.6.3 and datumesh-core 0.3.14 from crates.io, and run the README example
 # against PostgreSQL 16 in a database of its own (empty: the example makes the schema), twice
 # (it is idempotent). The packaged crate must carry no test material.
 #
@@ -40,7 +40,7 @@ fi
 mkdir -p "$work/app/src"
 # The README's first ```rust block is the example.
 awk '/^```rust$/{f=1;next} /^```$/{if(f){exit}} f' "$root/README.md" > "$work/app/src/main.rs"
-printf '[package]\nname = "app"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\ndatumesh-formula = { path = "../datumesh-formula-%s" }\ndatumesh-engine = "0.5.0"\ndatumesh-store = "0.5.0"\ndatumesh-core = { version = "0.3.6", features = ["sign"] }\n' "$version" > "$work/app/Cargo.toml"
+printf '[package]\nname = "app"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\ndatumesh-formula = { path = "../datumesh-formula-%s" }\ndatumesh-engine = "0.6.0"\ndatumesh-store = "0.6.3"\ndatumesh-core = { version = "0.3.14", features = ["sign"] }\n' "$version" > "$work/app/Cargo.toml"
 
 psql_admin "CREATE DATABASE $db"
 trap 'psql_admin "DROP DATABASE IF EXISTS $db WITH (FORCE)"; rm -rf "$work"' EXIT

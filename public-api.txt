@@ -692,6 +692,7 @@ pub fn datumesh_formula::eval::World::read(&mut self, &datumesh_formula::eval::C
 pub fn datumesh_formula::eval::World::read_pinned(&mut self, &str, &datumesh_formula::eval::CellKey) -> core::result::Result<core::option::Option<datumesh_formula::eval::Version>, datumesh_formula::eval::Stop<Self::Error>>
 pub fn datumesh_formula::eval::World::rebound(&mut self, &str, &datumesh_formula::eval::Binding) -> core::result::Result<core::option::Option<alloc::rcs::arc::Arc<datumesh_formula::Compiled>>, datumesh_formula::eval::Stop<Self::Error>>
 pub fn datumesh_formula::eval::World::versions(&mut self, &datumesh_formula::eval::CellKey, &str, &str) -> core::result::Result<alloc::vec::Vec<datumesh_formula::eval::Version>, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::eval::World::withdrawn_in_slice(&mut self, &datumesh_formula::eval::SliceKey) -> core::result::Result<alloc::vec::Vec<(alloc::string::String, alloc::string::String)>, datumesh_formula::eval::Stop<Self::Error>>
 impl datumesh_formula::eval::World for datumesh_formula::memory::MemoryWorld
 pub type datumesh_formula::memory::MemoryWorld::Error = never
 pub fn datumesh_formula::memory::MemoryWorld::asof(&mut self) -> core::result::Result<alloc::string::String, datumesh_formula::eval::Stop<Self::Error>>
@@ -708,6 +709,7 @@ pub fn datumesh_formula::memory::MemoryWorld::read(&mut self, &datumesh_formula:
 pub fn datumesh_formula::memory::MemoryWorld::read_pinned(&mut self, &str, &datumesh_formula::eval::CellKey) -> core::result::Result<core::option::Option<datumesh_formula::eval::Version>, datumesh_formula::eval::Stop<Self::Error>>
 pub fn datumesh_formula::memory::MemoryWorld::rebound(&mut self, &str, &datumesh_formula::eval::Binding) -> core::result::Result<core::option::Option<alloc::rcs::arc::Arc<datumesh_formula::Compiled>>, datumesh_formula::eval::Stop<Self::Error>>
 pub fn datumesh_formula::memory::MemoryWorld::versions(&mut self, &datumesh_formula::eval::CellKey, &str, &str) -> core::result::Result<alloc::vec::Vec<datumesh_formula::eval::Version>, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::memory::MemoryWorld::withdrawn_in_slice(&mut self, &datumesh_formula::eval::SliceKey) -> core::result::Result<alloc::vec::Vec<(alloc::string::String, alloc::string::String)>, datumesh_formula::eval::Stop<Self::Error>>
 pub fn datumesh_formula::eval::cell_object(&datumesh_formula::Function, &datumesh_formula::eval::CellKey) -> datumesh_core::json::Value
 pub fn datumesh_formula::eval::cmp_scalar(&datumesh_core::model::Scalar, &datumesh_core::model::Scalar) -> core::cmp::Ordering
 pub fn datumesh_formula::eval::evaluate<W: datumesh_formula::eval::World + ?core::marker::Sized>(&datumesh_formula::Compiled, &datumesh_formula::Function, &datumesh_formula::eval::Args, &str, &mut W) -> core::result::Result<datumesh_formula::eval::Outcome, datumesh_formula::eval::Stop<<W as datumesh_formula::eval::World>::Error>>
@@ -771,6 +773,7 @@ pub fn datumesh_formula::memory::MemoryWorld::read(&mut self, &datumesh_formula:
 pub fn datumesh_formula::memory::MemoryWorld::read_pinned(&mut self, &str, &datumesh_formula::eval::CellKey) -> core::result::Result<core::option::Option<datumesh_formula::eval::Version>, datumesh_formula::eval::Stop<Self::Error>>
 pub fn datumesh_formula::memory::MemoryWorld::rebound(&mut self, &str, &datumesh_formula::eval::Binding) -> core::result::Result<core::option::Option<alloc::rcs::arc::Arc<datumesh_formula::Compiled>>, datumesh_formula::eval::Stop<Self::Error>>
 pub fn datumesh_formula::memory::MemoryWorld::versions(&mut self, &datumesh_formula::eval::CellKey, &str, &str) -> core::result::Result<alloc::vec::Vec<datumesh_formula::eval::Version>, datumesh_formula::eval::Stop<Self::Error>>
+pub fn datumesh_formula::memory::MemoryWorld::withdrawn_in_slice(&mut self, &datumesh_formula::eval::SliceKey) -> core::result::Result<alloc::vec::Vec<(alloc::string::String, alloc::string::String)>, datumesh_formula::eval::Stop<Self::Error>>
 pub struct datumesh_formula::memory::VectorResult
 pub datumesh_formula::memory::VectorResult::computed: datumesh_formula::memory::Computed
 pub datumesh_formula::memory::VectorResult::evaluated: alloc::vec::Vec<(datumesh_formula::eval::CellKey, alloc::string::String, datumesh_formula::eval::Version)>
