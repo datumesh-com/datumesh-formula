@@ -1,0 +1,23 @@
+{
+  "id": "uri/no-arguments-asof",
+  "kind": "uri",
+  "description": "asof alone. Changed in spec-0.2.0: the signature input now declares units; the outputs are unchanged.",
+  "valid": true,
+  "input": "cell://math.example/pi?asof=2024-01-01T00:00:00.000000Z",
+  "signature": {
+    "args": {},
+    "returns": {
+      "type": "number",
+      "unit": "1"
+    }
+  },
+  "object": {
+    "args": {},
+    "fn": "pi",
+    "ns": "math.example",
+    "asof": "2024-01-01T00:00:00.000000Z"
+  },
+  "canonical": "{\"args\":{},\"asof\":\"2024-01-01T00:00:00.000000Z\",\"fn\":\"pi\",\"ns\":\"math.example\"}",
+  "sha256": "c823dd359d7d566476c641b22c6755006f43daa94e8814b232dc73cf56ceebc1",
+  "https": "https://mesh.example/cell/math.example/pi?asof=2024-01-01T00:00:00.000000Z"
+}
