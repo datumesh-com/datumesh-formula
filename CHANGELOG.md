@@ -2,6 +2,15 @@
 
 All notable changes to `datumesh-formula`.
 
+## 0.6.2
+
+- **`read_names`** (CONTRACT-next-patch item 16; additive): `pub fn read_names(source: &str) -> Result<BTreeSet<String>, Error>`
+  gives the function names a body reads, as written, after lexing and parsing it, with no environment. Aliases
+  stay in their `@` form, built-ins and variables are not names, and a name is listed once. A method call
+  `N(...).m(...)` yields the class `N` and the method's function `N/m` (16.3), as the crate's resolver looks them
+  up; a receiver that is not itself a read yields no method name. Parse errors are the crate's error, with the
+  code `canonical_ast` gives. The private collector behind `define` is now `read_names_resolved`.
+
 ## 0.6.1
 
 The content of 0.6.0, which never reached crates.io: its tag's workflow could not read the vectors (the branch had replaced the vendored `spec-vectors/` with a submodule link that CI does not check out). `spec-vectors/` is vendored again, at spec-0.7.0. The tag `v0.6.0` stays.

@@ -137,14 +137,34 @@ pub(crate) fn pinned_reads(source: &str) -> Result<Vec<(String, String)>, Error>
         .collect())
 }
 
+/// The names `source` reads, as written, after lexing and parsing it (datumesh-formula 0.6.2,
+/// CONTRACT-next-patch item 16). Aliases stay in their `@` form, built-ins and variables are not
+/// names, and a name is listed once. A method call `N(...).m(...)` yields the class `N` and the
+/// method's function `N/m` (16.3); an aliased receiver yields `@a/N` and `@a/N/m`. A receiver that
+/// is not itself a read (a variable, or a method's result) yields no method name, since its class
+/// is known only after type checking; the reads inside it are still listed.
+pub fn read_names(source: &str) -> Result<std::collections::BTreeSet<String>, Error> {
+    collect_names(source, &|alias: &str| Some(format!("@{alias}")), None)
+}
+
 /// The fully qualified names `source` reads (aliases resolved through `aliases`; an unknown
 /// alias is left for resolution to report), after lexing and parsing it. Since spec-0.5.0 a
 /// class name an object is written with, and the functions of its methods (`N/m`, 16.3), are
 /// names too; `this` is the class `method_of`. Class names are looked up as classes by the
 /// caller, functions as functions.
-pub(crate) fn read_names(
+pub(crate) fn read_names_resolved(
     source: &str,
     aliases: &std::collections::BTreeMap<String, String>,
+    method_of: Option<&str>,
+) -> Result<std::collections::BTreeSet<String>, Error> {
+    collect_names(source, &|alias: &str| aliases.get(alias).cloned(), method_of)
+}
+
+/// The collector both `read_names` and `read_names_resolved` use: `alias_name` gives an alias's
+/// name (`None` leaves it out), `method_of` the class of `this`.
+fn collect_names(
+    source: &str,
+    alias_name: &dyn Fn(&str) -> Option<String>,
     method_of: Option<&str>,
 ) -> Result<std::collections::BTreeSet<String>, Error> {
     let tokens = lex::lex(source)?;
@@ -155,8 +175,8 @@ pub(crate) fn read_names(
             parse::PNode::Read { name, alias, .. } => {
                 if !*alias {
                     names.insert(name.clone());
-                } else if let Some(n) = aliases.get(name) {
-                    names.insert(n.clone());
+                } else if let Some(n) = alias_name(name) {
+                    names.insert(n);
                 }
             }
             parse::PNode::Method { recv, name, qualified, .. } => {
@@ -167,7 +187,7 @@ pub(crate) fn read_names(
                 let class = match tree.get(*recv) {
                     parse::PNode::Read { name: c, alias, .. } => {
                         if *alias {
-                            aliases.get(c).cloned()
+                            alias_name(c)
                         } else {
                             Some(c.clone())
                         }

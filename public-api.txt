@@ -1315,4 +1315,5 @@ pub const datumesh_formula::MAX_NODES: usize
 pub fn datumesh_formula::canonical_ast(&str, core::option::Option<&datumesh_formula::Env>) -> core::result::Result<datumesh_formula::ast::Ast, datumesh_formula::Error>
 pub fn datumesh_formula::check_descriptor(&str, &datumesh_core::json::Value, &datumesh_formula::Env) -> core::result::Result<datumesh_formula::Compiled, datumesh_formula::DefineError>
 pub fn datumesh_formula::define(&str, &datumesh_formula::Env) -> core::result::Result<datumesh_formula::Compiled, datumesh_formula::Error>
+pub fn datumesh_formula::read_names(&str) -> core::result::Result<alloc::collections::btree::set::BTreeSet<alloc::string::String>, datumesh_formula::Error>
 pub type datumesh_formula::NodeId = u32
