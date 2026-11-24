@@ -115,10 +115,46 @@ impl Compiled {
 /// labelled, which a printed body always is (`parse(print(ast)) = ast`, 15.6).
 pub fn canonical_ast(source: &str, env: Option<&Env>) -> Result<Ast, Error> {
     let tokens = lex::lex(source)?;
-    deep(tokens.len(), || {
+    let ast = deep(tokens.len(), || {
         let tree = parse::parse(&tokens)?;
         resolve::resolve(&tree, env)
-    })
+    });
+    match env {
+        Some(env) => ast.map_err(|e| env_name_hint(e, env)),
+        None => ast,
+    }
+}
+
+/// Item 34: an unqualified user function name gets the qualified name or `@alias` that `env`
+/// knows, in place of the generic forms the parser gives. Other errors are unchanged.
+fn env_name_hint(err: Error, env: &Env) -> Error {
+    let qualified: Vec<&str> = env.functions.keys().map(String::as_str).collect();
+    name_hint(err, &qualified, &env.aliases)
+}
+
+/// The name hint over the qualified function names and the aliases a caller knows (item 34). An
+/// unknown name with no known form keeps the parser's generic hint.
+pub(crate) fn name_hint(
+    mut err: Error,
+    qualified: &[&str],
+    aliases: &std::collections::BTreeMap<String, String>,
+) -> Error {
+    if err.code != Code::UnknownFunction {
+        return err;
+    }
+    let Some((name, _)) = err.detail.split_once(" is not a built-in") else {
+        return err;
+    };
+    let mut forms: Vec<String> =
+        qualified.iter().filter(|q| q.rsplit('/').next() == Some(name)).map(|q| q.to_string()).collect();
+    forms.extend(aliases.iter().filter(|(_, t)| t.rsplit('/').next() == Some(name)).map(|(a, _)| format!("@{a}")));
+    if !forms.is_empty() {
+        err.detail = format!(
+            "{name} is not a built-in; user functions are written qualified or as @alias; write {}",
+            forms.join(" or ")
+        );
+    }
+    err
 }
 
 /// The pinned reads (16.3, `super`) a body makes, as (function name, function hash), after lexing
@@ -275,7 +311,8 @@ pub fn define(source: &str, env: &Env) -> Result<Compiled, Error> {
         let ast = resolve::resolve(&tree, Some(env))?;
         let checked = check::check(&ast, env)?;
         Ok((ast, checked))
-    })?;
+    })
+    .map_err(|e| env_name_hint(e, env))?;
     let returns = Returns {
         ty: match &checked.ty {
             Ty::Num(_) => Type::Number,

@@ -375,7 +375,8 @@ fn define_in(
     let mut env = Env::new(name, sig);
     env.aliases = aliases.clone();
     env.method_of = method_of.map(str::to_string);
-    let names = crate::read_names_resolved(source, aliases, method_of)?;
+    let names =
+        crate::read_names_resolved(source, aliases, method_of).map_err(|e| crate::name_hint(e, &[], aliases))?;
     let mut used = BTreeMap::new();
     if let Some(class) = method_of {
         load_class(&mut env, class, callees, at)?;

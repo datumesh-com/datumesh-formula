@@ -10,6 +10,12 @@ All notable changes to `datumesh-formula`.
   `N(...).m(...)` yields the class `N` and the method's function `N/m` (16.3), as the crate's resolver looks them
   up; a receiver that is not itself a read yields no method name. Parse errors are the crate's error, with the
   code `canonical_ast` gives. The private collector behind `define` is now `read_names_resolved`.
+- **Errors name the dialect form** (CONTRACT-next-patch item 34; codes unchanged, additive). The message of
+  a usage error gains a `; write …` hint: a list comprehension (`E_FORMULA_PLACEMENT`) names a slice with a range
+  (`f(date: [lo..hi])`) and an aggregate; a bare number against a percent (`E_FORMULA_UNIT_MISMATCH`) names the
+  literal with its unit (`1.9 percent`); a quoted date where a date is expected (`E_FORMULA_TYPE`) names the date
+  unquoted; an unqualified user function (`E_FORMULA_UNKNOWN_FUNCTION`) names the qualified name or `@alias` the
+  environment knows, else `@alias/<name>`.
 
 ## 0.6.1
 

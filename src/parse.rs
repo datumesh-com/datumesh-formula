@@ -679,7 +679,7 @@ impl<'a> Parser<'a> {
                     Ok(x)
                 }
                 "*" => Err(err(Code::Placement, "* is an argument of a read only")),
-                "[" => Err(err(Code::Placement, "a range is an argument of a read only")),
+                "[" => Err(self.bracket_error()),
                 "+" => Err(err(Code::Syntax, "there is no unary +")),
                 "^" => Err(err(Code::Ambiguous, "write the parentheses: (-a)^b, -(a^b), (a^b)^c or a^(b^c)")),
                 "." => Err(err(Code::Reserved, "'.' is reserved for methods (1.3b)")),
@@ -743,7 +743,10 @@ impl<'a> Parser<'a> {
             }
             return Err(err(
                 Code::UnknownFunction,
-                format!("{} is not a built-in; user functions are written qualified or as @alias", t.text),
+                format!(
+                    "{} is not a built-in; user functions are written qualified or as @alias; write @alias/{}, or the qualified name <owner>/{}",
+                    t.text, t.text, t.text
+                ),
             ));
         }
         self.bump();
@@ -760,6 +763,41 @@ impl<'a> Parser<'a> {
     }
 
     /// An argument list `( [ arg *( "," arg ) ] )` of a read (`read`) or of the built-in `callee`.
+    /// Whether the bracket at the cursor is a list comprehension (`[x for x in d]`): a `for` word
+    /// before its closing bracket.
+    fn comprehension_ahead(&self) -> bool {
+        let mut depth = 0i32;
+        for k in 0.. {
+            let t = self.peek_at(k);
+            if t.kind == Kind::End {
+                return false;
+            }
+            if t.is("[") || t.is("(") {
+                depth += 1;
+            } else if t.is("]") || t.is(")") {
+                depth -= 1;
+                if depth <= 0 {
+                    return false;
+                }
+            } else if t.kind == Kind::Word && t.text.eq_ignore_ascii_case("for") {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// The error of a `[` where no range may be: a comprehension names the dialect's form (item 34).
+    fn bracket_error(&self) -> Error {
+        if self.comprehension_ahead() {
+            err(
+                Code::Placement,
+                "a list comprehension is not in the dialect; write a slice with a range, as f(date: [lo..hi]), and an aggregate: mean, sum, count, min or max",
+            )
+        } else {
+            err(Code::Placement, "a range is an argument of a read only")
+        }
+    }
+
     fn args(&mut self, read: bool, _callee: &str) -> Result<Vec<PArg>, Error> {
         self.expect("(")?;
         let mut out: Vec<PArg> = Vec::new();
@@ -780,8 +818,8 @@ impl<'a> Parser<'a> {
             } else if self.peek().is("*") && (self.peek_at(1).is(",") || self.peek_at(1).is(")")) {
                 return Err(err(Code::Placement, "* is an argument of a read only"));
             } else if self.peek().is("[") {
-                if !read {
-                    return Err(err(Code::Placement, "a range is an argument of a read only"));
+                if !read || self.comprehension_ahead() {
+                    return Err(self.bracket_error());
                 }
                 self.bump();
                 let lo = self.expr()?;

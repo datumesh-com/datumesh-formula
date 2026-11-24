@@ -177,7 +177,7 @@ fn adopt(bare_zero: bool, u: &NumUnit) -> Result<NumUnit, Error> {
     if ratio_like(u) && !bare_zero {
         return Err(e(
             Code::UnitMismatch,
-            format!("a bare number cannot be {}: write the unit (e.g. 1 {})", u.text(), u.text()),
+            format!("a bare number cannot be {}; write the unit (e.g. 1 {})", u.text(), u.text()),
         ));
     }
     Ok(u.clone())
@@ -296,6 +296,13 @@ pub(crate) fn literal_number(ast: &Ast, id: NodeId) -> Option<Decimal> {
     }
 }
 
+/// Item 34: a quoted date where a date is expected names the date literal, unquoted.
+fn quoted_date_hint(ast: &Ast, id: NodeId) -> Option<String> {
+    let s = str_literal(ast, id)?;
+    calendar::Date::parse(s)?;
+    Some(format!("; write the date {s} unquoted"))
+}
+
 fn str_literal(ast: &Ast, id: NodeId) -> Option<&str> {
     match ast.node(id) {
         Node::Str(s) => Some(s),
@@ -314,11 +321,11 @@ impl Checker<'_> {
                     if args.len() != 2 || *op == Op::Pow {
                         break;
                     }
-                    spine.push((cur, *op, args[1]));
+                    spine.push((cur, *op, args[0], args[1]));
                     cur = args[0];
                 }
                 let mut acc = self.node(cur)?;
-                for (nid, op, r) in spine.into_iter().rev() {
+                for (nid, op, l, r) in spine.into_iter().rev() {
                     if matches!(op, Op::And | Op::Or) {
                         if acc.is_slice() {
                             return Err(e(Code::SliceValue, "a slice where a scalar is required"));
@@ -331,7 +338,8 @@ impl Checker<'_> {
                         }
                     }
                     let rt = self.node(r)?;
-                    acc = self.binary(op, &acc, &rt)?;
+                    let lt = acc.clone();
+                    acc = self.binary(op, &lt, &rt).map_err(|err| self.operand_hint(err, [l, r], [&lt, &rt]))?;
                     self.types[nid as usize] = Some(acc.clone());
                 }
                 return Ok(acc);
@@ -446,6 +454,28 @@ impl Checker<'_> {
 
     // ------------------------------------------------------------------------------------
     // Operators.
+
+    /// Item 34: a usage error between two operands names the form to write. A bare number against
+    /// a ratio unit names the literal with its unit; a quoted date against a date names the date.
+    fn operand_hint(&self, mut err: Error, ids: [NodeId; 2], tys: [&Ty; 2]) -> Error {
+        let ast = self.ast;
+        for i in 0..2 {
+            let (bare, other) = (ids[i], tys[1 - i]);
+            if err.code == Code::UnitMismatch && err.detail.starts_with("a bare number cannot be") {
+                if let (Node::Num { value, unit: None }, Ty::Num(k @ NumUnit::Known(_))) = (ast.node(bare), other) {
+                    if ratio_like(k) {
+                        err.detail = format!("a bare number cannot be {}; write {value} {}", k.text(), k.text());
+                    }
+                }
+            }
+            if err.code == Code::Type && *other == Ty::Date {
+                if let Some(h) = quoted_date_hint(ast, bare) {
+                    err.detail.push_str(&h);
+                }
+            }
+        }
+        err
+    }
 
     fn binary(&mut self, op: Op, l: &Ty, r: &Ty) -> Result<Ty, Error> {
         match op {
@@ -602,6 +632,9 @@ impl Checker<'_> {
                             ));
                         }
                     }
+                    if let Some(h) = quoted_date_hint(self.ast, *x).filter(|_| decl.ty == Type::Date) {
+                        return Err(e(Code::Type, format!("{fn_name}({name}) is a date, not a string{h}")));
+                    }
                     let t = self.node(*x)?;
                     if t.is_slice() {
                         return Err(e(Code::SliceValue, format!("{fn_name}({name}) takes a scalar, not a slice")));
@@ -728,6 +761,9 @@ impl Checker<'_> {
         for (name, x) in args {
             let decl =
                 sig.args.get(name).ok_or_else(|| e(Code::ArgUnknown, format!("{first} has no argument {name}")))?;
+            if let Some(h) = quoted_date_hint(self.ast, *x).filter(|_| decl.ty == Type::Date) {
+                return Err(e(Code::Type, format!("{first}({name}) is a date, not a string{h}")));
+            }
             let got = self.scalar_of(*x)?;
             if got.scalar_type() != Some(decl.ty) {
                 return Err(e(Code::Type, format!("{first}({name}) is a {}, not a {}", decl.ty.as_str(), got.name())));
