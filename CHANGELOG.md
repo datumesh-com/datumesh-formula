@@ -2,6 +2,11 @@
 
 All notable changes to `datumesh-formula`.
 
+## 0.7.0
+
+Requires datumesh-engine 0.7.0 and datumesh-store 0.7.0 (the listing release, CONTRACT-http-listing.md). No change of
+behaviour or API in the formula crate itself; the engine and store types it takes moved to their 0.7 lines.
+
 ## 0.6.2
 
 - **`read_names`** (CONTRACT-next-patch item 16; additive): `pub fn read_names(source: &str) -> Result<BTreeSet<String>, Error>`
